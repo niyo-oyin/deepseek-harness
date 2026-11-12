@@ -9,53 +9,47 @@
   height: calc(28px + var(--dsh-content-font-delta, 0px));
 }
 
-/* The user clock keeps the secondary tier. */
+/* The clock sits at the row's outer edge: before the icons of an assistant
+   tail, after the icons of a user row. The controls beside it can then wait
+   for hover without leaving a gap between the clock and the message edge.
+   Assistant-tail metadata keeps the smaller information size. */
 .timeStart {
-  padding-right: 12px;
+  font-size: calc(var(--dsh-content-font-size-secondary, 13px) - 1px);
+  line-height: calc(24px + var(--dsh-content-font-delta, 0px));
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+}
+
+/* The user clock keeps the secondary tier. */
+.timeEnd {
+  padding-left: 4px;
   font-size: var(--dsh-content-font-size-secondary, 13px);
   line-height: calc(24px + var(--dsh-content-font-delta, 0px));
   color: var(--dsw-alias-label-tertiary);
   white-space: nowrap;
 }
 
-/* Assistant-tail metadata keeps the smaller information size while sharing
-   the action icons' resting color. */
-.timeEnd {
-  font-size: calc(var(--dsh-content-font-size-secondary, 13px) - 1px);
-  line-height: calc(24px + var(--dsh-content-font-delta, 0px));
-  color: inherit;
-  white-space: nowrap;
-}
-
-.endInfo {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  margin-left: 8px;
-  color: var(--dsw-alias-label-tertiary);
-}
-
-/* Earlier user-authored flow rows and opted-in turn tails reveal the complete
-   actions row on hover or focus-within. Opacity keeps layout stable, and
-   devices without hover keep every row visible. */
+/* Earlier user-authored flow rows and opted-in turn tails reveal the controls
+   of the actions row on hover or focus-within; the clock stays visible on
+   every row. Opacity keeps layout stable, and devices without hover keep
+   every control visible. */
 @media (hover: hover) {
-  [data-actions-reveal='hover'] .actions,
+  [data-actions-reveal='hover'] .actions > :not(.timeStart, .timeEnd),
   :is([data-chat-flow-kind='user'], [data-chat-flow-kind='steering']):has(
     ~ :is([data-chat-flow-kind='user'], [data-chat-flow-kind='steering'])
-  ) .actions {
+  ) .actions > :not(.timeStart, .timeEnd) {
     opacity: 0;
     transition: opacity 80ms ease;
   }
 
-  [data-actions-reveal='hover']:hover .actions,
-  [data-actions-reveal='hover']:focus-within .actions,
+  [data-actions-reveal='hover']:hover .actions > :not(.timeStart, .timeEnd),
+  [data-actions-reveal='hover']:focus-within .actions > :not(.timeStart, .timeEnd),
   :is([data-chat-flow-kind='user'], [data-chat-flow-kind='steering']):has(
     ~ :is([data-chat-flow-kind='user'], [data-chat-flow-kind='steering'])
-  ):hover .actions,
+  ):hover .actions > :not(.timeStart, .timeEnd),
   :is([data-chat-flow-kind='user'], [data-chat-flow-kind='steering']):has(
     ~ :is([data-chat-flow-kind='user'], [data-chat-flow-kind='steering'])
-  ):focus-within .actions {
+  ):focus-within .actions > :not(.timeStart, .timeEnd) {
     opacity: 1;
   }
 }
@@ -81,7 +75,7 @@
   height: calc(15px + var(--dsh-content-font-delta, 0px));
 }
 
-.actions[data-clock='end'] .action svg {
+.actions[data-clock='start'] .action svg {
   width: calc(17px + var(--dsh-content-font-delta, 0px));
   height: calc(17px + var(--dsh-content-font-delta, 0px));
 }

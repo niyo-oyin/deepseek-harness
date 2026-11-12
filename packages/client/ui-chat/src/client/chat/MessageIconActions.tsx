@@ -1,5 +1,7 @@
 // Shared IconActions chrome for user and assistant messages: copy
-// live, optional branch wiring, and an optional date-aware clock.
+// live, optional branch wiring, and an optional date-aware clock. The clock
+// sits at the row's outer edge and stays visible while the controls of an
+// earlier message wait for hover.
 
 import { useId, type ReactNode } from 'react'
 import {
@@ -15,7 +17,7 @@ export interface MessageIconActionsProps {
   text: string
   /** Unix epoch ms for the clock label; omitted for transient messages. */
   time?: number | undefined
-  /** Clock before icons (user) or after (assistant). */
+  /** Clock before the icons (assistant rows, which start at the left edge) or after them (user rows, which end at the right edge). */
   clock: 'start' | 'end'
   /** Fork the session at this message; omission hides the branch action. */
   onBranch?: (() => void) | undefined
@@ -82,9 +84,8 @@ export function MessageIconActions({
       {onBranch !== undefined && branchUnavailable && (
         <span id={reasonId} className={css.visuallyHidden}>{t('message.branchUnavailable')}</span>
       )}
-      {clock === 'end'
-        ? <span className={css.endInfo}>{usageAction}{clockEl}</span>
-        : usageAction}
+      {usageAction}
+      {clock === 'end' ? clockEl : null}
     </div>
   )
 }

@@ -48,12 +48,12 @@ describe('chat flow font-size axis', () => {
 
   it('the message clock and action glyphs scale with the text they serve', () => {
     const actions = read('MessageIconActions.module.css')
-    // The user clock reads the secondary tier. The assistant tail is one
-    // further pixel down, matching its usage trigger and supporting metadata.
-    expect(declarationsFrom(actions, '.timeStart')).toEqual(expect.arrayContaining([
+    // The user clock, after its icons, reads the secondary tier. The assistant tail's clock, before
+    // its icons, is one further pixel down, matching its usage trigger and supporting metadata.
+    expect(declarationsFrom(actions, '.timeEnd')).toEqual(expect.arrayContaining([
       'font-size: var(--dsh-content-font-size-secondary, 13px)',
     ]))
-    expect(declarationsFrom(actions, '.timeEnd')).toEqual(expect.arrayContaining([
+    expect(declarationsFrom(actions, '.timeStart')).toEqual(expect.arrayContaining([
       'font-size: calc(var(--dsh-content-font-size-secondary, 13px) - 1px)',
     ]))
     expect(declarationsFrom(actions, '.action svg')).toEqual(expect.arrayContaining([
@@ -133,17 +133,18 @@ describe('chat flow font-size axis', () => {
     expect(narrow).toMatch(/\.root \+ \.root \{[^}]*margin-left: 0/)
   })
 
-  it('non-latest turn tails hide the whole actions row until hover or focus', () => {
+  it('non-latest turn tails hide the controls of the actions row until hover or focus and keep the clock', () => {
     // TurnTailNodeView tags its root data-actions-reveal='hover' for every
     // turn but the latest; the gate lives under @media (hover: hover) so
     // no-hover devices keep the row visible. 'always' has no rule at all —
-    // absence, not an override, keeps the latest turn's row shown.
+    // absence, not an override, keeps the latest turn's row shown. The clock
+    // is excluded from the gate, so every message shows when it was sent.
     const css = read('MessageIconActions.module.css')
-    expect(css).toContain("[data-actions-reveal='hover'] .actions,")
-    expect(css).toMatch(/\) \.actions \{\s*opacity: 0/)
-    expect(css).toContain("[data-actions-reveal='hover']:hover .actions,")
-    expect(css).toContain("[data-actions-reveal='hover']:focus-within .actions,")
-    expect(css).toMatch(/\):focus-within \.actions \{\s*opacity: 1/)
+    expect(css).toContain("[data-actions-reveal='hover'] .actions > :not(.timeStart, .timeEnd),")
+    expect(css).toMatch(/\) \.actions > :not\(\.timeStart, \.timeEnd\) \{\s*opacity: 0/)
+    expect(css).toContain("[data-actions-reveal='hover']:hover .actions > :not(.timeStart, .timeEnd),")
+    expect(css).toContain("[data-actions-reveal='hover']:focus-within .actions > :not(.timeStart, .timeEnd),")
+    expect(css).toMatch(/\):focus-within \.actions > :not\(\.timeStart, \.timeEnd\) \{\s*opacity: 1/)
     expect(css).not.toContain("[data-actions-reveal='always']")
   })
 
