@@ -77,6 +77,8 @@ Each call resolves its provider at execution time, and registration or load orde
 | no id, no usable provider | `WEB_PROVIDER_UNAVAILABLE` |
 | no id, multiple usable providers | `WEB_PROVIDER_AMBIGUOUS` |
 
+Search then substitutes the only other available and ready provider when the selected provider's `ready()` answers false. An installed search provider therefore serves without an explicit selection while the default provider has no credential; with no other or several other ready providers, the selected provider keeps the request.
+
 The shipped `deepseek-official` and `deepseek-search-api` search ids select legacy Messages search and the direct Search API respectively.
 
 A provider's availability is a cheap local check — for example whether its API key is present — and never makes network calls, so selection stays fast and deterministic.

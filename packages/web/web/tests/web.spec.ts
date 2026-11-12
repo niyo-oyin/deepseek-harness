@@ -258,6 +258,24 @@ describe('WebRuntime search readiness', () => {
     await expect(web.searchReady(undefined)).resolves.toBe(false)
   })
 
+  it('substitutes the only other ready provider when the selected provider cannot authenticate', async () => {
+    const { web } = await mountWeb({ searchProvider: 'deepseek' })
+    web.registerSearchProvider(readyProvider('deepseek', available, false))
+    web.registerSearchProvider(readyProvider('legacy', available, false))
+    web.registerSearchProvider(readyProvider('exa', available, true))
+    await expect(web.searchReady('google')).resolves.toBe(true)
+    await expect(web.search({ query: 'q' })).resolves.toMatchObject(searchResult('exa'))
+  })
+
+  it('keeps the selected provider when more than one other provider is ready', async () => {
+    const { web } = await mountWeb({ searchProvider: 'deepseek' })
+    web.registerSearchProvider(readyProvider('deepseek', available, false))
+    web.registerSearchProvider(readyProvider('exa', available, true))
+    web.registerSearchProvider(readyProvider('other', available, true))
+    await expect(web.searchReady('google')).resolves.toBe(false)
+    await expect(web.search({ query: 'q' })).resolves.toMatchObject(searchResult('deepseek'))
+  })
+
   it('treats a selected provider without ready() as ready', async () => {
     const { web } = await mountWeb()
     web.registerSearchProvider(makeSearchProvider('plain', available, () => Promise.resolve(searchResult('plain'))))

@@ -78,6 +78,10 @@ export interface WebRuntimeConfig {
  * - No id configured, exactly one registered usable provider → that provider.
  * - No id configured, multiple usable providers → `WEB_PROVIDER_AMBIGUOUS`.
  * - No id configured, no usable provider → `WEB_PROVIDER_UNAVAILABLE`.
+ *
+ * Search then substitutes the only other available and ready provider when the
+ * selected provider's `ready()` answers false, so an installed search provider
+ * serves without an explicit selection while the default provider has no credential.
  */
 export class WebRuntime extends TypertRemoteService {
   /**
@@ -183,7 +187,11 @@ export class WebRuntime extends TypertRemoteService {
    * @returns the provider's results, capped to `request.maxResults`.
    */
   async search(request: WebSearchRequest, signal?: AbortSignal): Promise<WebSearchResult> {
-    const result = await this.selectSearchProvider().search(request, signal)
+    const selected = this.selectSearchProvider()
+    // A lone provider has no substitute, so its readiness is not asked here.
+    const substitute = this.searchProviders.size > 1 && !(await selected.ready?.(undefined) ?? true)
+      ? await onlyOtherReady(selected, this.searchProviders, undefined) : undefined
+    const result = await (substitute ?? selected).search(request, signal)
     return capSources(result, request.maxResults)
   }
 
@@ -196,7 +204,11 @@ export class WebRuntime extends TypertRemoteService {
    * @returns false only when the selected provider reports that it cannot authenticate.
    */
   async searchReady(llmProvider?: string): Promise<boolean> {
-    return await selectedProviderReady(() => this.selectSearchProvider(), llmProvider)
+    let selected: WebSearchProvider
+    try { selected = this.selectSearchProvider() }
+    catch (_selectionFailure) { return true /* search() surfaces the same failure when called. */ }
+    if (await selected.ready?.(llmProvider) ?? true) return true
+    return await onlyOtherReady(selected, this.searchProviders, llmProvider) !== undefined
   }
 
   /** Select the search provider with the rules above, throwing the matching {@link WebError}. */
@@ -269,6 +281,23 @@ async function selectedProviderReady(select: () => ResolvableProvider, llmProvid
   try { provider = select() }
   catch (_selectionFailure) { return true /* The operation surfaces the same failure when called. */ }
   return await provider.ready?.(llmProvider) ?? true
+}
+
+/**
+ * Find the one other provider that can serve after the selected provider reported that it cannot authenticate.
+ * @param selected - the provider the selection rules chose; its readiness is not asked again.
+ * @param providers - every provider registered for the capability.
+ * @param llmProvider - the provider route id of the model request, when known.
+ * @returns the only other available and ready provider; undefined when none or more than one qualifies.
+ */
+async function onlyOtherReady<P extends ResolvableProvider>(
+  selected: P, providers: ReadonlyMap<string, P>, llmProvider: string | undefined,
+): Promise<P | undefined> {
+  const ready: P[] = []
+  for (const provider of providers.values()) {
+    if (provider !== selected && provider.available() && (await provider.ready?.(llmProvider) ?? true)) ready.push(provider)
+  }
+  return ready.length === 1 ? ready[0] : undefined
 }
 
 /** Resolve the selected provider or throw the matching {@link WebError}. */
