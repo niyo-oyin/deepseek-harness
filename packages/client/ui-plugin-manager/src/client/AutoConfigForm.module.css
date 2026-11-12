@@ -1,0 +1,83 @@
+/* Generated row configuration form: the controls the shared settings fields do not cover. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 0;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.label {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-primary);
+}
+
+.badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reset,
+.clear {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .reset:hover:not(:disabled),
+  .clear:hover:not(:disabled) {
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
+.reset:disabled,
+.clear:disabled {
+  cursor: default;
+}
+
+.secret {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.secret > :first-child {
+  align-self: stretch;
+}
+
+.clear {
+  margin: -4px 0 12px;
+}
+
+.hint,
+.note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-tertiary);
+}

@@ -24,6 +24,8 @@ import type { InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStor
 import { EXTENSION_BUNDLES, HIDDEN_BUNDLES, MORE_BUNDLES } from '@deepseek-ai/dsh-official-bundles'
 import type { createNavigationStore } from './navigation-store.ts'
 import type { PluginHeaderLayoutFace } from './header-scroll.ts'
+import { autoConfig, type AutoConfig } from './auto-config.ts'
+import { AutoConfigForm } from './AutoConfigForm.tsx'
 import { rowConfigKey, type OfficialItem } from './config-ledger.ts'
 import { INSTALL_GIT_EXAMPLE, INSTALL_PATH_EXAMPLE, type PluginManagerLocaleKey } from './locales.ts'
 import {
@@ -674,7 +676,7 @@ function ItemDetail({ item, t, onBack, renderSlot, form }: {
  * A row's configuration page keeps its technical identity beside local package
  * text and the form supplied by its configuration entry.
  */
-function RowDetail({ pkg, row, t, resolveText, onBack, renderSlot, form }: {
+function RowDetail({ pkg, row, t, resolveText, onBack, renderSlot, form, generated }: {
   readonly pkg: PackageView
   readonly row: PackageRow
   readonly t: Translate
@@ -682,6 +684,8 @@ function RowDetail({ pkg, row, t, resolveText, onBack, renderSlot, form }: {
   readonly onBack: () => void
   readonly renderSlot: RenderConfig
   readonly form: ConfigPageForm | undefined
+  /** The form generated from the row's served schema; present only when the bundle registers no page for the row. */
+  readonly generated: ReactNode | undefined
 }): ReactNode {
   const { title } = packageText(pkg, resolveText)
   const { title: rowTitle, description } = rowText(row, resolveText)
@@ -703,12 +707,14 @@ function RowDetail({ pkg, row, t, resolveText, onBack, renderSlot, form }: {
         </div>
         {rowTitle === row.rowId ? null : <p className={css.detailName}><code>{row.rowId}</code></p>}
         <p className={css.detailName}><code>{row.moduleName}</code></p>
-        <p className={css.detailDesc}>{description ?? renderSlot('plugins.row.config', { view: 'summary' }, { entryKey: key })}</p>
+        <p className={css.detailDesc}>
+          {description ?? (generated === undefined ? renderSlot('plugins.row.config', { view: 'summary' }, { entryKey: key }) : t('autoConfigSummary'))}
+        </p>
       </div>
       <MetadataError error={row.meta?.error} t={t} />
       <RuntimeError error={row.diagnostic} t={t} />
       <div className={css.detailSections} data-plugin-config>
-        {renderSlot('plugins.row.config', { view: 'page', form }, { entryKey: key })}
+        {generated ?? renderSlot('plugins.row.config', { view: 'page', form }, { entryKey: key })}
         {renderSlot('plugins.detail.section', { subject })}
       </div>
     </div>
@@ -1569,11 +1575,38 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
   }
   const state = props.usePluginManager(snapshot => snapshot)
   const ledger = props.useConfigLedger(snapshot => snapshot)
+  const language = props.useLocale(snapshot => snapshot.active)
+  // A row whose bundle registers no page gets a form generated from the schema the Host serves for its
+  // entry. The fields are cached per schema so a write to another entry does not rebind an open form.
+  const generatedCache = useRef(new Map<string, { key: string; config: AutoConfig }>())
+  const generatedConfig = (rowId: string): AutoConfig | undefined => {
+    const served = configurations?.find(candidate => candidate.ns === rowId)
+    if (served === undefined || !served.autoGenerate) return undefined
+    const key = `${language}:${JSON.stringify(served.schema)}`
+    const cached = generatedCache.current.get(rowId)
+    const config = cached?.key === key ? cached.config : autoConfig(served.schema, language)
+    if (cached?.key !== key) generatedCache.current.set(rowId, { key, config })
+    return config.fields.length === 0 ? undefined : config
+  }
+  const generatedForm = (pkg: PackageView, row: PackageRow): ReactNode | undefined => {
+    if (ledger.rows.has(rowConfigKey(pkg.name, row.rowId))) return undefined
+    const config = generatedConfig(row.rowId)
+    if (config === undefined) return undefined
+    const secrets = configurations?.find(candidate => candidate.ns === row.rowId)?.secrets ?? []
+    return (
+      <AutoConfigForm
+        key={row.rowId}
+        scope={props.configForm<Record<string, unknown>>(row.rowId)}
+        config={config}
+        storedSecrets={new Set(secrets.flatMap(secret => secret.set && secret.path.length === 1 ? [String(secret.path[0])] : []))}
+        t={t}
+      />
+    )
+  }
   // What is open; a package that leaves the list (uninstalled) drops back to the cards.
   const view = props.useStore(state => state.view), { setView, setTab } = props.actions
   const tabs = props.usePluginTabs(snapshot => snapshot)
   const bundleDetails = props.useBundleDetails(snapshot => snapshot)
-  const language = props.useLocale(snapshot => snapshot.active)
   const selectedTab = props.useStore(state => state.tab)
   // A contributed tab that left the ledger falls back to Installed, and stays there when it returns.
   const tab = tabs.some(item => item.id === selectedTab) ? selectedTab : INSTALLED_TAB
@@ -1639,7 +1672,7 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
     if (row.entryId !== undefined) props.setRowEnabled(row.entryId, enabled)
   }
   const configure = (pkg: PackageView): RowConfigure => ({
-    has: row => ledger.rows.has(rowConfigKey(pkg.name, row.rowId)),
+    has: row => ledger.rows.has(rowConfigKey(pkg.name, row.rowId)) || generatedConfig(row.rowId) !== undefined,
     open: (row) => { setView({ kind: 'row', name: pkg.name, rowId: row.rowId, ...pkgOrigin }) },
   })
   const updates = updatesNote(mine, state.versions, t)
@@ -1799,6 +1832,7 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
               pkg={openPkg}
               row={openRow}
               form={formFor(openRow.rowId)}
+              generated={generatedForm(openPkg, openRow)}
               t={t}
               resolveText={resolveText}
               renderSlot={renderSlot}
