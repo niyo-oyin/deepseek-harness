@@ -149,6 +149,7 @@
     { "path": "./packages/client/ui-settings-plugins" },
     { "path": "./packages/client/ui-settings-shell" },
     { "path": "./packages/client/ui-settings-mcp" },
+    { "path": "./packages/client/ui-settings-skills" },
     { "path": "./packages/client/ui-settings-agent-loop" },
     { "path": "./packages/experimental/cua/tsconfig.client.json" },
     { "path": "./packages/client/ui-settings-session-log" },

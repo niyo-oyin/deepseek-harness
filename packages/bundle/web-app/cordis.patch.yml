@@ -488,6 +488,12 @@
     - id: ui-settings-mcp
       name: '@deepseek-ai/dsh-client-ui-settings-mcp'
 
+    # Fork: the Skills page over the skill registry's `disabled` setting and
+    # the skill-manager row above — every skill with its switch, and the
+    # editor for the user's own skills.
+    - id: ui-settings-skills
+      name: '@deepseek-ai/dsh-client-ui-settings-skills'
+
     - id: ui-settings-agent-loop
       name: '@deepseek-ai/dsh-client-ui-settings-agent-loop'
 
