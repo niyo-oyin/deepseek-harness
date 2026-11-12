@@ -312,6 +312,8 @@ export function apply(ctx: Context): void {
                 // Fork or child-title failure leaves the source view unchanged.
               })
           },
+          // The navigation reports its own failure; a rejection here is a child-title rename after the fork.
+          resendFrom: (seq, text) => { void ctx.uiWorkspace.resendFrom(sessionId, seq, text).catch(() => {}) },
         }
       },
     }, ChatView)

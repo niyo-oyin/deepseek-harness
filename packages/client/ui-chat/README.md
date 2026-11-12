@@ -102,6 +102,8 @@ The completed-turn action footer follows the recorded Turn end. Its action row s
 <a id="turn-process-folding"></a>
 ## Turn Process Folding
 
+A sent user message with text offers Edit and resend in a new conversation beside Copy, while the Session access snapshot admits `session/fork`. It opens a new Session that holds the conversation up to, and not including, that message, with the message text in the composer; the Session it was sent in is unchanged, because a Session log is append-only. Steering messages do not offer it: they joined a turn already running, so no cut lies before them. Attachments of the message are not carried into the new composer.
+
 Empty `user/message` records with `source.kind: 'retry'` remain in Session history while Chat renders a compact continuation-request receipt instead of a user bubble. Ordinary empty user messages and retry messages containing content retain their normal presentation.
 
 During uninterrupted following, local transcript and steering echoes remain mounted through Inbox acceptance and claim until the durable message arrives, without triggering tail following twice. Pending steering follows Inbox order across clients, using matching local echoes in place. Admitted local steering also suppresses matching stale Inbox rows until the claim projection arrives; steering without a locally tracked submission continues to follow the Inbox projection. After reconnect, Host-owned rows replace receipt-confirmed local echoes; a claim awaiting admission may briefly have no bubble.

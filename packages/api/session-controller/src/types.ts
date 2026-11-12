@@ -311,6 +311,14 @@ export interface SessionForkRequest {
   readonly sessionId: SessionId
   /** Exact inclusive source event seq; omission selects the latest completed-turn prefix. */
   readonly atSeq?: number
+  /**
+   * Cut before the turn that consumed this source event: the child inherits the
+   * latest completed-turn prefix that ends before this seq. Input still pending
+   * at that cut is canceled in the child, because the source delivered it after
+   * the cut. Starting over from a sent message names that message's seq here.
+   * Not accepted together with `atSeq`.
+   */
+  readonly beforeSeq?: number
   /** False asks the Host to check for required migration before forking. Defaults to true. */
   readonly allowMigration?: boolean
 }

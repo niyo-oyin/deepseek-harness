@@ -532,16 +532,18 @@ export class SessionManager {
    * preserve it or lower it after an exact cut before the first `turn/start`;
    * the fork has no durable source relationship. A child published before Workspace
    * attachment fails is also reconciled into the list.
-   * @param opts - source session, optional exact inclusive boundary seq, and permission to start migration.
+   * @param opts - source session, optional exact inclusive boundary seq or the seq whose turn the cut
+   *   precedes, and permission to start migration.
    * @returns the fork result (the child session id).
    */
   async fork(
-    opts: { sessionId: SessionId; atSeq?: SessionSeq; allowMigration?: boolean },
+    opts: { sessionId: SessionId; atSeq?: SessionSeq; beforeSeq?: SessionSeq; allowMigration?: boolean },
   ): Promise<RemoteResult<{ sessionId: SessionId }>> {
     const source = this.summaries.find(s => s.sessionId === opts.sessionId)
     const result = await this.remote.session.fork({
       sessionId: opts.sessionId,
       ...opts.atSeq === undefined ? {} : { atSeq: opts.atSeq },
+      ...opts.beforeSeq === undefined ? {} : { beforeSeq: opts.beforeSeq },
       ...opts.allowMigration === undefined ? {} : { allowMigration: opts.allowMigration },
     })
     const childId = result.ok

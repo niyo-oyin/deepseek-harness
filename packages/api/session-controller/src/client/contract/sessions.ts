@@ -127,7 +127,10 @@ export interface ISessions {
    * @param opts - source session id, the optional exact inclusive boundary
    *   seq (a real event seq the caller already knows; a cut inside an open
    *   turn is balanced Host-side with synthetic closers, and omission selects
-   *   the latest completed-turn prefix), and whether to increment an
+   *   the latest completed-turn prefix), or instead `beforeSeq`, the seq of an
+   *   event whose turn the child must not contain (the child inherits the
+   *   latest completed-turn prefix before it, with the input pending there
+   *   canceled), and whether to increment an
    *   inherited durable title, skipping numbers Host-listed titles already use,
    *   before resolving. `onCreated` observes the catalogued child before that optional rename.
    * @returns the child session id.
@@ -136,6 +139,7 @@ export interface ISessions {
   fork(opts: {
     sessionId: SessionId
     atSeq?: number
+    beforeSeq?: number
     increaseTitle?: boolean
     onCreated?: (childId: SessionId) => void
     /** False refuses source migration; omission preserves the Host default. */

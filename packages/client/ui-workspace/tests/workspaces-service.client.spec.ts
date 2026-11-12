@@ -576,6 +576,72 @@ describe('UiWorkspaceService', () => {
     expect(b.selectPanel).not.toHaveBeenCalled()
   })
 
+  describe('resendFrom', () => {
+    it('forks before the sent message, then opens the child with the message text in its composer', async () => {
+      const b = bench()
+      b.uiWorkspace.openSession(sid('source'))
+      const source = b.sessions.retained[0]!
+      b.requestDraftInitialization.mockImplementation((binding) => {
+        // The draft is prepared on the retained child before it replaces the source in the main view.
+        expect(binding.sessionId).toBe(sid('forked'))
+        expect(source.release).not.toHaveBeenCalled()
+        return 'applied'
+      })
+
+      await b.uiWorkspace.resendFrom(sid('source'), 7, 'question, reworded')
+
+      expect(b.sessions.fork).toHaveBeenCalledExactlyOnceWith({ sessionId: sid('source'), beforeSeq: 7, increaseTitle: true })
+      expect(b.requestDraftInitialization).toHaveBeenCalledExactlyOnceWith(
+        b.sessions.retained[1]!.reference.binding, { prompt: 'question, reworded', whenDraftExists: 'replace' },
+      )
+      expect(b.sessions.retain).toHaveBeenLastCalledWith(sid('forked'), { source: 'mainView' })
+      expect(source.release).toHaveBeenCalledOnce()
+      expect(b.notify).not.toHaveBeenCalled()
+    })
+
+    it('puts a first-turn message in a blank Session of the same Workspace, which has no earlier history to keep', async () => {
+      const b = bench({ workspaces: workspaceState([workspace('a', [sid('source')])]), sessions: sessionState([summary('source', { cwd: '/w/a' })]) })
+      const opening = vi.spyOn(b.uiWorkspace, 'openWorkspace')
+      b.sessions.fork.mockRejectedValueOnce(Object.assign(new Error('session fork failed'), {
+        name: 'SessionForkError', rpcError: { code: 'session/fork-unavailable', message: 'no completed turn before event 1' },
+      }))
+
+      await b.uiWorkspace.resendFrom(sid('source'), 1, 'first question')
+      await lastOpening(opening)
+
+      expect(b.sessions.create).toHaveBeenCalledWith({ workspaceId: wid('a') })
+      expect(b.requestDraftInitialization).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ sessionId: sid('created-a') }), { prompt: 'first question', whenDraftExists: 'replace' },
+      )
+      expect(b.notify).not.toHaveBeenCalled()
+    })
+
+    it('reports any other fork failure and keeps the current selection', async () => {
+      const b = bench()
+      b.uiWorkspace.openSession(sid('source'))
+      b.sessions.retain.mockClear()
+      b.sessions.fork.mockRejectedValueOnce(new Error('fork failed'))
+
+      await b.uiWorkspace.resendFrom(sid('source'), 7, 'question')
+
+      expect(b.notify).toHaveBeenCalledExactlyOnceWith({ kind: 'createFailed', message: 'fork failed' })
+      expect(b.sessions.retain).not.toHaveBeenCalled()
+      expect(b.requestDraftInitialization).not.toHaveBeenCalled()
+    })
+
+    it('does not open the child after a later navigation', async () => {
+      const b = bench()
+      const forked = Promise.withResolvers<SessionId>()
+      b.sessions.fork.mockReturnValueOnce(forked.promise)
+      const resending = b.uiWorkspace.resendFrom(sid('source'), 7, 'question')
+      b.uiWorkspace.openSession(sid('elsewhere'))
+      forked.resolve(sid('forked'))
+      await resending
+      expect(b.sessions.retain).toHaveBeenCalledExactlyOnceWith(sid('elsewhere'), { source: 'mainView' })
+      expect(b.requestDraftInitialization).not.toHaveBeenCalled()
+    })
+  })
+
   it('does not supersede a pending Workspace selection when a sidebar fork completes', async () => {
     const b = bench({ workspaces: workspaceState([workspace('a')]) })
     const created = Promise.withResolvers<SessionId>()

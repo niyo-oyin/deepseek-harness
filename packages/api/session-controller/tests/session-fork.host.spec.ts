@@ -328,6 +328,73 @@ describe('sessions.fork', () => {
     },
   )
 
+  it('starts over before a sent message: keeps the earlier turns and cancels the input queued before the cut', async () => {
+    const ctx = new Context()
+    try {
+      await mountAgentLoopTestDependencies(ctx)
+      const harness = await mountAgentLoopTestHarness(ctx)
+      const adapter = new MockAdapter(Array.from({ length: 4 }, () => textResponse('reply')))
+      ctx.llm.registerAdapter(['mock'], adapter)
+      ctx.provide('workspaceRegistry', { list: () => [], archivedSessionIds: [] } as never)
+      const source = await harness.create(sid('source'), { provider: 'mock', model: 'mock' })
+      // B and C are queued while A's turn has not ended, so they are still pending at the end of that turn.
+      source.followup(message('A'))
+      source.followup(message('B'))
+      source.followup(message('C'))
+      await source.whenIdle()
+      const original = source.session.snapshotEvents()
+      const sent = original.find(event => event.type === 'user/message'
+        && event.data.content.some(part => part.type === 'text' && part.text === 'B'))!
+      const firstTurnEnd = original.find(event => event.type === 'turn/end')!
+
+      const response = await (await createSessionTestRemote(ctx, {
+        defaultModelSelection: () => ({ provider: 'mock', model: 'mock' }), cwd: '/tmp',
+      })).fork({ sessionId: source.id, beforeSeq: sent.seq })
+
+      if (!response.ok) throw response.error
+      const child = ctx.agents.get(response.value.sessionId)!
+      expect(child.session.inheritedEventCount).toBe(firstTurnEnd.seq + 1)
+      // The inherited prefix still records B and C as queued; the child cancels both right after its seed marker.
+      expect(child.session.snapshotEvents().slice(child.session.inheritedEventCount)).toMatchObject([
+        { type: 'session/end-seed' },
+        { type: 'agent/inbox/spliced', data: { target: 'next-turn', start: 0, removedCount: 2, inserted: [], outcome: 'canceled' } },
+      ])
+      const requestCount = adapter.requests.length
+      child.followup(message('B, reworded'))
+      await child.whenIdle()
+      const userTexts = child.session.deriveMessages().flatMap(item => item.role === 'user'
+        ? item.content.flatMap(part => part.type === 'text' ? [part.text] : []) : [])
+      expect(userTexts).toEqual(['A', 'B, reworded'])
+      expect(adapter.requests.slice(requestCount)).toHaveLength(1)
+      expect(source.session.snapshotEvents()).toEqual(original)
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('has no cut before a message of the first turn, and takes one boundary kind at a time', async () => {
+    const ctx = await composed()
+    const source = await liveAgent(ctx, 'session-first-message', 2)
+    const proxy = await remote(ctx)
+    // Seq 1 is the first turn's user message: no completed turn precedes it.
+    const first = await proxy.fork(request({ sessionId: source.id, beforeSeq: 1 }))
+    expect(first).toMatchObject({
+      ok: false,
+      error: { code: 'session/fork-unavailable', details: { sessionId: source.id } },
+    })
+    if (!first.ok) expect(first.error.message).toMatch(/no completed turn before event 1/)
+    // Seq 4 is the second turn's user message: the child keeps the first turn only.
+    const second = await proxy.fork(request({ sessionId: source.id, beforeSeq: 4 }))
+    if (!second.ok) throw second.error
+    expect(ctx.sessions.get(second.value.sessionId)?.snapshotEvents().map(event => event.type))
+      .toEqual(['turn/start', 'user/message', 'turn/end', 'session/end-seed'])
+    for (const anchors of [{ atSeq: 2, beforeSeq: 4 }, { beforeSeq: -1 }, { beforeSeq: 0.5 }]) {
+      await expect(proxy.fork(request({ sessionId: source.id, ...anchors })))
+        .resolves.toMatchObject({ ok: false, error: { code: 'gateway/bad-request' } })
+    }
+    await ctx.fiber.dispose()
+  })
+
   it('cuts exactly at a completed turn and retains cwd without source lineage', async () => {
     const ctx = await composed()
     const source = await liveAgent(ctx, 'session-source', 2)

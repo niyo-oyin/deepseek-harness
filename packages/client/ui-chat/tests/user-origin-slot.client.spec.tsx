@@ -55,6 +55,7 @@ function viewProps(data: UserMessageNode | SteeringMessageNode): ChatNodeViewPro
   } as ChatConversationViewNode
   const props: Partial<Omit<ChatNodeViewProps, 'node'>> & { node: ChatConversationViewNode } = {
     node, t, loadImage: unusedImageLoader, renderFactorySlot: renderUserFactory, openFile: vi.fn(),
+    useAccess: () => true, resendFrom: vi.fn(),
   }
   return props as ChatNodeViewProps<'user' | 'steering'>
 }

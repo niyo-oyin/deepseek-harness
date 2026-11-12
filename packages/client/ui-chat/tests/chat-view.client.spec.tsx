@@ -451,6 +451,7 @@ function makeHarness(
     read: () => savedScroll,
   }
   const forkAt = vi.fn()
+  const resendFrom = vi.fn()
   // Rows and the harness must observe the same chat-store instance.
   const chat = createChatStore().create()
   const transcriptView = createSnapshotStore<TranscriptViewMode>('compact')
@@ -578,6 +579,7 @@ function makeHarness(
     loadImage: vi.fn(() => Promise.reject(new Error('not used'))),
     chatScroll,
     forkAt,
+    resendFrom,
     // Absent-service default; mention tests override with a real resolver.
     fileMentions: () => undefined,
     t,
@@ -605,7 +607,7 @@ function makeHarness(
     setConnection: (state: ConnectionState) => { connection.set(state) },
     openFile, openUserFile, loadOlder, consumeOlder, prepareOlder, loadThrough, openView,
     setOutline: (value: unknown) => { outlineValue = value },
-    chatScroll, forkAt, toolOwners, fenceCalls,
+    chatScroll, forkAt, resendFrom, toolOwners, fenceCalls,
     setPerformanceUsage: (mode: 'compact' | 'detailed') => { performanceUsage.set(mode) },
     setGrouped: (value: ConversationGroupedView<ProcessGroupData> | undefined) => {
       grouped = value
@@ -3750,6 +3752,26 @@ describe('ChatView', () => {
     expect(buttons[0]!.getAttribute('aria-disabled')).toBe('true')
     fireEvent.click(buttons[0]!)
     expect(h.forkAt).not.toHaveBeenCalled()
+  })
+
+  it('offers edit and resend on a sent user message with its text, and not on a steering message', () => {
+    const h = makeHarness({ nodes: [userInTurn(1, 'question', 1), steering(2, 'direction', 1)] })
+    const view = render(<h.ChatView {...h.props} />)
+    const userRow = view.container.querySelector<HTMLElement>('[data-chat-flow-kind="user"]')!
+    const steeringRow = view.container.querySelector<HTMLElement>('[data-chat-flow-kind="steering"]')!
+    // A steering message joined a turn that was already running, so no cut lies before it.
+    expect(within(steeringRow).queryByRole('button', { name: '编辑并在新对话中重新发送' })).toBeNull()
+    fireEvent.click(within(userRow).getByRole('button', { name: '编辑并在新对话中重新发送' }))
+    // The message's own event seq names the cut, and its text is what the composer starts from.
+    expect(h.resendFrom.mock.calls).toEqual([[1, 'question']])
+  })
+
+  it('omits edit and resend when the Session access snapshot excludes session/fork', () => {
+    const h = makeHarness({ nodes: [user(1, 'question')] })
+    Object.assign(h.props, { useAccess: (endpoint: string) => endpoint !== 'session/fork' })
+    const view = render(<h.ChatView {...h.props} />)
+    expect(view.getByRole('button', { name: '复制' })).toBeTruthy()
+    expect(view.queryByRole('button', { name: '编辑并在新对话中重新发送' })).toBeNull()
   })
 
   it('omits the Turn Tail branch action when the Session access snapshot excludes session/fork', () => {

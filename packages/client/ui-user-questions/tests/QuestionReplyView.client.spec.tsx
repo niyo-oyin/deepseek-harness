@@ -25,6 +25,7 @@ function renderView(data: QuestionReplyData) {
     openFile: vi.fn(),
     inspectCall: vi.fn(),
     forkAt: vi.fn(),
+    resendFrom: vi.fn(),
     loadImage: vi.fn(() => Promise.reject(new Error('not used'))),
     useDisclosure,
     useTurnData: () => undefined,

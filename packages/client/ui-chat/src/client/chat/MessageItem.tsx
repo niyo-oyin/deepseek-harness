@@ -330,12 +330,15 @@ export function PendingSubmissionBubble({ submission, loadImage, renderFactorySl
  * bubble without asking for it.
  */
 export const UserMessageNodeView = memo(function UserMessageNodeView({
-  node, renderFactorySlot, loadImage, renderSlotChain, t,
+  node, renderFactorySlot, loadImage, renderSlotChain, resendFrom, useAccess, t,
 }: ChatNodeViewProps<'user' | 'steering'> & {
   /** Bound by the `user` keyed registration, the only entry that declares the seat. */
   renderSlotChain: PropsRenderSlots<'conversation.chat.user.before'>['renderSlotChain']
 }) {
   const data = node.data
+  const forkAllowed = useAccess('session/fork')
+  // A steering message joined a turn already running, so no cut lies before it; a message without text has nothing to edit.
+  const resendable = forkAllowed && node.kind === 'user'
   return (
     <UserStyleBubble
       node={node}
@@ -352,6 +355,7 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
           text={text}
           time={data.time}
           clock="end"
+          onResend={resendable && text.trim() !== '' ? () => { resendFrom(data.seq, text) } : undefined}
           className={css.actions}
           t={t}
         />

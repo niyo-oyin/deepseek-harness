@@ -6,6 +6,7 @@ import type { ClientRemote, DirectoryListing, RemoteFailure } from '@deepseek-ai
 import type {
   ISessions,
   SessionCreateError,
+  SessionForkError,
   SessionBinding,
   SessionReference,
   SessionTarget,
@@ -70,6 +71,18 @@ export interface UiWorkspace {
     onCreated?: (childId: SessionId) => void,
     options?: Pick<Parameters<ISessions['fork']>[0], 'allowMigration'>,
   ): Promise<SessionId>
+  /**
+   * Start over from a sent message: fork the Session before the turn that consumed the message, open
+   * the child, and put the message text in its composer, where the user edits and sends it. The source
+   * Session keeps its history. A message of the first turn has no earlier history to keep, so its text
+   * goes to a blank Session of the same Workspace instead. Attachments of the message are not carried.
+   * A failure is shown through the Workspace notice and leaves the selection as it was.
+   * @param sessionId - Session holding the message.
+   * @param messageSeq - event seq of the sent user message.
+   * @param prompt - the message text the composer starts from.
+   * @returns completion; a later navigation supersedes the open without undoing the fork.
+   */
+  resendFrom(sessionId: SessionId, messageSeq: number, prompt: string): Promise<void>
   /**
    * Resolve the Session for a new conversation in a Workspace: navigation names the first reusable
    * blank member — listed in the Workspace, not archived, and listing no preset or the requested one —
@@ -331,6 +344,32 @@ class UiWorkspaceService extends Service implements UiWorkspace {
       increaseTitle: true,
       ...onCreated === undefined ? {} : { onCreated },
       ...options?.allowMigration === undefined ? {} : { allowMigration: options.allowMigration },
+    })
+  }
+
+  async resendFrom(sessionId: SessionId, messageSeq: number, prompt: string): Promise<void> {
+    const navigation = AbortSignal.any([this.ctx.layout.beginNavigation(), this.lifetime.signal])
+    const draft: DraftInitializationOptions = { prompt, whenDraftExists: 'replace' }
+    let childId: SessionId
+    try {
+      childId = await this.sessions.fork({ sessionId, beforeSeq: messageSeq, increaseTitle: true })
+    } catch (error: unknown) {
+      if (navigation.aborted) return
+      if (error instanceof Error && error.name === 'SessionForkError'
+        && (error as SessionForkError).rpcError.code === 'session/fork-unavailable') {
+        const workspaceId = this.workspaces.list.getSnapshot().items
+          .find(item => item.sessionIds.includes(sessionId))?.workspaceId
+        this.startSession(workspaceId, draft)
+        return
+      }
+      this.notify({ kind: 'createFailed', message: error instanceof Error ? error.message : String(error) })
+      return
+    }
+    if (navigation.aborted) return
+    this.replaceMain(childId, navigation, 'reveal', (id) => {
+      const binding = this.sessions.binding(id)
+      if (binding === undefined) this.draftPreparationFailed()
+      this.prepareDraft(binding, draft)
     })
   }
 

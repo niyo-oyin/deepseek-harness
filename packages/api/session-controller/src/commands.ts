@@ -84,6 +84,32 @@ function latestCompletedPrefixBoundary(events: readonly SessionEvent[]): Session
   return boundary
 }
 
+/**
+ * Cancel the input that is still pending at the end of a fork seed. Each
+ * `agent/inbox/spliced` event changes one pending list by its inserted and
+ * removed counts, so the counts alone give what the lists hold at the cut.
+ * @param seed - the fork seed, whose last event supplies the seq base and time.
+ * @returns one canceling splice per non-empty pending list, next-step first, as the Inbox's own clear writes them.
+ */
+function pendingInputCancellations(seed: readonly SessionEvent[]): SessionEvent[] {
+  const pending = { 'next-step': 0, 'next-turn': 0 }
+  for (const event of seed) {
+    if (event.type !== 'agent/inbox/spliced') continue
+    pending[event.data.target] += event.data.inserted.length - (event.data.removedCount ?? 0)
+  }
+  const last = seed.at(-1)
+  if (last === undefined) return []
+  const cancellations: SessionEvent[] = []
+  for (const target of ['next-step', 'next-turn'] as const) {
+    if (pending[target] <= 0) continue
+    cancellations.push({
+      type: 'agent/inbox/spliced', seq: SessionSeq(last.seq + cancellations.length + 1), time: last.time,
+      data: { target, start: 0, removedCount: pending[target], inserted: [], outcome: 'canceled' },
+    })
+  }
+  return cancellations
+}
+
 /** Implements Session business commands delegated by the Session Controller Remote service. */
 export class SessionCommandController {
   /** First-insertion facts cached per exact Session; the log remains the recovery source. */
@@ -224,15 +250,23 @@ export class SessionCommandController {
    * Create a new ordinary Session from an exact event prefix. An explicit
    * `atSeq` is the inclusive cut; an omitted value selects the latest
    * completed-turn prefix. An open cut receives synthetic fork closers.
-   * @param request - source Session and optional exact event boundary.
+   * `beforeSeq` selects the latest completed-turn prefix that ends before that
+   * event and cancels the input still pending there, so the child continues
+   * from the state before the event's turn with nothing queued.
+   * @param request - source Session and optional exact or preceding event boundary.
    * @returns the new Session identity.
    */
   async fork(request: SessionForkRequest): Promise<SessionForkValue> {
+    if (request.atSeq !== undefined && request.beforeSeq !== undefined) {
+      throw new RemoteError('gateway/bad-request', 'atSeq and beforeSeq cannot be combined', {})
+    }
     let atSeq: ReturnType<typeof SessionSeq> | undefined
+    let beforeSeq: ReturnType<typeof SessionSeq> | undefined
     try {
       atSeq = request.atSeq === undefined ? undefined : SessionSeq(request.atSeq)
+      beforeSeq = request.beforeSeq === undefined ? undefined : SessionSeq(request.beforeSeq)
     } catch {
-      throw new RemoteError('gateway/bad-request', 'atSeq must be a non-negative safe integer', {})
+      throw new RemoteError('gateway/bad-request', 'atSeq and beforeSeq must be non-negative safe integers', {})
     }
     let observed: SessionObservation
     try {
@@ -251,17 +285,22 @@ export class SessionCommandController {
       )
     }
     using source = observed
-    const boundary = atSeq ?? latestCompletedPrefixBoundary(source.events)
+    // Seqs are contiguous from zero, so the events before `beforeSeq` are the first `beforeSeq` events.
+    const boundary = atSeq
+      ?? latestCompletedPrefixBoundary(beforeSeq === undefined ? source.events : source.events.slice(0, beforeSeq))
     if (boundary === undefined || source.events[boundary]?.seq !== boundary) {
       throw new RemoteError(
         'session/fork-unavailable',
-        request.atSeq === undefined
-          ? `session "${request.sessionId}" has no completed turn to fork from`
-          : `event ${String(request.atSeq)} does not exist in session "${request.sessionId}" (last seq: ${String(source.events.at(-1)?.seq ?? 'none')})`,
+        request.atSeq !== undefined
+          ? `event ${String(request.atSeq)} does not exist in session "${request.sessionId}" (last seq: ${String(source.events.at(-1)?.seq ?? 'none')})`
+          : request.beforeSeq !== undefined
+            ? `session "${request.sessionId}" has no completed turn before event ${String(request.beforeSeq)}`
+            : `session "${request.sessionId}" has no completed turn to fork from`,
         { sessionId: request.sessionId },
       )
     }
     const seed = buildForkSeed(source.events, boundary)
+    if (beforeSeq !== undefined) seed.push(...pendingInputCancellations(seed))
     let workspace: Workspace | undefined
     try {
       workspace = await this.forkWorkspace(source.header)
