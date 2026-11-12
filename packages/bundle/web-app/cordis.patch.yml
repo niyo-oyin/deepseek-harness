@@ -478,6 +478,11 @@
     - id: ui-settings-shell
       name: '@deepseek-ai/dsh-client-ui-settings-shell'
 
+    # Fork: the MCP servers page over the mcp-manager row above — its entries,
+    # live status, connection test, and restart.
+    - id: ui-settings-mcp
+      name: '@deepseek-ai/dsh-client-ui-settings-mcp'
+
     - id: ui-settings-agent-loop
       name: '@deepseek-ai/dsh-client-ui-settings-agent-loop'
 

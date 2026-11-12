@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "MCP servers",
+    "description": "Add, enable, test, and restart the MCP servers the agent can use."
+  }
+}
