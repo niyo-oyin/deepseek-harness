@@ -397,14 +397,17 @@ export function ModelSelect(
     ? t('trigger.loading')
     : currentChoice?.model.name
       ?? t('trigger.fallback')
-  const triggerLabel = effortLabel === undefined ? modelLabel : `${modelLabel} · ${effortLabel}`
+  // Two providers can serve a model of the same name, so the trigger names the provider of the current one.
+  const providerLabel = currentChoice?.group.provider.name
+  const providedModelLabel = providerLabel === undefined ? modelLabel : `${providerLabel} · ${modelLabel}`
+  const triggerLabel = effortLabel === undefined ? providedModelLabel : `${providedModelLabel} · ${effortLabel}`
   const triggerAria = waiting
     ? t('trigger.loading')
     : currentChoice === undefined
       ? t('trigger.selectAria')
       : effortLabel === undefined
-        ? t('trigger.aria', { model: modelLabel })
-        : t('trigger.ariaEffort', { model: modelLabel, effort: effortLabel })
+        ? t('trigger.aria', { model: providedModelLabel })
+        : t('trigger.ariaEffort', { model: providedModelLabel, effort: effortLabel })
   const renderModelLabel = (
     provider: ModelLabelOwner['provider'], model: ModelLabelOwner['model'],
     placement: ModelLabelOwner['placement'], selected: boolean,
@@ -464,6 +467,7 @@ export function ModelSelect(
         }}
       >
         <IconDataOutlineRegular className={css.triggerIcon} size={16} />
+        {providerLabel !== undefined && <span className={css.triggerProvider}>{`${providerLabel} ·`}</span>}
         <span className={css.triggerLabel}>
           {currentChoice === undefined ? modelLabel : renderModelLabel(currentChoice.group.provider, currentChoice.model, 'trigger', true)}
         </span>

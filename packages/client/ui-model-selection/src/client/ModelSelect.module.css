@@ -66,6 +66,17 @@
   color: var(--dsw-alias-label-caption);
 }
 
+/* Provider name ahead of the model name, in the caption tone. It gives way after
+   the effort and before the model name, which stays readable longest. */
+.triggerProvider {
+  flex-shrink: 100;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-caption);
+}
+
 /* The Models glyph replaces the text when the composer row cannot fit it. */
 .triggerIcon {
   display: var(--dsh-composer-model-icon-display, none);
@@ -74,6 +85,7 @@
 
 /* The composer measures expanded row demand and owns these display variables.
    Outside a composer, the trigger retains its text. */
+.triggerProvider,
 .triggerLabel,
 .triggerEffort {
   display: var(--dsh-composer-model-text-display, block);
