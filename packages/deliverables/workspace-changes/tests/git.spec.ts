@@ -103,6 +103,35 @@ describe('snapshots and diffs', () => {
     expect((await diffTrees(runnerGit, workspace, before, after, signal)).length).toBe(21)
   })
 
+  it('keeps its private index between snapshots and restarts it when the repository index changes or a snapshot fails', async () => {
+    const cwd = await scratchDir('dsh-git-reuse-', cleanups)
+    git(cwd, 'init', '-q', '-b', 'main')
+    await writeFile(join(cwd, 'tracked.txt'), 'one\n')
+    git(cwd, 'add', '-A'); git(cwd, 'commit', '-q', '-m', 'base')
+    await writeFile(join(cwd, 'untracked.txt'), 'new\n')
+    const { git: runnerGit } = await runner()
+    const workspace = (await locateGitWorkspace(runnerGit, cwd, objectsIn(await scratchDir('dsh-git-store-', cleanups)), signal))!
+    const first = await snapshotTree(runnerGit, workspace, signal)
+    const seed = workspace.seed
+    expect(seed).toMatch(/^\d+(?:\.\d+)?:\d+$/)
+    expect(await snapshotTree(runnerGit, workspace, signal)).toBe(first)
+    expect(workspace.seed).toBe(seed)
+    await writeFile(join(cwd, 'untracked.txt'), 'changed\n')
+    const second = await snapshotTree(runnerGit, workspace, signal)
+    expect((await diffTrees(runnerGit, workspace, first, second, signal)).map(entry => entry.path)).toEqual(['untracked.txt'])
+    expect(workspace.seed).toBe(seed)
+    // Unstaging rewrites the repository's index; the work tree, and so the snapshot, stays the same.
+    git(cwd, 'rm', '-q', '--cached', 'tracked.txt')
+    expect(await snapshotTree(runnerGit, workspace, signal)).toBe(second)
+    expect(workspace.seed).not.toBe(seed)
+    const aborted = new AbortController()
+    aborted.abort()
+    await expect(snapshotTree(runnerGit, workspace, aborted.signal)).rejects.toThrow()
+    expect(workspace.seed).toBeUndefined()
+    expect(await readdir(workspace.scratch)).not.toContain('index')
+    expect(await snapshotTree(runnerGit, workspace, signal)).toBe(second)
+  })
+
 })
 
 describe('repository edge cases', () => {

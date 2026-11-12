@@ -1,5 +1,5 @@
 /** Git working-tree snapshots, tree diffs, and ignore checks through the subprocess capability. */
-import { copyFile, mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { copyFile, mkdir, rm, stat } from 'node:fs/promises'
 import { join, relative, resolve } from 'node:path'
 import type { SubprocessRuntime } from '@deepseek-ai/dsh-subprocess'
 import { parseNumstat, type NumstatEntry } from './numstat.ts'
@@ -103,6 +103,11 @@ export interface GitWorkspace {
   env: Readonly<Record<string, string>>
   /** Work-tree paths a snapshot must skip: the private directory when a temporary root lies inside the work tree. */
   excludes: readonly string[]
+  /**
+   * Modification time and size of the repository's index when the private index was last seeded from it, or
+   * `absent` for a repository without one; undefined before the first snapshot and after a failed one.
+   */
+  seed?: string | undefined
 }
 
 /** Whether a filesystem error names a missing path. */
@@ -143,7 +148,7 @@ export async function locateGitWorkspace(
 /**
  * Write the complete work tree, including untracked and modified files but
  * not ignored ones, as a tree object through a private index seeded from the
- * repository's index. New blobs and the tree land in the private object store;
+ * repository's index and kept until that index changes. New blobs and the tree land in the private object store;
  * the repository's index, object store, work tree, and refs stay unchanged,
  * and an in-progress merge keeps its unmerged entries.
  * @param git - command runner.
@@ -152,13 +157,22 @@ export async function locateGitWorkspace(
  * @returns the tree object id.
  */
 export async function snapshotTree(git: GitRunner, workspace: GitWorkspace, signal: AbortSignal): Promise<string> {
-  const scratch = await mkdtemp(join(workspace.scratch, 'index-'))
+  const index = join(workspace.scratch, 'index')
   try {
-    const index = join(scratch, 'index')
-    // A repository without an index yet (fresh `git init`) starts from scratch.
-    await copyFile(join(workspace.gitDir, 'index'), index).catch((error: unknown) => {
+    // A repository without an index yet (fresh `git init`) has no facts to seed from.
+    const source = join(workspace.gitDir, 'index')
+    const facts = await stat(source).then(found => `${String(found.mtimeMs)}:${String(found.size)}`, (error: unknown) => {
       if (!isMissing(error)) throw error
+      return 'absent'
     })
+    // The private index outlives one snapshot, so git reuses the file facts it recorded and hashes only what changed
+    // since the previous snapshot. A stage, commit, or checkout rewrites the repository's index; the private index
+    // then restarts from it.
+    if (workspace.seed !== facts) {
+      if (facts === 'absent') await rm(index, { force: true })
+      else await copyFile(source, index)
+      workspace.seed = facts
+    }
     const env = { ...workspace.env, GIT_INDEX_FILE: index }
     // `--ignore-errors` skips unreadable files and reports them through exit code 1; the index is still complete.
     const pathspec = workspace.excludes.length === 0 ? [] : ['--', '.', ...workspace.excludes.map(path => `:(exclude)${path}`)]
@@ -166,8 +180,12 @@ export async function snapshotTree(git: GitRunner, workspace: GitWorkspace, sign
     /* v8 ignore next -- git reports a skipped unreadable file only on hosts whose permissions the tests can revoke. */
     if (added.exitCode !== 1) ok(added, `git add in ${workspace.root}`)
     return ok(await git.run(['write-tree'], { cwd: workspace.root, env, signal }), 'git write-tree').stdout.trim()
-  } finally {
-    await rm(scratch, { recursive: true, force: true })
+  } catch (error: unknown) {
+    // An interrupted git command can leave a partial index or its lock; the next snapshot restarts from the repository's index.
+    workspace.seed = undefined
+    await rm(index, { force: true })
+    await rm(`${index}.lock`, { force: true })
+    throw error
   }
 }
 
