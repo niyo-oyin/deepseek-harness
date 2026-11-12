@@ -1088,8 +1088,9 @@ export class PluginManagerController {
     try {
       await this.load()
       if (this.getSnapshot().status !== 'error') await this.checkAllVersions()
-    } catch (_error) {
+    } catch (error) {
       // A rejected transport request leaves the cached cards available for retry.
+      console.warn('[ui-plugin-manager] plugin refresh failed:', error instanceof Error ? error.message : String(error))
       this.patch({ status: 'error' })
     } finally {
       // Hold the spinner to its minimum so a fast read does not flash it, then settle.
@@ -1119,6 +1120,7 @@ export class PluginManagerController {
         const inventory = await this.ctx.remote.pluginInventory.list()
         if (generation !== this.generation) return
         if (!inventory.ok) {
+          console.warn(`[ui-plugin-manager] pluginInventory.list failed: ${inventory.error.code}: ${inventory.error.message}`)
           this.patch({ status: 'error' })
           continue
         }
@@ -1133,6 +1135,9 @@ export class PluginManagerController {
         ])
         if (generation !== this.generation) return
         if (!bundles.ok || !plugins.ok) {
+          for (const [method, result] of [['listBundles', bundles], ['listPlugins', plugins]] as const) {
+            if (!result.ok) console.warn(`[ui-plugin-manager] pluginManager.${method} failed: ${result.error.code}: ${result.error.message}`)
+          }
           this.patch({ status: 'error' })
           continue
         }

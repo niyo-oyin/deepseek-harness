@@ -43,6 +43,9 @@ import css from './InputBar.module.css'
 
 export type InputBarProps = ComposerBarProps
 
+/** How long a submit phase may hold the composer read-only before the console names the phase. */
+const COMPOSER_BUSY_WARNING_MS = 30_000
+
 export const InputBar = memo(function InputBar({
   useSession, useInput, inputActions, keyboard, addFiles, removeAttachment, resolveDraftAttachments,
   retryFileUpload, registerFileIntake,
@@ -160,6 +163,20 @@ export const InputBar = memo(function InputBar({
   // be disabled do lock it — there is no session to choose a model for.
   const modelSeatLocked = removed || inert || !live
   const machineBusy = input?.phase === 'adjudicating' || input?.phase === 'submitting' || input?.phase === 'sending'
+  // A composer that refuses input inside a Session names its reason in the console; Desktop keeps
+  // console warnings on disk, so a composer found read-only later can still be explained.
+  useEffect(() => {
+    if (sessionId === undefined || !locked) return
+    console.warn(`[ui-conversation] composer locked: removed=${String(removed)} inert=${String(inert)} live=${String(live)} blocked=${String(blocked !== undefined)}`)
+  }, [locked, sessionId])
+  const busyPhase = machineBusy ? input?.phase : undefined
+  useEffect(() => {
+    if (busyPhase === undefined) return
+    const timer = setTimeout(() => {
+      console.warn(`[ui-conversation] composer still read-only after ${String(COMPOSER_BUSY_WARNING_MS / 1000)}s in phase ${busyPhase}`)
+    }, COMPOSER_BUSY_WARNING_MS)
+    return () => { clearTimeout(timer) }
+  }, [busyPhase])
   // The message waits for the Host to accept it; Send shows progress instead of the arrow.
   const sending = input?.phase === 'sending'
   // The no-workspace surface remains the resident DOM node but acts as the
