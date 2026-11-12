@@ -15,6 +15,8 @@ import type {
   WorkspaceOrderValue,
   WorkspacePinSessionRequest,
   WorkspacePinValue,
+  WorkspaceReleaseSandboxAccessValue,
+  WorkspaceSandboxAccessValue,
   WorkspaceUnarchiveSessionRequest,
   WorkspaceUnpinSessionRequest,
   WorkspaceValue,
@@ -133,6 +135,23 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
     const result = await this.remote.delete({ workspaceId })
     if (result.ok) this.remove(workspaceId, true)
     return result
+  }
+
+  /**
+   * Ask whether the Host's process sandbox leaves standing access on Workspace directories.
+   * @returns generated Remote result.
+   */
+  sandboxAccess(): Promise<RemoteResult<WorkspaceSandboxAccessValue>> {
+    return this.remote.sandboxAccess()
+  }
+
+  /**
+   * Release the sandbox's standing access on one Workspace directory; the projection is unchanged.
+   * @param workspaceId - target Workspace.
+   * @returns generated Remote result.
+   */
+  releaseSandboxAccess(workspaceId: WorkspaceId): Promise<RemoteResult<WorkspaceReleaseSandboxAccessValue>> {
+    return this.remote.releaseSandboxAccess({ workspaceId })
   }
 
   /**

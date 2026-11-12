@@ -326,6 +326,14 @@ export type RowToast =
   | { kind: 'unpinFailed' }
   | { kind: 'archivedNotOpenable' }
   | { kind: 'defaultWorkspaceFailed' }
+  /** A sandbox-access release started on the Workspace displayed as `title`; its outcome follows as another notice. */
+  | { kind: 'sandboxReleasing'; title: string }
+  /** The release removed the sandbox's entries from the Workspace directory. */
+  | { kind: 'sandboxReleased'; title: string }
+  /** The Workspace directory carried nothing for the release to undo. */
+  | { kind: 'sandboxUnchanged'; title: string }
+  /** The Host could not release the Workspace directory. */
+  | { kind: 'sandboxReleaseFailed'; title: string }
   | { kind: 'forkRequiresOpen'; sessionId: SessionId }
   | { kind: 'shortcutForkFailed'; reason: 'unavailable' | 'failed' }
   /**

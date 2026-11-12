@@ -373,8 +373,11 @@ describe('WorkspaceController', () => {
     await expect(controller.unarchiveSession(sid('session'))).resolves.toBeUndefined()
     await expect(controller.pinSession(sid('session'))).resolves.toBeUndefined()
     await expect(controller.unpinSession(sid('session'))).resolves.toBeUndefined()
+    await expect(controller.sandboxAccess()).resolves.toBe(true)
+    await expect(controller.releaseSandboxAccess(wid('one'))).resolves.toBe(true)
     await expect(controller.delete(wid('one'))).resolves.toBeUndefined()
     // Each command crosses the wire as one positional request object.
+    expect(mock.log.requests('workspace/releaseSandboxAccess')).toEqual([{ workspaceId: 'one' }])
     expect(mock.log.requests('workspace/create')).toEqual([{ path: '/work/created' }])
     expect(mock.log.requests('workspace/rename')).toEqual([{ workspaceId: 'one', title: 'renamed' }])
     expect(mock.log.requests('workspace/insertBefore')).toEqual([{ workspaceId: 'one' }])
@@ -405,6 +408,13 @@ describe('WorkspaceController', () => {
     await expect(controller.rename(wid('missing'), 'name')).rejects.toThrow('workspace rename failed: workspace/not-found: gone')
     mock.remote.workspace.delete.mockResolvedValueOnce(err(missingWorkspace))
     await expect(controller.delete(wid('missing'))).rejects.toThrow('workspace delete failed: workspace/not-found: gone')
+    mock.remote.workspace.sandboxAccess.mockResolvedValueOnce(err(new RemoteError('gateway/internal', 'no sandbox', {})))
+    await expect(controller.sandboxAccess()).rejects.toThrow('workspace sandbox access query failed: gateway/internal: no sandbox')
+    mock.remote.workspace.releaseSandboxAccess.mockResolvedValueOnce(err(
+      new RemoteError('workspace/sandbox-release-failed', 'denied', { workspaceId: wid('one'), path: '/work/one' }),
+    ))
+    await expect(controller.releaseSandboxAccess(wid('one')))
+      .rejects.toThrow('workspace sandbox access release failed: workspace/sandbox-release-failed: denied')
     mock.remote.workspace.insertBefore.mockResolvedValueOnce(err(missingWorkspace))
     await expect(controller.insertBefore(wid('missing'))).rejects.toThrow('workspace reorder failed: workspace/not-found: gone')
     mock.remote.workspace.archiveSession.mockResolvedValueOnce(err(missingSession))

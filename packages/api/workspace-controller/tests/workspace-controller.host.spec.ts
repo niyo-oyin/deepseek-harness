@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import { SandboxProvider } from '@deepseek-ai/dsh-sandbox'
+import type { ConfinedArgv } from '@deepseek-ai/dsh-sandbox'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
@@ -99,6 +101,29 @@ function followerContext(ctx: Context, principal: Principal): Context {
     uplink: <In>(): AsyncIterable<In> => ({ [Symbol.asyncIterator]: () => ({ next: async () => ({ done: true, value: undefined }) }) }),
   }
   return ctx.extend({ invocation })
+}
+
+/** A sandbox that records the directories it is asked to release; `standing` is what it reports leaving behind. */
+class RecordingSandbox extends SandboxProvider {
+  readonly released: string[] = []
+  outcome: () => Promise<boolean> = () => Promise.resolve(true)
+
+  constructor(ctx: Context, private readonly standing: boolean) {
+    super(ctx)
+  }
+
+  override get standingWorkspaceAccess(): boolean {
+    return this.standing
+  }
+
+  override releaseWorkspace(workspaceRoot: string): Promise<boolean> {
+    this.released.push(workspaceRoot)
+    return this.outcome()
+  }
+
+  confine(): Promise<ConfinedArgv> {
+    return Promise.reject(new Error('this suite confines nothing'))
+  }
 }
 
 function stageDir(root: string, name: string): string {
@@ -328,6 +353,73 @@ describe('WorkspaceController commands', () => {
     // Unpin is idempotent: an id that is not pinned is not an error.
     await expect(controller.unpinSession({ sessionId: session.id }))
       .resolves.toEqual({ pinnedSessionIds: [] })
+  })
+})
+
+describe('WorkspaceController sandbox access', () => {
+  it('reports nothing standing and releases nothing without a sandbox service', async () => {
+    const { controller, root } = await harness()
+    const { workspace } = await controller.create({ path: stageDir(root, 'alpha') })
+    await expect(controller.sandboxAccess()).resolves.toEqual({ standing: false })
+    await expect(controller.releaseSandboxAccess({ workspaceId: workspace.workspaceId })).resolves.toEqual({ released: false })
+    await expect(controller.delete({ workspaceId: workspace.workspaceId })).resolves.toEqual({ deleted: true })
+  })
+
+  it('releases a deleted Workspace directory where the sandbox leaves standing access', async () => {
+    const { controller, ctx, root } = await harness()
+    const sandbox = new RecordingSandbox(ctx, true)
+    const path = stageDir(root, 'alpha')
+    const { workspace } = await controller.create({ path })
+    await expect(controller.sandboxAccess()).resolves.toEqual({ standing: true })
+
+    await expect(controller.delete({ workspaceId: workspace.workspaceId })).resolves.toEqual({ deleted: true })
+    expect(sandbox.released).toEqual([path])
+    // An unknown Workspace is refused before anything is released.
+    await expect(controller.delete({ workspaceId: workspace.workspaceId })).rejects.toMatchObject({ code: 'workspace/not-found' })
+    expect(sandbox.released).toEqual([path])
+  })
+
+  it('confirms a deletion whose release fails afterwards', async () => {
+    const { controller, ctx, root } = await harness()
+    const sandbox = new RecordingSandbox(ctx, true)
+    sandbox.outcome = () => Promise.reject(new Error('Access is denied.'))
+    const { workspace } = await controller.create({ path: stageDir(root, 'alpha') })
+    await expect(controller.delete({ workspaceId: workspace.workspaceId })).resolves.toEqual({ deleted: true })
+    expect(sandbox.released).toHaveLength(1)
+    await expect(controller.create({ path: join(root, 'alpha') })).resolves.toMatchObject({ created: true })
+  })
+
+  it('leaves a deleted Workspace directory alone where the sandbox leaves nothing behind', async () => {
+    const { controller, ctx, root } = await harness()
+    const sandbox = new RecordingSandbox(ctx, false)
+    const { workspace } = await controller.create({ path: stageDir(root, 'alpha') })
+    await expect(controller.sandboxAccess()).resolves.toEqual({ standing: false })
+    await controller.delete({ workspaceId: workspace.workspaceId })
+    expect(sandbox.released).toEqual([])
+  })
+
+  it('releases a registered Workspace on request and names a failed release', async () => {
+    const { controller, ctx, root } = await harness()
+    const sandbox = new RecordingSandbox(ctx, true)
+    const path = stageDir(root, 'alpha')
+    const { workspace } = await controller.create({ path })
+
+    await expect(controller.releaseSandboxAccess({ workspaceId: workspace.workspaceId })).resolves.toEqual({ released: true })
+    sandbox.outcome = () => Promise.resolve(false)
+    await expect(controller.releaseSandboxAccess({ workspaceId: workspace.workspaceId })).resolves.toEqual({ released: false })
+    expect(sandbox.released).toEqual([path, path])
+    // The Workspace stays registered: a release is not a deletion.
+    await expect(controller.create({ path })).resolves.toMatchObject({ created: false })
+
+    sandbox.outcome = () => Promise.reject(new Error('Access is denied.'))
+    const refused = controller.releaseSandboxAccess({ workspaceId: workspace.workspaceId })
+    await expect(refused).rejects.toMatchObject({
+      code: 'workspace/sandbox-release-failed',
+      details: { workspaceId: workspace.workspaceId, path },
+    })
+    await expect(refused).rejects.toThrow('Access is denied.')
+    await expect(controller.releaseSandboxAccess({ workspaceId: 'missing' as WorkspaceId }))
+      .rejects.toMatchObject({ code: 'workspace/not-found' })
   })
 })
 

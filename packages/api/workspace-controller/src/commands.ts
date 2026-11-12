@@ -1,6 +1,7 @@
 /** Workspace command implementation and stable Remote failure mapping. */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-sandbox'
 import type { Workspace } from '@deepseek-ai/dsh-workspace'
 import {
   WorkspaceActiveSessionError,
@@ -24,7 +25,10 @@ import type {
   WorkspaceOrderValue,
   WorkspacePinSessionRequest,
   WorkspacePinValue,
+  WorkspaceReleaseSandboxAccessRequest,
+  WorkspaceReleaseSandboxAccessValue,
   WorkspaceRenameRequest,
+  WorkspaceSandboxAccessValue,
   WorkspaceUnarchiveSessionRequest,
   WorkspaceUnpinSessionRequest,
   WorkspaceValue,
@@ -92,16 +96,61 @@ export class WorkspaceCommands {
 
   /**
    * Delete one Workspace registration without deleting its directory or Sessions.
+   * Where the process sandbox leaves standing access on Workspace directories,
+   * the deleted Workspace's directory is released afterwards without delaying
+   * the reply: the release rewrites the whole directory tree, and its failure
+   * is logged because the deletion already stands.
    * @param request - Workspace identity to remove.
    * @returns deletion confirmation.
    */
   delete(request: WorkspaceDeleteRequest): Promise<WorkspaceDeleteValue> {
     return this.enqueue(async () => {
+      const path = this.ctx.workspaceRegistry.get(WorkspaceId(request.workspaceId))?.path
       if (!await this.ctx.workspaceRegistry.delete(WorkspaceId(request.workspaceId))) {
         throw workspaceNotFound(request.workspaceId)
       }
+      const sandbox = this.ctx.get('sandbox')
+      if (path !== undefined && sandbox?.standingWorkspaceAccess === true) {
+        sandbox.releaseWorkspace(path).catch((error: unknown) => {
+          this.ctx.logger.warn(
+            `workspace '${request.workspaceId}' was deleted but the sandbox access on '${path}' could not be released: ${errorMessage(error)}`,
+          )
+        })
+      }
       return { deleted: true }
     })
+  }
+
+  /**
+   * Report whether the composed process sandbox leaves standing access on Workspace directories.
+   * @returns the Host-wide fact; false without a sandbox service.
+   */
+  sandboxAccess(): WorkspaceSandboxAccessValue {
+    return { standing: this.ctx.get('sandbox')?.standingWorkspaceAccess === true }
+  }
+
+  /**
+   * Return one Workspace's directory to the state before the process sandbox
+   * prepared it. The Workspace stays registered; its next sandboxed command
+   * prepares the directory again. The call is not queued behind other
+   * Workspace commands because a release lasts as long as the tree is large.
+   * @param request - Workspace identity whose directory is released.
+   * @returns whether the directory carried anything to undo.
+   */
+  async releaseSandboxAccess(request: WorkspaceReleaseSandboxAccessRequest): Promise<WorkspaceReleaseSandboxAccessValue> {
+    const workspace = this.requireWorkspace(request.workspaceId)
+    const sandbox = this.ctx.get('sandbox')
+    if (sandbox === undefined) return { released: false }
+    try {
+      return { released: await sandbox.releaseWorkspace(workspace.path) }
+    } catch (error) {
+      throw new RemoteError(
+        'workspace/sandbox-release-failed',
+        `cannot release the sandbox access on "${workspace.path}": ${errorMessage(error)}`,
+        { workspaceId: request.workspaceId, path: workspace.path },
+        { cause: error },
+      )
+    }
   }
 
   /**

@@ -15,7 +15,10 @@ import type {
   WorkspaceOrderValue,
   WorkspacePinSessionRequest,
   WorkspacePinValue,
+  WorkspaceReleaseSandboxAccessRequest,
+  WorkspaceReleaseSandboxAccessValue,
   WorkspaceRenameRequest,
+  WorkspaceSandboxAccessValue,
   WorkspaceUnarchiveSessionRequest,
   WorkspaceUnpinSessionRequest,
   WorkspaceValue,
@@ -102,6 +105,16 @@ class FakeWorkspaceRemote implements WorkspaceRemote {
     _request: WorkspaceUnpinSessionRequest,
   ) => Promise<RemoteResult<WorkspacePinValue>> = () =>
     Promise.resolve(remoteOk({ pinnedSessionIds: [] }))
+
+  sandboxAccess(): Promise<RemoteResult<WorkspaceSandboxAccessValue>> {
+    this.record('sandboxAccess', undefined)
+    return Promise.resolve(remoteOk({ standing: true }))
+  }
+
+  releaseSandboxAccess(request: WorkspaceReleaseSandboxAccessRequest): Promise<RemoteResult<WorkspaceReleaseSandboxAccessValue>> {
+    this.record('releaseSandboxAccess', request)
+    return Promise.resolve(remoteOk({ released: true }))
+  }
 
   create(request: WorkspaceCreateRequest): Promise<RemoteResult<WorkspaceCreateValue>> {
     this.record('create', request)
@@ -557,6 +570,17 @@ describe('ClientWorkspaceModel', () => {
     model.handleCarrierFailure()
     await Promise.resolve()
     expect(listener).toHaveBeenCalledOnce()
+  })
+
+  it('releases sandbox access without changing the projection', async () => {
+    const remote = new FakeWorkspaceRemote()
+    const model = modelFor(remote)
+    baseline(model, [workspace('kept')])
+    const before = model.getSnapshot()
+    await expect(model.sandboxAccess()).resolves.toEqual({ ok: true, value: { standing: true } })
+    await expect(model.releaseSandboxAccess(wid('kept'))).resolves.toEqual({ ok: true, value: { released: true } })
+    expect(remote.calls).toContainEqual({ method: 'releaseSandboxAccess', request: { workspaceId: 'kept' } })
+    expect(model.getSnapshot()).toBe(before)
   })
 
   it('removes from a unary delete echo before the operation resolves', async () => {

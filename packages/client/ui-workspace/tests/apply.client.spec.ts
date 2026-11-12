@@ -130,12 +130,17 @@ async function bench(access: 'fake' | 'static' = 'fake') {
   const subscribe = () => () => {}
   const workspacesSubscribe = vi.fn(subscribe)
   const initializeDefault = vi.fn(async (): Promise<WorkspaceView | undefined> => undefined)
+  // A Host whose sandbox leaves nothing on Workspace directories, unless a test says otherwise.
+  const sandboxAccess = vi.fn(async (): Promise<boolean> => false)
+  const releaseSandboxAccess = vi.fn(async (_workspaceId: WorkspaceId): Promise<boolean> => true)
   ctx.provide('workspaces', {
     list: { getSnapshot: () => workspaceSnapshot, subscribe: workspacesSubscribe },
     create,
     initializeDefault,
     rename,
     delete: vi.fn(async () => undefined),
+    sandboxAccess,
+    releaseSandboxAccess,
     insertBefore: vi.fn(async () => undefined),
     archiveSession: vi.fn(async () => undefined),
     unarchiveSession: vi.fn(async () => undefined),
@@ -170,7 +175,7 @@ async function bench(access: 'fake' | 'static' = 'fake') {
   return {
     ctx, slots: ctx.get('slots') as SlotRegistry, locale, create, rename, commands, accessSource, whenResourceAccess, stopGuard,
     retain, using, selectPanel, search, renameSession, binding, fork, pickDirectory, pinSession, unpinSession,
-    workspacesSubscribe, initializeDefault, history, scope, sessionOf,
+    workspacesSubscribe, initializeDefault, history, scope, sessionOf, sandboxAccess, releaseSandboxAccess,
     setWorkspaces: (snapshot: WorkspaceSnapshot): void => { workspaceSnapshot = snapshot },
     setSessions: (snapshot: SessionListState): void => { sessionSnapshot = snapshot },
   }
@@ -344,7 +349,8 @@ describe('ui-workspace apply', () => {
     expect(rowToastEntry.store).toBeUndefined()
     expect(b.slots.entries('workspace.toast').map(row => row.options.key)).toEqual([
       'sessionIdCopied', 'sessionIdCopyFailed', 'pinFailed', 'unpinFailed', 'archivedNotOpenable',
-      'defaultWorkspaceFailed', 'shortcutForkFailed', 'createFailed', 'forkRequiresOpen', 'archived', 'stoppedAndArchived',
+      'defaultWorkspaceFailed', 'sandboxReleasing', 'sandboxReleased', 'sandboxUnchanged', 'sandboxReleaseFailed',
+      'shortcutForkFailed', 'createFailed', 'forkRequiresOpen', 'archived', 'stoppedAndArchived',
     ])
     for (const registration of b.slots.entries('workspace.toast')) {
       expect(registration.locale).toBe('workspace')
@@ -987,6 +993,68 @@ it('falls back to the ordinary notice when a follow-up notice provider fails', a
   await vi.waitFor(() => { expect(toast.hooks.toast.getSnapshot()).toEqual({ kind: 'archived', sessionId: 'one', seq: 1 }) })
   expect(warning).toHaveBeenCalledWith('session archive notice unavailable:', failure)
   warning.mockRestore()
+})
+
+it('offers the sandbox release only where the Host leaves standing access, and reports each outcome', async () => {
+  const b = await bench()
+  onTestFinished(() => b.ctx.fiber.dispose())
+  b.setWorkspaces(workspaceState([workspace('alpha', [])]))
+  declare(b.slots, 'sidebar.workspaces', 'shell.overlay')
+  await b.ctx.plugin({ inject: [...inject], apply }).await()
+  const toast = faceOf(entry(b.slots, 'shell.overlay', 'workspace.row-toast')) as RowToastInjected
+  const target = { kind: 'workspace' as const, value: { workspaceId: 'alpha' as WorkspaceId, path: '/projects/alpha', displayTitle: 'Alpha' } }
+  const open = async () => {
+    const menu = b.ctx.contextMenus.resolve(target)
+    await menu.ready
+    return menu
+  }
+  const ids = (menu: Awaited<ReturnType<typeof open>>) => menu.source.getSnapshot().map(item => item.id)
+
+  // A Host that leaves nothing behind shows no release action; the answer holds for the connection.
+  expect(ids(await open())).toEqual(['workspace.rename/rename', 'workspace.delete/delete'])
+  expect(ids(await open())).toEqual(['workspace.rename/rename', 'workspace.delete/delete'])
+  expect(b.sandboxAccess).toHaveBeenCalledOnce()
+
+  // A reconnect may reach another Host, so the fact is asked again.
+  b.sandboxAccess.mockResolvedValue(true)
+  b.ctx.emit('connection/reset')
+  const menu = await open()
+  expect(ids(menu)).toEqual(['workspace.rename/rename', 'workspace.sandbox/release', 'workspace.delete/delete'])
+  expect(menu.source.getSnapshot()[1]).toMatchObject({ label: '还原沙箱权限设置', icon: { key: 'workspace.sandbox' } })
+  expect(b.sandboxAccess).toHaveBeenCalledTimes(2)
+
+  let finish!: (released: boolean) => void
+  b.releaseSandboxAccess.mockImplementationOnce(() => new Promise<boolean>((resolve) => { finish = resolve }))
+  menu.select('workspace.sandbox/release')
+  // The start is announced at once: a release lasts as long as the directory tree is large.
+  expect(toast.hooks.toast.getSnapshot()).toMatchObject({ kind: 'sandboxReleasing', title: 'Alpha' })
+  expect(b.releaseSandboxAccess).toHaveBeenCalledExactlyOnceWith('alpha')
+  finish(true)
+  await vi.waitFor(() => { expect(toast.hooks.toast.getSnapshot()).toMatchObject({ kind: 'sandboxReleased', title: 'Alpha' }) })
+
+  b.releaseSandboxAccess.mockResolvedValueOnce(false)
+  ;(await open()).select('workspace.sandbox/release')
+  await vi.waitFor(() => { expect(toast.hooks.toast.getSnapshot()).toMatchObject({ kind: 'sandboxUnchanged', title: 'Alpha' }) })
+
+  const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  const failure = new Error('workspace sandbox access release failed: workspace/sandbox-release-failed: denied')
+  b.releaseSandboxAccess.mockRejectedValueOnce(failure)
+  ;(await open()).select('workspace.sandbox/release')
+  await vi.waitFor(() => { expect(toast.hooks.toast.getSnapshot()).toMatchObject({ kind: 'sandboxReleaseFailed', title: 'Alpha' }) })
+  expect(warning).toHaveBeenCalledWith('workspace sandbox access release rejected:', failure)
+  warning.mockRestore()
+  expect(b.sandboxAccess).toHaveBeenCalledTimes(2)
+
+  // A caller without the right to change the Workspace directory is not offered the action.
+  b.accessSource.mockImplementation((_kind, _id, action) => createSnapshotStore(action !== 'workspace/releaseSandboxAccess'))
+  expect(ids(await open())).toEqual(['workspace.rename/rename', 'workspace.delete/delete'])
+  b.accessSource.mockImplementation(() => ALLOWED)
+
+  // A failed query hides the action for that menu and is asked again at the next one.
+  b.ctx.emit('connection/reset')
+  b.sandboxAccess.mockRejectedValueOnce(new Error('workspace sandbox access query failed'))
+  expect(ids(await open())).toEqual(['workspace.rename/rename', 'workspace.delete/delete'])
+  expect(ids(await open())).toEqual(['workspace.rename/rename', 'workspace.sandbox/release', 'workspace.delete/delete'])
 })
 
 it('captures Workspace menu requests, rechecks mutable access, and withdraws registrations on unload', async () => {

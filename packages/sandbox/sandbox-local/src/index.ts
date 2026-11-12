@@ -17,12 +17,14 @@
  * stops managing DACLs itself. The rung reports partial enforcement because
  * NTFS hard links alias one file object across paths, reads stay unconfined,
  * and a tree another AppContainer tool has ACL'd with a package SID is not
- * readable by the Low-integrity child.
+ * readable by the Low-integrity child. `releaseWorkspace` undoes a standing
+ * workspace grant on request; the next workspace-write call materializes it
+ * again.
  * @module @deepseek-ai/dsh-sandbox-local
  */
 
-import { spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { execFile, spawnSync } from 'node:child_process'
+import { existsSync, mkdtempSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -286,12 +288,14 @@ export class LocalSandboxProvider extends SandboxProvider {
   /**
    * Server-lifetime write grants (windows-acl rung): the STANDING
    * workspace-root grant per workspace (its ACE is the cross-session reuse
-   * cache and outlives the provider — never revoked) and the REVOCABLE
+   * cache and outlives the provider — revoked only by {@link releaseWorkspace}) and the REVOCABLE
    * private-temp grant per live session/workspace pair (revoked on provider
    * dispose).
    */
   private readonly workspaceGrants = new Map<string, AclWriteGrant>()
   private readonly tempCapabilities = new Map<string, AclTempCapability>()
+  /** Workspace releases in flight, by canonical root; a confine of that root waits for its release. */
+  private readonly workspaceReleases = new Map<string, Promise<boolean>>()
 
   constructor(ctx: Context, config: Config) {
     super(ctx)
@@ -343,6 +347,12 @@ export class LocalSandboxProvider extends SandboxProvider {
   async confine(argv: readonly string[], policy: SandboxPolicy, signal?: AbortSignal): Promise<ConfinedArgv> {
     signal?.throwIfAborted()
     policy = { ...policy, workspaceRoot: canonicalPath(policy.workspaceRoot) }
+    // A release in flight removes the standing grant this call would otherwise take as present.
+    const releasing = this.workspaceReleases.get(policy.workspaceRoot)
+    if (releasing !== undefined) {
+      await releasing.catch(() => undefined)
+      signal?.throwIfAborted()
+    }
     if (this.runnerCommand !== undefined) {
       return Promise.resolve<ConfinedArgv>({
         argv: [...this.runnerCommand, ...bwrapProfileArgs(policy), '--', ...argv],
@@ -359,6 +369,68 @@ export class LocalSandboxProvider extends SandboxProvider {
       denialSignatures: DENIAL_SIGNATURES[selected.runner],
       runnerFailureRules: RUNNER_FAILURE_RULES[selected.runner],
     })
+  }
+
+  /**
+   * Whether workspace directories carry standing entries of this provider:
+   * true only where the windows-acl rung confines (win32 without an operator
+   * runner), whose workspace grant outlives every process.
+   * @returns whether {@link releaseWorkspace} has anything to undo on this host.
+   */
+  override get standingWorkspaceAccess(): boolean {
+    return this.runnerCommand === undefined && (this.internals.platform ?? process.platform) === 'win32'
+  }
+
+  /**
+   * Undo the standing windows-acl grant on one workspace directory: every
+   * capability-SID entry, the ambient-delete deny, and the Low mandatory
+   * label, on the directory and, by inheritance, its tree. The work runs in
+   * the runner's release form as a process of its own, because Windows
+   * re-propagates the whole tree synchronously (about 0.25 ms per file). The
+   * provider forgets its cached grant first and makes a concurrent
+   * workspace-write call for the same root wait, so the next such call
+   * materializes the grant again. Concurrent releases of one root share one run.
+   * @param workspaceRoot - the workspace directory, in any spelling of its path.
+   * @returns whether the directory carried a grant; false off the windows-acl rung and for a directory that no longer exists.
+   */
+  override releaseWorkspace(workspaceRoot: string): Promise<boolean> {
+    if (!this.standingWorkspaceAccess) return Promise.resolve(false)
+    const root = canonicalPath(workspaceRoot)
+    const pending = this.workspaceReleases.get(root)
+    if (pending !== undefined) return pending
+    const release = this.runWorkspaceRelease(root).finally(() => {
+      this.workspaceReleases.delete(root)
+    })
+    this.workspaceReleases.set(root, release)
+    return release
+  }
+
+  /** One release run: drop the cached grant, then let the runner's release form rewrite the directory. */
+  private async runWorkspaceRelease(root: string): Promise<boolean> {
+    const cached = this.workspaceGrants.get(root)
+    if (cached !== undefined) {
+      this.workspaceGrants.delete(root)
+      try {
+        cached.dispose()
+      } catch (error) {
+        // The grant only held SID allocations; failing to free them does not stop the release.
+        this.ctx.logger.warn(`sandbox-local: windows-acl grant cleanup for ${root} failed: ${String(error)}`)
+      }
+    }
+    if (!statSync(root, { throwIfNoEntry: false })?.isDirectory()) return false
+    const [program, ...prefix] = this.windowsAclRunnerInvocation()
+    if (program === undefined) throw new Error('sandbox-local: windows-acl runner invocation is empty')
+    const stdout = await new Promise<string>((resolve, reject) => {
+      execFile(program, [...prefix, '--release-workspace', root], { windowsHide: true }, (error, output, stderr) => {
+        if (error === null) resolve(output)
+        else reject(new Error(`sandbox-local: windows-acl release of ${root} failed: ${stderr.trim() || error.message}`, { cause: error }))
+      })
+    })
+    const verdict = stdout.trim()
+    if (verdict !== 'released' && verdict !== 'unchanged') {
+      throw new Error(`sandbox-local: windows-acl release of ${root} reported ${JSON.stringify(verdict)}`)
+    }
+    return verdict === 'released'
   }
 
   /** The selected rung's runner invocation (program + profile arguments) for one policy. */

@@ -223,6 +223,31 @@ export abstract class SandboxProvider extends Service {
    *   the selected backend achieves for it.
    */
   abstract confine(argv: readonly string[], policy: SandboxPolicy, signal?: AbortSignal): Promise<ConfinedArgv>
+
+  /**
+   * Whether this backend leaves access entries on a workspace directory that
+   * outlive the confined process and that {@link releaseWorkspace} undoes.
+   * Only the Windows ACL backend does; a backend that confines through a
+   * per-process profile leaves nothing behind.
+   * @returns whether a workspace directory can carry standing entries of this backend.
+   */
+  get standingWorkspaceAccess(): boolean {
+    return false
+  }
+
+  /**
+   * Return a workspace directory to the state before this backend first
+   * prepared it. The next `workspace-write` execution there prepares it
+   * again, so calling this for a workspace still in use costs one more
+   * preparation and nothing else. A process confined to the directory while
+   * this runs loses its write access.
+   * @param workspaceRoot - the workspace directory, in any spelling of its path.
+   * @returns whether the directory carried anything to undo; rejects when the backend could not undo it.
+   */
+  releaseWorkspace(workspaceRoot: string): Promise<boolean> {
+    void workspaceRoot
+    return Promise.resolve(false)
+  }
 }
 
 export default SandboxProvider

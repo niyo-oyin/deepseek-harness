@@ -37,6 +37,13 @@
  * CreateProcessAsUserW, verified empirically). Read-only leaves the ambient
  * temp entries untouched (writes there are denied anyway).
  *
+ * Release form: `[node, runner.js, '--release-workspace', <dir>]` spawns
+ * nothing. It returns the directory to the state before any standing grant
+ * (see `releaseStandingGrant`), prints `released` or `unchanged` on stdout,
+ * and exits 0. The seam runs it as a process of its own because undoing a
+ * grant re-propagates the whole tree, which would block the caller's event
+ * loop for as long as the tree is large.
+ *
  * Failure contract: every runner-side failure (bad args, missing
  * directories, token/grant/spawn errors) prints `windows-acl-run: <detail>`
  * to stderr and exits 127 — the seam's RUNNER_FAILURE_RULES matches that
@@ -49,11 +56,13 @@ import { closeSync, existsSync, mkdtempSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { win32 } from './ffi.ts'
+import { releaseStandingGrant } from './grant.ts'
 import { AclSandbox, assertTempRootOutsideWorkspace } from './index.ts'
 import { tempWriteSid, workspaceWriteSid } from './workspace-sid.ts'
 
 const RUNNER_SIGNATURE = 'windows-acl-run'
 const RUNNER_FAILURE_EXIT = 127
+const RELEASE_FLAG = '--release-workspace'
 
 class RunnerFailure extends Error {}
 
@@ -113,8 +122,20 @@ function requireDirectory(label: string, path: string): void {
   }
 }
 
+/** The release form: undo the standing grant on one directory and report whether it carried one. */
+function release(raw: string[]): number {
+  const directory = raw[1]
+  if (directory === undefined) fail(`missing value after ${RELEASE_FLAG}`)
+  if (raw.length > 2) fail(`unknown argument: ${String(raw[2])}`)
+  requireDirectory(RELEASE_FLAG, directory)
+  process.stdout.write(releaseStandingGrant(directory) ? 'released\n' : 'unchanged\n')
+  return 0
+}
+
 async function main(): Promise<number> {
-  const parsed = parseArgs(process.argv.slice(2))
+  const raw = process.argv.slice(2)
+  if (raw[0] === RELEASE_FLAG) return release(raw)
+  const parsed = parseArgs(raw)
   // Both directories are validated in both modes: a provider bug that passes
   // a bogus root must fail loudly at the runner boundary, never mid-child.
   requireDirectory('--workspace', parsed.workspace)

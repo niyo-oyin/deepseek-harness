@@ -661,3 +661,51 @@ TryOpen 'DIRECTORY' '${child}'
     }
   }, 15_000)
 })
+
+describe.skipIf(!isWin32)('windows-acl runner release form', () => {
+  const scratchDirs: string[] = []
+  afterAll(() => {
+    for (const dir of scratchDirs) rmSync(dir, { recursive: true, force: true })
+  })
+
+  function scratch(): string {
+    const dir = mkdtempSync(join(tmpdir(), 'dsh-acl-runner-release-'))
+    scratchDirs.push(dir)
+    return dir
+  }
+
+  it('undoes a standing grant and reports whether the directory carried one', () => {
+    const dir = scratch()
+    const grant = AclWriteGrant.create(workspaceWriteSid(dir))
+    try {
+      grant.add(dir, true)
+      const released = runRunner(['--release-workspace', dir])
+      expect(released.stderr).toBe('')
+      expect(released.status).toBe(0)
+      expect(released.stdout).toBe('released\n')
+      const acl = spawnSync('icacls', [dir], { encoding: 'utf8' }).stdout
+      expect(acl).not.toContain(workspaceWriteSid(dir))
+      expect(acl).not.toContain('Mandatory Label')
+
+      const again = runRunner(['--release-workspace', dir])
+      expect(again.status).toBe(0)
+      expect(again.stdout).toBe('unchanged\n')
+    } finally {
+      grant.dispose()
+    }
+  })
+
+  it('fails with the runner signature for a missing directory, a missing value, and a trailing argument', () => {
+    const dir = scratch()
+    const missing = runRunner(['--release-workspace', join(dir, 'absent')])
+    expect(missing.status).toBe(127)
+    expect(missing.stderr).toContain('windows-acl-run: --release-workspace is not an existing directory')
+    const bare = runRunner(['--release-workspace'])
+    expect(bare.status).toBe(127)
+    expect(bare.stderr).toBe('windows-acl-run: missing value after --release-workspace\n')
+    const trailing = runRunner(['--release-workspace', dir, '--mode'])
+    expect(trailing.status).toBe(127)
+    expect(trailing.stderr).toBe('windows-acl-run: unknown argument: --mode\n')
+    expect(missing.stdout + bare.stdout + trailing.stdout).toBe('')
+  })
+})

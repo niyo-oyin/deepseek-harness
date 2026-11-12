@@ -72,6 +72,19 @@ export interface IWorkspaces {
    */
   delete(workspaceId: WorkspaceId): Promise<void>
   /**
+   * Ask whether the Host's process sandbox leaves standing access on
+   * Workspace directories, which {@link releaseSandboxAccess} undoes.
+   * @returns true where a release has something to undo.
+   */
+  sandboxAccess(): Promise<boolean>
+  /**
+   * Return a Workspace directory to the state before the process sandbox
+   * prepared it, keeping the Workspace registered.
+   * @param workspaceId - target Workspace.
+   * @returns whether the directory carried anything to undo.
+   */
+  releaseSandboxAccess(workspaceId: WorkspaceId): Promise<boolean>
+  /**
    * Move a Workspace within the Host registry order.
    * @param workspaceId - Workspace to move.
    * @param beforeWorkspaceId - anchor Workspace; omitted appends.
@@ -148,6 +161,18 @@ export class WorkspaceController extends Service implements IWorkspaces {
   async delete(workspaceId: WorkspaceId): Promise<void> {
     const result = await this.model.delete(workspaceId)
     if (!result.ok) throw commandError('delete', result.error)
+  }
+
+  async sandboxAccess(): Promise<boolean> {
+    const result = await this.model.sandboxAccess()
+    if (!result.ok) throw commandError('sandbox access query', result.error)
+    return result.value.standing
+  }
+
+  async releaseSandboxAccess(workspaceId: WorkspaceId): Promise<boolean> {
+    const result = await this.model.releaseSandboxAccess(workspaceId)
+    if (!result.ok) throw commandError('sandbox access release', result.error)
+    return result.value.released
   }
 
   async insertBefore(workspaceId: WorkspaceId, beforeWorkspaceId?: WorkspaceId): Promise<void> {

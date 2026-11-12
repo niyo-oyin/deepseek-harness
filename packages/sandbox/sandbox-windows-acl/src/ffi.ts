@@ -68,7 +68,7 @@ export interface Win32Bindings extends Win32ProcessBindings {
     information: number,
     owner: null,
     group: null,
-    dacl: NativePtr | null,
+    dacl: NativePtr | Buffer | null,
     sacl: NativePtr | null,
   ): number
   getNamedSecurityInfoW(

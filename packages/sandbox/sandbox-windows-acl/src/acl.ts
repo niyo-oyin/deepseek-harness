@@ -164,9 +164,14 @@ function readCurrentSecurity(
  * half-built ACL is released before the error is thrown.
  * @param api - the binding table.
  * @param lowLabelSidPtr - the Low integrity SID (S-1-16-4096) the label names.
+ * @param aceFlags - the label ACE's flags; {@link revokeStandingWrite} adds INHERITED_ACE to hand a label back to an ancestor.
  * @returns the ACL carrying the single inheritable label ACE.
  */
-export function buildLowLabelAcl(api: Win32Bindings, lowLabelSidPtr: NativePtr): NativePtr {
+export function buildLowLabelAcl(
+  api: Win32Bindings,
+  lowLabelSidPtr: NativePtr,
+  aceFlags: number = abi.SUB_CONTAINERS_AND_OBJECTS_INHERIT,
+): NativePtr {
   const sidLength = api.getLengthSid(lowLabelSidPtr)
   if (sidLength === 0) throwLastError(api, 'GetLengthSid', 'Low mandatory label SID')
   const aclLength = abi.ACL_HEADER_SIZE + abi.MANDATORY_ACE_OVERHEAD + sidLength
@@ -178,7 +183,7 @@ export function buildLowLabelAcl(api: Win32Bindings, lowLabelSidPtr: NativePtr):
     throwWin32(api, 'InitializeAcl', win32Code, 'Low mandatory label ACL')
   }
   if (api.addMandatoryAce(
-    acl, abi.ACL_REVISION, abi.SUB_CONTAINERS_AND_OBJECTS_INHERIT, abi.SYSTEM_MANDATORY_LABEL_NO_WRITE_UP, lowLabelSidPtr,
+    acl, abi.ACL_REVISION, aceFlags, abi.SYSTEM_MANDATORY_LABEL_NO_WRITE_UP, lowLabelSidPtr,
   ) === 0) {
     const win32Code = api.getLastError()
     api.localFree(acl) // best-effort on the error path
@@ -299,6 +304,78 @@ function hasExactEntry(acl: NativePtr, aceType: number, inheritance: number, mas
     offset += aceSize
   }
   return false
+}
+
+/**
+ * True when the inline SID at `offset` is a capability SID: revision 1 under
+ * the identifier authority 4 (`S-1-4-…`), the authority every workspace and
+ * temp write SID of this package is derived under and Windows assigns to no
+ * account.
+ * @param acl - the ACL holding the ACE.
+ * @param offset - the byte offset of the ACE's inline SID.
+ * @returns whether the SID is a capability SID.
+ */
+function isCapabilitySidAt(acl: NativePtr, offset: number): boolean {
+  if (decodeUint8At(acl, offset) !== 1) return false
+  for (let index = 2; index < 7; index++) {
+    if (decodeUint8At(acl, offset + index) !== 0) return false
+  }
+  return decodeUint8At(acl, offset + 7) === 4
+}
+
+/** What {@link standingEntries} found on one DACL. */
+interface StandingEntries {
+  /** The DACL without the explicit capability grants and the ambient-delete deny; undefined when it carries neither. */
+  readonly without: Buffer | undefined
+  /** Whether a capability grant inherited from an ancestor directory reaches this directory. */
+  readonly inherited: boolean
+}
+
+/**
+ * Find what {@link grantWrite} left on a DACL and build the DACL without it:
+ * every explicit Allow ACE for {@link abi.GRANT_MASK} naming a capability SID
+ * (the directory's current write SID and the residue of SIDs derived from its
+ * earlier paths alike) and the exact ambient-delete deny. SetEntriesInAclW
+ * cannot express this edit: its REVOKE_ACCESS removes every ACE naming one
+ * trustee, and the deny names the world SID, whose other ACEs belong to the
+ * directory's owner. Every other ACE is copied byte for byte in its original
+ * order; an inherited ACE is never removed, because its source is an ancestor.
+ * @param acl - the current DACL pointer (from {@link readCurrentSecurity}).
+ * @param worldSidPtr - the Everyone SID the ambient-delete deny names.
+ * @returns the rewritten DACL and whether an inherited capability grant remains; an implausible header reads as nothing found.
+ */
+function standingEntries(acl: NativePtr, worldSidPtr: NativePtr): StandingEntries {
+  const aclSize = decodeUint16At(acl, 2)
+  const aceCount = decodeUint16At(acl, 4)
+  if (aclSize < abi.ACL_HEADER_SIZE || aclSize > 1_048_576) return { without: undefined, inherited: false }
+  let offset = abi.ACL_HEADER_SIZE
+  let inherited = false
+  const removed: { offset: number; size: number }[] = []
+  for (let index = 0; index < aceCount; index++) {
+    const aceSize = decodeUint16At(acl, offset + 2)
+    if (aceSize < 8 || offset + aceSize > aclSize) return { without: undefined, inherited: false }
+    const aceType = decodeUint8At(acl, offset)
+    const aceFlags = decodeUint8At(acl, offset + 1)
+    const mask = decodeUint32At(acl, offset + 4)
+    // The shortest SID is 8 bytes, so an ACE below 16 bytes carries none to read.
+    const grant = aceSize >= 16 && aceType === abi.ACCESS_ALLOWED_ACE_TYPE && mask === abi.GRANT_MASK
+      && isCapabilitySidAt(acl, offset + 8)
+    const deny = aceType === abi.ACCESS_DENIED_ACE_TYPE && aceFlags === abi.CONTAINER_INHERIT_ACE
+      && mask === abi.FILE_DELETE_CHILD && sameSidAt(acl, offset + 8, worldSidPtr, 0)
+    if (grant && (aceFlags & abi.INHERITED_ACE) !== 0) inherited = true
+    else if (grant || deny) removed.push({ offset, size: aceSize })
+    offset += aceSize
+  }
+  if (removed.length === 0) return { without: undefined, inherited }
+  const without = Buffer.alloc(offset - removed.reduce((total, entry) => total + entry.size, 0))
+  let target = 0
+  for (let source = 0; source < offset; source++) {
+    if (removed.some(entry => source >= entry.offset && source < entry.offset + entry.size)) continue
+    without[target++] = decodeUint8At(acl, source)
+  }
+  without.writeUInt16LE(without.length, 2) // AclSize: the header and the remaining ACEs, with no slack
+  without.writeUInt16LE(aceCount - removed.length, 4) // AceCount
+  return { without, inherited }
 }
 
 /**
@@ -443,6 +520,58 @@ export function revokeWrite(api: Win32Bindings, path: string, sidPtr: NativePtr)
       hasForeignGrant(oldAcl, sidPtr) ? { kind: 'keep' } : { kind: 'clear' },
       descriptor, 'revokeWrite',
     )
+    return true
+  })
+}
+
+/**
+ * Undo the standing grant on a directory that stays in use: remove every
+ * explicit capability-SID grant, the ambient-delete deny, and the Low label
+ * that {@link grantWrite} applied, in one SetNamedSecurityInfoW call that
+ * propagates to the tree. The grants of SIDs derived from the directory's
+ * earlier paths go with the current one: after a rename they authorize no
+ * token and would otherwise stay for good. A directory that carries neither
+ * a capability grant nor the deny is left untouched, label included — nothing
+ * shows this module put a label there.
+ *
+ * A directory inside another granted directory still receives that ancestor's
+ * capability grant by inheritance, and the ancestor's confined processes need
+ * the Low level to write here. Windows does not re-derive an inherited label
+ * when an explicit one is cleared (verified on Windows 11 build 26200: the
+ * directory ends with no label at all), so in that case the label is written
+ * back marked INHERITED_ACE. It then reads as the ancestor's, and undoing the
+ * ancestor's grant later removes it with the rest of the tree.
+ *
+ * Runs under the per-path lock. {@link revokeWrite} is the temp-directory
+ * form: it removes one SID's entries and leaves the deny on a directory that
+ * is removed with its session.
+ * @param api - the binding table.
+ * @param path - the directory whose standing grant is undone.
+ * @param worldSidPtr - the Everyone SID the ambient-delete deny names.
+ * @param lowLabelSidPtr - the Low integrity SID an inherited label names.
+ * @returns whether the directory carried anything to undo.
+ */
+export function revokeStandingWrite(api: Win32Bindings, path: string, worldSidPtr: NativePtr, lowLabelSidPtr: NativePtr): boolean {
+  return withPathLock(api, path, () => {
+    const { oldAcl, descriptor } = readCurrentSecurity(api, path)
+    // The rewritten DACL is a copy this process owns, so the descriptor (and the DACL inside it) can go first.
+    const found = oldAcl === null ? { without: undefined, inherited: false } : standingEntries(oldAcl, worldSidPtr)
+    if (descriptor !== null) {
+      const freed = api.localFree(descriptor)
+      if (!isNullPtr(freed)) throwLastError(api, 'LocalFree', `revokeStandingWrite(${path}) descriptor`)
+    }
+    if (found.without === undefined) return false
+    const label = found.inherited
+      ? buildLowLabelAcl(api, lowLabelSidPtr, abi.SUB_CONTAINERS_AND_OBJECTS_INHERIT | abi.INHERITED_ACE)
+      : null
+    const applyResult = api.setNamedSecurityInfoW(
+      path, abi.SE_FILE_OBJECT,
+      abi.DACL_SECURITY_INFORMATION | abi.LABEL_SECURITY_INFORMATION,
+      null, null, found.without, label,
+    )
+    const freedLabel = label === null ? null : api.localFree(label)
+    if (applyResult !== abi.ERROR_SUCCESS) throwWin32(api, 'SetNamedSecurityInfoW', applyResult, `revokeStandingWrite(${path})`)
+    if (freedLabel !== null && !isNullPtr(freedLabel)) throwLastError(api, 'LocalFree', `revokeStandingWrite(${path}) label ACL`)
     return true
   })
 }

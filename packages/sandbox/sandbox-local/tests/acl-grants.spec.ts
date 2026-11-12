@@ -1,11 +1,13 @@
 /**
  * windows-acl grant ownership through the real LocalSandboxProvider: one
  * standing capability per workspace plus one random, distinct, revocable
- * temp capability per live session/workspace pair. The Win32 grant surface
- * is mocked; native access checks live in sandbox-windows-acl's runner suite.
+ * temp capability per live session/workspace pair, and the release of a
+ * workspace grant through the runner's release form. The Win32 grant surface
+ * is mocked and the release runs a scripted stand-in runner; native access
+ * checks live in sandbox-windows-acl's runner suite.
  */
 
-import { chmodSync, existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { chmodSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -78,6 +80,16 @@ function workspaceRoot(): string {
   return realpathSync(mkdtempSync(join(tmpdir(), 'dsh-acl-grants-ws-')))
 }
 
+/** Remove the private temp directories the recorded grants created, then the test's own scratch directories. */
+function removeScratch(scratch: string[]): void {
+  for (const grant of mockState.grants) {
+    for (const added of grant.added) {
+      if (!added.standing) rmSync(added.path, { recursive: true, force: true })
+    }
+  }
+  for (const dir of scratch.splice(0)) rmSync(dir, { recursive: true, force: true })
+}
+
 function flag(argv: readonly string[], name: string): string | undefined {
   const index = argv.indexOf(name)
   return index < 0 ? undefined : argv[index + 1]
@@ -95,14 +107,7 @@ describe('windows-acl write grants (LocalSandboxProvider)', () => {
     mockState.disposeFailure = undefined
   })
 
-  const cleanup = () => {
-    for (const grant of mockState.grants) {
-      for (const added of grant.added) {
-        if (!added.standing) rmSync(added.path, { recursive: true, force: true })
-      }
-    }
-    for (const dir of scratch.splice(0)) rmSync(dir, { recursive: true, force: true })
-  }
+  const cleanup = () => { removeScratch(scratch) }
 
   it('does not create grants for a cancelled confinement request', async () => {
     const { sandbox, fiber } = await setup()
@@ -417,5 +422,175 @@ describe('windows-acl write grants (LocalSandboxProvider)', () => {
     } finally {
       cleanup()
     }
+  })
+})
+
+/**
+ * A stand-in for the runner's release form: logs its arguments beside itself,
+ * waits while a `hold` file exists there, then answers as the `answer` file
+ * says — a verdict line on stdout, or the runner's failure line and exit 127.
+ */
+function releaseRunner(answer: string): { dir: string; invocation: string[]; calls: () => string[][] } {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'dsh-acl-release-runner-')))
+  const script = join(dir, 'runner.cjs')
+  writeFileSync(join(dir, 'answer'), answer)
+  writeFileSync(script, [
+    'const fs = require("node:fs")',
+    'const path = require("node:path")',
+    'fs.appendFileSync(path.join(__dirname, "calls.log"), JSON.stringify(process.argv.slice(2)) + "\\n")',
+    'const finish = () => {',
+    '  const answer = fs.readFileSync(path.join(__dirname, "answer"), "utf8")',
+    '  if (answer !== "fail") return void process.stdout.write(answer + "\\n")',
+    '  process.stderr.write("windows-acl-run: SetNamedSecurityInfoW failed (Win32 5)\\n")',
+    '  process.exitCode = 127',
+    '}',
+    'const wait = () => fs.existsSync(path.join(__dirname, "hold")) ? setTimeout(wait, 10) : finish()',
+    'wait()',
+  ].join('\n'))
+  return {
+    dir,
+    invocation: [process.execPath, script],
+    calls: () => existsSync(join(dir, 'calls.log'))
+      ? readFileSync(join(dir, 'calls.log'), 'utf8').trim().split('\n').map(line => JSON.parse(line) as string[])
+      : [],
+  }
+}
+
+describe('windows-acl workspace release (LocalSandboxProvider)', () => {
+  const scratch: string[] = []
+
+  beforeEach(() => {
+    mockState.grants = []
+    mockState.addFailure = undefined
+    mockState.addFailureStanding = undefined
+    mockState.createTempFailure = undefined
+    mockState.createWorkspaceFailure = undefined
+    mockState.disposeFailure = undefined
+  })
+
+  const cleanup = () => { removeScratch(scratch) }
+
+  async function releasing(answer: string) {
+    const built = await setup()
+    const runner = releaseRunner(answer)
+    scratch.push(runner.dir)
+    built.sandbox.internals = { platform: 'win32', windowsAclRunnerArgs: runner.invocation }
+    // The provider names the directory by its native canonical path, which also expands Windows short names.
+    const ws = realpathSync.native(workspaceRoot())
+    scratch.push(ws)
+    return { ...built, runner, ws }
+  }
+
+  it('reports standing workspace access only where the windows-acl rung confines', async () => {
+    const { sandbox, fiber } = await setup()
+    try {
+      expect(sandbox.standingWorkspaceAccess).toBe(true)
+      sandbox.internals = { platform: 'linux' }
+      expect(sandbox.standingWorkspaceAccess).toBe(false)
+      await expect(sandbox.releaseWorkspace(tmpdir())).resolves.toBe(false)
+    } finally { await fiber.dispose() }
+    const ctx = new Context()
+    const operator = await ctx.plugin(LocalSandboxProvider, { runnerCommand: ['runner'], runnerFailureSignatures: ['runner: '] })
+    try {
+      const provider = ctx.sandbox as LocalSandboxProvider
+      provider.internals = { platform: 'win32' }
+      expect(provider.standingWorkspaceAccess).toBe(false)
+    } finally { await operator.dispose() }
+  })
+
+  it('releases through the runner, forgets the cached grant, and materializes it again on the next call', async () => {
+    const { sandbox, fiber, runner, ws } = await releasing('released')
+    try {
+      const policy: SandboxPolicy = { mode: 'workspace-write', workspaceRoot: ws, sessionId: SessionId('sess-release') }
+      await sandbox.confine(['true'], policy)
+      expect(mockState.grants.filter(grant => grant.writeSid === WORKSPACE_SID)).toHaveLength(1)
+
+      await expect(sandbox.releaseWorkspace(ws)).resolves.toBe(true)
+      expect(runner.calls()).toEqual([['--release-workspace', ws]])
+      expect(mockState.grants[0]).toMatchObject({ writeSid: WORKSPACE_SID, disposed: true })
+
+      await sandbox.confine(['true'], policy)
+      const workspaceGrants = mockState.grants.filter(grant => grant.writeSid === WORKSPACE_SID)
+      expect(workspaceGrants).toHaveLength(2)
+      expect(workspaceGrants[1]).toMatchObject({ added: [{ path: ws, standing: true }], disposed: false })
+      // The session keeps its private temp capability: only the workspace grant was undone.
+      expect(mockState.grants).toHaveLength(3)
+    } finally { await fiber.dispose(); cleanup() }
+  })
+
+  it('releases a workspace this provider never granted, in any spelling of its path', async () => {
+    const { sandbox, fiber, runner, ws } = await releasing('unchanged')
+    try {
+      await expect(sandbox.releaseWorkspace(join(ws, '.'))).resolves.toBe(false)
+      expect(runner.calls()).toEqual([['--release-workspace', ws]])
+      expect(mockState.grants).toEqual([])
+    } finally { await fiber.dispose(); cleanup() }
+  })
+
+  it('resolves false for a directory that no longer exists without starting the runner', async () => {
+    const { sandbox, fiber, runner, ws } = await releasing('released')
+    try {
+      await expect(sandbox.releaseWorkspace(join(ws, 'removed'))).resolves.toBe(false)
+      expect(runner.calls()).toEqual([])
+    } finally { await fiber.dispose(); cleanup() }
+  })
+
+  it('rejects with the runner failure line, and with the output of a runner that reports no verdict', async () => {
+    const { sandbox, fiber, runner, ws } = await releasing('fail')
+    try {
+      await expect(sandbox.releaseWorkspace(ws)).rejects.toThrow(
+        `sandbox-local: windows-acl release of ${ws} failed: windows-acl-run: SetNamedSecurityInfoW failed (Win32 5)`,
+      )
+      writeFileSync(join(runner.dir, 'answer'), 'done')
+      await expect(sandbox.releaseWorkspace(ws)).rejects.toThrow(`sandbox-local: windows-acl release of ${ws} reported "done"`)
+      // A failed release is not remembered: the next one runs again.
+      writeFileSync(join(runner.dir, 'answer'), 'released')
+      await expect(sandbox.releaseWorkspace(ws)).resolves.toBe(true)
+      expect(runner.calls()).toHaveLength(3)
+    } finally { await fiber.dispose(); cleanup() }
+  })
+
+  it('shares one run between concurrent releases and holds a workspace-write call until it ends', async () => {
+    const { sandbox, fiber, runner, ws } = await releasing('released')
+    try {
+      const policy: SandboxPolicy = { mode: 'workspace-write', workspaceRoot: ws, sessionId: SessionId('sess-wait') }
+      await sandbox.confine(['true'], policy)
+      writeFileSync(join(runner.dir, 'hold'), '')
+      const first = sandbox.releaseWorkspace(ws)
+      const second = sandbox.releaseWorkspace(ws)
+      expect(second).toBe(first)
+      let confined = false
+      const waiting = sandbox.confine(['true'], policy).then(() => { confined = true })
+      await vi.waitFor(() => { expect(runner.calls()).toHaveLength(1) })
+      expect(confined).toBe(false)
+      expect(mockState.grants.filter(grant => grant.writeSid === WORKSPACE_SID)).toHaveLength(1)
+
+      rmSync(join(runner.dir, 'hold'))
+      await expect(first).resolves.toBe(true)
+      await waiting
+      expect(runner.calls()).toHaveLength(1)
+      // The held call granted the workspace again, after the release had removed the earlier grant.
+      const workspaceGrants = mockState.grants.filter(grant => grant.writeSid === WORKSPACE_SID)
+      expect(workspaceGrants.map(grant => grant.disposed)).toEqual([true, false])
+    } finally { await fiber.dispose(); cleanup() }
+  })
+
+  it('still runs the release when freeing the cached grant fails, and stops a held call that was cancelled', async () => {
+    const { sandbox, fiber, runner, ws } = await releasing('released')
+    try {
+      const policy: SandboxPolicy = { mode: 'workspace-write', workspaceRoot: ws, sessionId: SessionId('sess-cancel') }
+      await sandbox.confine(['true'], policy)
+      mockState.disposeFailure = new Error('LocalFree failed')
+      writeFileSync(join(runner.dir, 'hold'), '')
+      const release = sandbox.releaseWorkspace(ws)
+      const controller = new AbortController()
+      const reason = new Error('turn cancelled')
+      const held = sandbox.confine(['true'], policy, controller.signal)
+      controller.abort(reason)
+      rmSync(join(runner.dir, 'hold'))
+      await expect(release).resolves.toBe(true)
+      await expect(held).rejects.toBe(reason)
+      mockState.disposeFailure = undefined
+    } finally { await fiber.dispose(); cleanup() }
   })
 })

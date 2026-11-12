@@ -668,6 +668,28 @@ describe('RowActionToast', () => {
     }
   })
 
+  it.each([
+    ['sandboxReleasing', '正在还原“Alpha”的沙箱权限设置。文件夹较大时需要一些时间。', false],
+    ['sandboxReleased', '已还原“Alpha”的沙箱权限设置。下次在其中运行沙箱命令时会重新设置。', true],
+    ['sandboxUnchanged', '“Alpha”没有需要还原的沙箱权限设置。', false],
+    ['sandboxReleaseFailed', '无法还原“Alpha”的沙箱权限设置。', true],
+  ] as const)('names the Workspace in the %s notice and holds an outcome longer than a status', async (kind, text, outcome) => {
+    const { dismissToast, notify } = await toastSurface()
+    vi.useFakeTimers()
+    try {
+      notify({ kind, title: 'Alpha' })
+      const alert = screen.getByRole('alert')
+      expect(alert.textContent).toBe(text)
+      expect(alert.querySelector('button')).toBeNull()
+      act(() => { vi.advanceTimersByTime(4000) })
+      expect(dismissToast).toHaveBeenCalledTimes(outcome ? 0 : 1)
+      act(() => { vi.advanceTimersByTime(3000) })
+      expect(dismissToast).toHaveBeenCalledOnce()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('shows a refused creation with the Host reason and holds it as long as the archived notice', async () => {
     const { dismissToast, notify } = await toastSurface()
     vi.useFakeTimers()

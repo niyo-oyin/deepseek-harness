@@ -50,6 +50,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
       readonly sessionId: SessionId
       readonly beforeSessionId?: SessionId
     }
+    /** The process sandbox could not undo what it left on the Workspace directory. */
+    'workspace/sandbox-release-failed': { readonly workspaceId: WorkspaceId; readonly path: string }
     /** The verb needs an interaction the composed backend does not serve. */
     'directory-picker/unavailable': { readonly capability: string }
     /** The target is not fully qualified, or the backend cannot list it. */
@@ -91,6 +93,27 @@ export interface WorkspaceDeleteRequest {
 /** Receipt after one Workspace registration is deleted. */
 export interface WorkspaceDeleteValue {
   readonly deleted: true
+}
+
+/** Whether the Host's process sandbox leaves entries on Workspace directories that a release undoes. */
+export interface WorkspaceSandboxAccessValue {
+  /**
+   * True on a Host whose sandbox backend grants a Workspace directory standing
+   * access (the Windows ACL backend: capability entries and a Low mandatory
+   * label on the directory tree); false where confinement leaves nothing behind.
+   */
+  readonly standing: boolean
+}
+
+/** Workspace whose directory is returned to the state before the sandbox prepared it. */
+export interface WorkspaceReleaseSandboxAccessRequest {
+  readonly workspaceId: WorkspaceId
+}
+
+/** Outcome of one sandbox-access release. */
+export interface WorkspaceReleaseSandboxAccessValue {
+  /** Whether the directory carried anything to undo. */
+  readonly released: boolean
 }
 
 /** DOM-insertBefore-like Workspace order mutation. */

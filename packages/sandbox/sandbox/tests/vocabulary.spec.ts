@@ -7,8 +7,10 @@
  */
 
 import { describe, expect, it } from 'vitest'
+import { Context } from '@deepseek-ai/cordis'
 import { HarnessError } from '@deepseek-ai/dsh-error'
-import { SANDBOX_PREPARATION_ERROR_CODES, SANDBOX_UNAVAILABLE, SandboxPreparationError, SandboxUnavailableError } from '@deepseek-ai/dsh-sandbox'
+import { SANDBOX_PREPARATION_ERROR_CODES, SANDBOX_UNAVAILABLE, SandboxPreparationError, SandboxProvider, SandboxUnavailableError } from '@deepseek-ai/dsh-sandbox'
+import type { ConfinedArgv } from '@deepseek-ai/dsh-sandbox'
 
 describe('SandboxUnavailableError', () => {
   it('carries the structured { name, code } identity consumers key on', () => {
@@ -42,5 +44,18 @@ describe('SandboxPreparationError', () => {
     expect(error).toBeInstanceOf(HarnessError)
     expect(error).toMatchObject({ name: 'SandboxPreparationError', code: 'SANDBOX_PREPARATION_FAILED', cause })
     expect(SANDBOX_PREPARATION_ERROR_CODES).toEqual(['SANDBOX_PREPARATION_FAILED', 'SANDBOX_INVALID_TEMP_ROOT'])
+  })
+})
+
+describe('SandboxProvider standing workspace access', () => {
+  it('leaves nothing standing and releases nothing unless a backend says otherwise', async () => {
+    class ProfileSandbox extends SandboxProvider {
+      confine(): Promise<ConfinedArgv> {
+        return Promise.reject(new Error('this suite confines nothing'))
+      }
+    }
+    const sandbox = new ProfileSandbox(new Context())
+    expect(sandbox.standingWorkspaceAccess).toBe(false)
+    await expect(sandbox.releaseWorkspace('/workspace')).resolves.toBe(false)
   })
 })

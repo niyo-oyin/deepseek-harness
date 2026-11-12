@@ -12,7 +12,7 @@
  * @module @deepseek-ai/dsh-sandbox-windows-acl/grant
  */
 
-import { grantWrite, revokeWrite } from './acl.ts'
+import { grantWrite, revokeStandingWrite, revokeWrite } from './acl.ts'
 import { allocPtrSlot, decodePtr, isNullPtr, throwLastError, win32Sync } from './ffi.ts'
 import type { NativePtr, Win32Bindings } from './ffi.ts'
 import { makeWellKnownSid } from './token.ts'
@@ -138,4 +138,40 @@ export class AclWriteGrant {
       throw new AggregateError(failures, `AclWriteGrant dispose completed with ${failures.length} cleanup failure(s)`)
     }
   }
+}
+
+/**
+ * Return a workspace directory to the state before any standing grant: remove
+ * every explicit capability-SID grant, the ambient-delete deny, and the Low
+ * mandatory label from it, and let that propagate to the tree (see
+ * {@link revokeStandingWrite}). The next workspace-write provision of the
+ * directory grants it again, at the cost of one more tree propagation.
+ * @param path - the workspace directory.
+ * @param api - optional already-resolved bindings (tests).
+ * @returns whether the directory carried anything to undo.
+ */
+export function releaseStandingGrant(path: string, api?: Win32Bindings): boolean {
+  const bindings = api ?? win32Sync()
+  const worldSidPtr = makeWellKnownSid(bindings, abi.WinWorldSid)
+  let lowLabelSidPtr: NativePtr
+  try {
+    lowLabelSidPtr = makeWellKnownSid(bindings, abi.WinLowLabelSid)
+  } catch (error) {
+    bindings.localFree(worldSidPtr) // best-effort: the SID failure is the one to report
+    throw error
+  }
+  let released: boolean
+  try {
+    released = revokeStandingWrite(bindings, path, worldSidPtr, lowLabelSidPtr)
+  } catch (error) {
+    // Best-effort: the revert failure is the one to report.
+    bindings.localFree(worldSidPtr)
+    bindings.localFree(lowLabelSidPtr)
+    throw error
+  }
+  for (const [label, sidPtr] of [['world SID', worldSidPtr], ['Low label SID', lowLabelSidPtr]] as const) {
+    const freed = bindings.localFree(sidPtr)
+    if (!isNullPtr(freed)) throwLastError(bindings, 'LocalFree', label)
+  }
+  return released
 }

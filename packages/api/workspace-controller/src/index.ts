@@ -24,7 +24,10 @@ import type {
   WorkspaceOrderValue,
   WorkspacePinSessionRequest,
   WorkspacePinValue,
+  WorkspaceReleaseSandboxAccessRequest,
+  WorkspaceReleaseSandboxAccessValue,
   WorkspaceRenameRequest,
+  WorkspaceSandboxAccessValue,
   WorkspaceUnarchiveSessionRequest,
   WorkspaceUnpinSessionRequest,
   WorkspaceValue,
@@ -129,6 +132,27 @@ export class WorkspaceController extends TypertRemoteService {
   @Remote('delete')
   delete(request: WorkspaceDeleteRequest): Promise<WorkspaceDeleteValue> {
     return this.commands.delete(request)
+  }
+
+  /**
+   * Report whether this Host's process sandbox leaves standing access on
+   * Workspace directories, which {@link releaseSandboxAccess} undoes.
+   * @returns the Host-wide fact.
+   */
+  @Remote('sandboxAccess')
+  sandboxAccess(): Promise<WorkspaceSandboxAccessValue> {
+    return Promise.resolve(this.commands.sandboxAccess())
+  }
+
+  /**
+   * Return one Workspace's directory to the state before the process sandbox
+   * prepared it, keeping the Workspace registered.
+   * @param request - Workspace identity whose directory is released.
+   * @returns whether the directory carried anything to undo.
+   */
+  @Remote('releaseSandboxAccess')
+  releaseSandboxAccess(request: WorkspaceReleaseSandboxAccessRequest): Promise<WorkspaceReleaseSandboxAccessValue> {
+    return this.commands.releaseSandboxAccess(request)
   }
 
   /**

@@ -55,7 +55,7 @@ import { drainPipe, spawnSandboxed, spawnSandboxedInherited, waitForExit } from 
 import { createRestrictedToken, findLogonSid, makeWellKnownSid, openCurrentProcessToken, restrictTokenIntegrity, setTokenDefaultDaclGrant } from './token.ts'
 import * as abi from './win32-abi.ts'
 
-export { AclWriteGrant } from './grant.ts'
+export { AclWriteGrant, releaseStandingGrant } from './grant.ts'
 export { assertTempRootOutsideWorkspace, isTempRootInsideWorkspace } from './path-boundary.ts'
 export { tempWriteSid, workspaceWriteSid } from './workspace-sid.ts'
 export { ACL_DIAGNOSIS_SKILL, registerAclDiagnosisSkill } from './acl-skill.ts'

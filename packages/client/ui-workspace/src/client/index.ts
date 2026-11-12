@@ -1,4 +1,4 @@
-import { IconEditOutlineRegular, IconTrashOutlineRegular, IconPinFillRegular, IconPinOutlineRegular, IconUnarchiveOutlineRegular, IconArchiveOutlineRegular, IconBranchOutlineRegular, IconCopyOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconEditOutlineRegular, IconShieldOutlineRegular, IconTrashOutlineRegular, IconPinFillRegular, IconPinOutlineRegular, IconUnarchiveOutlineRegular, IconArchiveOutlineRegular, IconBranchOutlineRegular, IconCopyOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { SessionMenu } from './session-actions/SessionMenu.tsx'
 import type {} from '@deepseek-ai/dsh-client-ui-context-menu/client'
 /**
@@ -315,6 +315,7 @@ export function apply(ctx: Context): void {
   ctx.slots.inject('contextMenu.icon', function* () {
     for (const [key, Icon] of Object.entries({
       'workspace.rename': IconEditOutlineRegular, 'workspace.delete': IconTrashOutlineRegular,
+      'workspace.sandbox': IconShieldOutlineRegular,
       'workspace.pin': IconPinOutlineRegular, 'workspace.unpin': IconPinFillRegular,
       'workspace.archive': IconArchiveOutlineRegular, 'workspace.unarchive': IconUnarchiveOutlineRegular,
       'workspace.fork': IconBranchOutlineRegular, 'workspace.copy': IconCopyOutlineRegular,
@@ -331,6 +332,34 @@ export function apply(ctx: Context): void {
       ? [{ id: 'delete', label: ctx.locale.bind(NS)('delete.workspace'), icon: { key: 'workspace.delete' }, danger: true, separatorBefore: true,
         run: () => { requestWorkspaceAction(workspaceId, displayTitle, 'delete') } }] : [],
   }), 'workspace: delete menu action')
+  // Whether the Host's sandbox leaves standing access on Workspace directories is a Host fact, asked once
+  // per connection: a reconnect may reach another Host, and a failed query is asked again at the next menu.
+  let sandboxStanding: Promise<boolean> | undefined
+  ctx.on('connection/reset', () => { sandboxStanding = undefined })
+  const releaseSandboxAccess = async (workspaceId: WorkspaceId, title: string): Promise<void> => {
+    // A release rewrites the whole directory tree, so the start is announced before the outcome.
+    notify({ kind: 'sandboxReleasing', title })
+    try {
+      const released = await workspaces.releaseSandboxAccess(workspaceId)
+      notify({ kind: released ? 'sandboxReleased' : 'sandboxUnchanged', title })
+    } catch (reason) {
+      console.warn('workspace sandbox access release rejected:', reason)
+      notify({ kind: 'sandboxReleaseFailed', title })
+    }
+  }
+  ctx.effect(() => ctx.contextMenus.register({
+    id: 'workspace.sandbox', target: 'workspace', order: 200,
+    resolve: async ({ workspaceId, displayTitle }) => {
+      if (!ctx.remoteAccess.source('workspace', workspaceId, 'workspace/releaseSandboxAccess').getSnapshot()) return []
+      sandboxStanding ??= workspaces.sandboxAccess().catch(() => {
+        sandboxStanding = undefined
+        return false
+      })
+      if (!await sandboxStanding) return []
+      return [{ id: 'release', label: ctx.locale.bind(NS)('sandbox.release'), icon: { key: 'workspace.sandbox' },
+        run: () => releaseSandboxAccess(workspaceId, displayTitle) }]
+    },
+  }), 'workspace: sandbox access menu action')
   const browserInjected = (): WorkspaceBrowserInjected => ({
     settleWorkspaceAction: () => { workspaceActionRequest.set(null) },
     // Explicit group actions keep their target; unscoped New Session inherits

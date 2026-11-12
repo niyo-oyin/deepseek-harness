@@ -57,6 +57,21 @@ export function registerToasts(
         display: (_notice, t) => ({ text: t('defaultWorkspace.failed'), tone: 'warning' }),
       }),
     }, ToastEntry<PropsRuntime<'workspace.toast', 'defaultWorkspaceFailed'>>)
+    for (const [key, tone, holdMs] of [
+      ['sandboxReleasing', 'plain', undefined],
+      ['sandboxReleased', 'success', 6000],
+      ['sandboxUnchanged', 'plain', undefined],
+      ['sandboxReleaseFailed', 'warning', 6000],
+    ] as const) {
+      yield ctx.slots.register({
+        name: 'workspace.toast', key, locale: 'workspace',
+        inject: (): ToastDisplayInjected<typeof key> => ({
+          display: (notice, t) => ({
+            text: t(`toast.${key}`, { title: notice.title }), tone, ...holdMs === undefined ? {} : { holdMs },
+          }),
+        }),
+      }, ToastEntry<PropsRuntime<'workspace.toast', typeof key>>)
+    }
     yield ctx.slots.register({
       name: 'workspace.toast', key: 'shortcutForkFailed', locale: 'workspace',
       inject: (): ToastDisplayInjected<'shortcutForkFailed'> => ({

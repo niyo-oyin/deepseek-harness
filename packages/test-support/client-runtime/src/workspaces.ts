@@ -114,6 +114,25 @@ export class TestWorkspaces implements IWorkspaces {
   }
 
   /**
+   * Ask whether the Host's sandbox leaves standing access on Workspace directories (recorded).
+   * @returns the stubbed fact; false by default, as on a Host whose sandbox leaves nothing behind.
+   */
+  async sandboxAccess(): Promise<boolean> {
+    this.calls.push({ method: 'sandboxAccess', args: [] })
+    return await (this.stubs.get('sandboxAccess')?.() as Promise<boolean> | undefined) ?? false
+  }
+
+  /**
+   * Release the sandbox's standing access on a Workspace directory (recorded).
+   * @param workspaceId - target workspace.
+   * @returns the stubbed outcome; false by default, as for a directory with nothing to undo.
+   */
+  async releaseSandboxAccess(workspaceId: WorkspaceId): Promise<boolean> {
+    this.calls.push({ method: 'releaseSandboxAccess', args: [workspaceId] })
+    return await (this.stubs.get('releaseSandboxAccess')?.(workspaceId) as Promise<boolean> | undefined) ?? false
+  }
+
+  /**
    * Move a Workspace in display order (recorded; default no-op).
    * @param workspaceId - Workspace to move.
    * @param beforeWorkspaceId - Anchor; omitted appends.

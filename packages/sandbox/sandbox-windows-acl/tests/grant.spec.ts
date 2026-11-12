@@ -3,17 +3,18 @@
  * fail-closed, ACE add/dispose round-trip against the REAL directory DACL
  * (observed through icacls, the operator's own tool), the recorded path
  * order, and the standing/revocable lifecycle split (workspace ACEs outlive
- * dispose as the reuse cache; temp ACEs revoke). Win32-only, like the other
+ * dispose as the reuse cache; temp ACEs revoke), and releaseStandingGrant
+ * returning a granted tree to its earlier state. Win32-only, like the other
  * real-FFI suites.
  */
 
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { AclWriteGrant } from '../src/index.ts'
+import { AclWriteGrant, releaseStandingGrant } from '../src/index.ts'
 
 const isWin32 = process.platform === 'win32'
 
@@ -73,5 +74,86 @@ describe.skipIf(!isWin32)('AclWriteGrant (server-side materialization)', () => {
     expect(icaclsText(dir)).toContain('S-1-4-9000-79')
     grantB.dispose()
     expect(icaclsText(dir)).not.toContain('S-1-4-9000-79')
+  })
+})
+
+describe.skipIf(!isWin32)('releaseStandingGrant (undoing a workspace grant)', () => {
+  const scratchDirs: string[] = []
+  const grants: AclWriteGrant[] = []
+  afterEach(() => {
+    for (const grant of grants.splice(0)) grant.dispose()
+    for (const dir of scratchDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
+  })
+
+  /** A directory tree `root/sub/file.txt`, the shape a grant propagates through. */
+  function tree(): { root: string; sub: string; file: string } {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-acl-release-'))
+    scratchDirs.push(root)
+    const sub = join(root, 'sub')
+    mkdirSync(sub)
+    const file = join(sub, 'file.txt')
+    writeFileSync(file, 'x')
+    return { root, sub, file }
+  }
+
+  function standing(sid: string, path: string): void {
+    const grant = AclWriteGrant.create(sid)
+    grants.push(grant)
+    grant.add(path, true)
+  }
+
+  /** Every entry icacls shows for the paths, with each path removed from its own listing so trees compare. */
+  function entries(...paths: string[]): string[] {
+    return paths.map(path => icaclsText(path).replaceAll(path, '<path>'))
+  }
+
+  it('returns the whole tree to its state before the grant, keeping entries the owner added', () => {
+    const { root, sub, file } = tree()
+    // An explicit entry naming the same Everyone SID as the deny this package adds.
+    expect(spawnSync('icacls', [root, '/grant', '*S-1-1-0:(OI)(CI)(RX)']).status).toBe(0)
+    const before = entries(root, sub, file)
+
+    standing('S-1-4-9100-1', root)
+    const granted = icaclsText(root)
+    expect(granted).toContain('S-1-4-9100-1')
+    expect(granted).toContain('(DENY)')
+    expect(granted).toContain('Mandatory Label')
+    expect(icaclsText(file)).toContain('S-1-4-9100-1')
+
+    expect(releaseStandingGrant(root)).toBe(true)
+    expect(entries(root, sub, file)).toEqual(before)
+    // Nothing is left to undo, and a directory that carries no grant is not touched.
+    expect(releaseStandingGrant(root)).toBe(false)
+    expect(entries(root, sub, file)).toEqual(before)
+  })
+
+  it('removes the grant of a SID derived from an earlier path together with the current one', () => {
+    const { root, sub, file } = tree()
+    const before = entries(root, sub, file)
+    standing('S-1-4-9100-2', root)
+    standing('S-1-4-9100-3', root) // what a rename leaves: the SID of the old path still names the directory
+    expect(releaseStandingGrant(root)).toBe(true)
+    expect(entries(root, sub, file)).toEqual(before)
+  })
+
+  it('keeps a nested directory writable for the enclosing grant, which later takes its label with it', () => {
+    const { root, sub, file } = tree()
+    const before = entries(root, sub, file)
+    standing('S-1-4-9100-4', root)
+    standing('S-1-4-9100-5', sub)
+
+    expect(releaseStandingGrant(sub)).toBe(true)
+    const nested = icaclsText(sub)
+    expect(nested).not.toContain('S-1-4-9100-5')
+    // The enclosing grant still reaches the directory, and its confined processes still find the Low label there.
+    expect(nested).toContain('S-1-4-9100-4')
+    expect(nested).toContain('Mandatory Label')
+
+    expect(releaseStandingGrant(root)).toBe(true)
+    expect(entries(root, sub, file)).toEqual(before)
+  })
+
+  it('names the failing call for a directory that does not exist', () => {
+    expect(() => releaseStandingGrant(join(tmpdir(), 'dsh-acl-release-missing-directory'))).toThrow(/GetNamedSecurityInfoW/u)
   })
 })
