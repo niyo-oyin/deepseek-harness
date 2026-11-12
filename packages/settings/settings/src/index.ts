@@ -12,6 +12,9 @@ import { redactSecrets, type RedactedSecret } from './redact.ts'
 import { isVolatilePath, plainConfig, projectForm, volatileForm } from './schema.ts'
 import type { SettingsNamespace } from './types.ts'
 
+/** Registry symbol every Schemastery schema carries, whichever copy of the library built it. */
+const SCHEMASTERY = Symbol.for('schemastery')
+
 export { redactSecrets } from './redact.ts'
 export type { RedactedSecret, RedactedValue } from './redact.ts'
 export type { SettingsNamespace } from './types.ts'
@@ -226,6 +229,8 @@ export class SettingsForms extends Service {
   private closed = false
   private scheduled = false
   private readonly presentations = new Map<Fiber, { auto?: boolean }>()
+  /** Entries whose unreadable configuration was already reported; cleared once the entry reads again. */
+  private readonly unreadable = new Set<string>()
 
   constructor(private readonly ownerContext: Context) {
     super(ownerContext, 'settings')
@@ -302,25 +307,30 @@ export class SettingsForms extends Service {
   describe(options?: SettingsDescribeOptions): SettingsDescriptor[] {
     const active = new Set<string>()
     const descriptors = this.ownerContext.configEditor.configuration().flatMap(({ entry, inherited, override }) => {
-      const schema = this.schema(entry)
-      if (schema === undefined || entry.fiber === undefined
-        || entry.fiber.runtime === null || entry.fiber.state !== FiberState.ACTIVE) return []
-      const form = volatileForm(schema)
-      if (form === undefined) return []
+      // One entry whose schema or inherited configuration cannot be read is omitted and reported;
+      // every other entry keeps its form, and a write to another entry still succeeds.
+      let read: ReturnType<SettingsForms['read']>
+      try {
+        read = this.read(entry, inherited, override)
+      } catch (error) {
+        if (!this.unreadable.has(entry.id)) {
+          this.unreadable.add(entry.id)
+          this.ownerContext.logger.warn('settings: entry %s has no form because its configuration could not be read', String(entry.options.id))
+          this.ownerContext.logger.warn(error)
+        }
+        return []
+      }
+      this.unreadable.delete(entry.id)
+      if (read === undefined) return []
+      const { form, raw, fiber, value, base, user } = read
       active.add(entry.id)
-      const raw = JSON.stringify([entry.fiber.uid, schema.toJSON(), entry.options.config ?? {}])
-      const autoGenerate = this.presentations.get(entry.fiber.ctx.fiber)?.auto ?? true
+      const autoGenerate = this.presentations.get(fiber)?.auto ?? true
       const previous = this.revisions.get(entry.id)
       const revision = previous === undefined ? 0 : previous.revision + Number(previous.raw !== raw)
       this.revisions.set(entry.id, { raw, revision, ns: entry.options.id as SettingsNamespace, autoGenerate })
       if (previous?.raw !== raw || previous.autoGenerate !== autoGenerate) {
         this.ownerContext.emit('settings/document-updated', entry.options.id as SettingsNamespace, revision)
       }
-      const value = projectForm(form, plainConfig(entry.fiber.effectiveConfig))
-      // Inherited layers omit profile fields, so only interpolate and validate them, without the running fiber's config hooks.
-      const resolved: unknown = interpolate(entry.fiber.ctx, inherited)
-      const base = projectForm(form, plainConfig(inheritedConfig(entry.fiber.runtime, resolved)))
-      const user = projectForm(form, override)
       const redacted = redactSecrets(form as z<never>, value)
       return [{
         autoGenerate,
@@ -423,9 +433,39 @@ export class SettingsForms extends Service {
     this.describe()
   }
 
+  /**
+   * Read one active entry's form schema and layered values without changing any revision.
+   * @returns the entry's form inputs, or undefined when the entry is inactive or declares no live field.
+   * @throws when the schema cannot be serialized or the inherited configuration cannot be resolved.
+   */
+  private read(entry: Entry, inherited: unknown, override: unknown): {
+    form: z
+    raw: string
+    fiber: Fiber
+    value: unknown
+    base: unknown
+    user: unknown
+  } | undefined {
+    const schema = this.schema(entry)
+    if (schema === undefined || entry.fiber === undefined
+      || entry.fiber.runtime === null || entry.fiber.state !== FiberState.ACTIVE) return undefined
+    const form = volatileForm(schema)
+    if (form === undefined) return undefined
+    const raw = JSON.stringify([entry.fiber.uid, schema.toJSON(), entry.options.config ?? {}])
+    const value = projectForm(form, plainConfig(entry.fiber.effectiveConfig))
+    // Inherited layers omit profile fields, so only interpolate and validate them, without the running fiber's config hooks.
+    const resolved: unknown = interpolate(entry.fiber.ctx, inherited)
+    const base = projectForm(form, plainConfig(inheritedConfig(entry.fiber.runtime, resolved)))
+    return { form, raw, fiber: entry.fiber.ctx.fiber, value, base, user: projectForm(form, override) }
+  }
+
   private schema(entry: Entry): z | undefined {
-    const schema = entry.fiber?.runtime?.Config
-    return schema !== undefined && 'toJSON' in schema ? schema as z : undefined
+    const schema: unknown = entry.fiber?.runtime?.Config
+    // A plugin may validate its configuration with another Standard Schema library; only a
+    // Schemastery schema carries the field metadata a form is projected from.
+    return (typeof schema === 'function' || (typeof schema === 'object' && schema !== null))
+      && Reflect.get(schema, SCHEMASTERY) === true
+      ? schema as z : undefined
   }
 }
 

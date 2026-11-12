@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path'
 import { expect, it, vi } from 'vitest'
 import { parse } from 'yaml'
+import { FiberState } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { configurationFixture as fixture } from './configuration-fixture.ts'
 
@@ -337,6 +338,38 @@ it('imports the removed settings.yaml into the profile once and keeps rejected s
   // The rename fails with EISDIR on POSIX and EPERM on Windows; the reported error names the rename either way.
   await vi.waitFor(() => { expect(failures().some(failure => failure instanceof Error && failure.message.includes('rename'))).toBe(true) })
   expect(blocked.agentDefaultModel.currentSelection().model).toBe('legacy')
+})
+
+it('omits an entry configured by another Standard Schema library and keeps every other form writable', async () => {
+  // Accepted by the Loader, which needs only `~standard.validate`, but not a Schemastery schema.
+  const foreign = {
+    '~standard': { version: 1, vendor: 'other', validate: (value: unknown) => ({ value }) },
+    toJSON: () => ({ type: 'object' }),
+  } as Partial<z> as z
+  const { ctx } = await fixture({ schema: foreign })
+  expect([...ctx.loader.entries()].find(entry => entry.options.id === 'first')?.fiber?.state).toBe(FiberState.ACTIVE)
+  expect(ctx.settings.describe().map(row => row.ns)).toEqual(['default-model'])
+  await ctx.settings.update('default-model', { model: 'changed' })
+  expect(ctx.agentDefaultModel.currentSelection()).toEqual({ provider: 'test', model: 'changed' })
+  await expect(ctx.settings.update('first', { count: 3 })).rejects.toThrow('No configurable plugin entry "first"')
+})
+
+it('omits an entry whose schema cannot be serialized, reports it once, and restores it when it reads again', async () => {
+  const schema = z.object({ ordinary: z.string(), count: z.number().default(2).volatile() })
+  let broken = true
+  const toJSON = schema.toJSON.bind(schema)
+  Object.defineProperty(schema, 'toJSON', { value: () => { if (broken) throw new Error('unserializable schema'); return toJSON() } })
+  const { ctx } = await fixture({ schema })
+  const reports = (): unknown[] => ctx.logger.buffer.filter(message => message.type === 'warn').map((message): unknown => message.args.at(-1))
+  expect(ctx.settings.describe().map(row => row.ns)).toEqual(['default-model'])
+  expect(ctx.settings.describe().map(row => row.ns)).toEqual(['default-model'])
+  expect(reports().filter(report => report === 'first')).toHaveLength(1)
+  expect(reports().filter(report => report === 'second')).toHaveLength(1)
+  expect(reports()).toContainEqual(expect.objectContaining({ message: 'unserializable schema' }))
+  await ctx.settings.update('default-model', { model: 'changed' })
+  expect(ctx.agentDefaultModel.currentSelection().model).toBe('changed')
+  broken = false
+  expect(ctx.settings.describe().map(row => row.ns).sort()).toEqual(['default-model', 'first', 'second'])
 })
 
 it('describes an entry whose required field only the profile supplies, and reports a failed refresh instead of crashing', async () => {
