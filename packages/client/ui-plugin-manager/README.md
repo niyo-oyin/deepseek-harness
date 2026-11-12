@@ -98,7 +98,7 @@ ctx.slots.inject('plugins.row.config', () => ctx.slots.register({
 
 The bundle's patch must declare the row under that id, and the registration exists while the bundle is on, so a bundle that is off shows no configure control.
 
-A row whose bundle registers no `plugins.row.config` entry still gets the **Configure** control while the Host serves a schema for the row's entry with `autoGenerate` set. The page generates the form from that schema: one control per string, number, boolean, string-choice, and `role('secret')` field, labelled by the field name with the schema's description and default as its hint. A secret is write-only, shows whether a value is stored, and can be cleared; it is stored in the profile's `cordis.patch.yml`. Fields of other types are listed as edited in that document. Edits are staged and written on save, like a registered form, and a registered entry always replaces the generated one.
+A row whose bundle registers no `plugins.row.config` entry still gets the **Configure** control while the Host serves a schema for the row's entry with `autoGenerate` set. The page generates the form from that schema: one control per string, number, boolean, string-choice, and `role('secret')` field, labelled by the field name with the schema's description and default as its hint. A string-choice field is a dropdown of its declared values, whose first option returns the field to its default. A secret is write-only, shows whether a value is stored, and can be cleared; it is stored in the profile's `cordis.patch.yml`. Fields of other types are listed as edited in that document. Edits are staged and written on save, like a registered form, and a registered entry always replaces the generated one.
 
 ### Detail page extension points
 

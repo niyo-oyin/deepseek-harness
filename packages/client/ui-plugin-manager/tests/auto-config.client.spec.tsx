@@ -84,22 +84,25 @@ describe('generated field specs', () => {
 })
 
 describe('AutoConfigForm', () => {
-  function renderForm(stored: readonly string[] = [], config = autoConfig(SCHEMA, 'en')) {
+  function renderForm(stored: readonly string[] = [], config = autoConfig(SCHEMA, 'en'), mode = 'auto') {
     const stub = stubConfigForm<Record<string, unknown>>()
-    stub.publish({ status: 'ready', writable: true, revision: 4, value: { name: 'exa', count: 3, strict: true, mode: 'auto' }, base: { strict: true }, user: { strict: true } })
+    stub.publish({ status: 'ready', writable: true, revision: 4, value: { name: 'exa', count: 3, strict: true, mode }, base: { strict: true }, user: { strict: true } })
     const view = render(
       <StrictMode><AutoConfigForm scope={stub.scope} config={config} storedSecrets={new Set(stored)} t={t} /></StrictMode>,
     )
     return { stub, view }
   }
 
-  it('renders one control per field with its description, choices, and default', () => {
+  it('renders one control per field with its description and default, and a choice as a dropdown', () => {
     renderForm()
     expect((screen.getByLabelText('name') as HTMLInputElement).value).toBe('exa')
     expect((screen.getByLabelText('count') as HTMLInputElement).value).toBe('3')
     expect(screen.getByRole('switch', { name: 'strict' }).getAttribute('aria-checked')).toBe('true')
     expect(screen.getByText('Provider id. Default: exa.')).toBeTruthy()
-    expect(screen.getByText('Search type. One of: auto / neural. Default: auto.')).toBeTruthy()
+    expect(screen.getByText('Search type. Default: auto.')).toBeTruthy()
+    const mode = screen.getByLabelText('mode') as HTMLSelectElement
+    expect(mode.value).toBe('auto')
+    expect([...mode.options].map(option => [option.value, option.text])).toEqual([['', en.autoConfigChoiceDefault], ['auto', 'auto'], ['neural', 'neural']])
     expect(screen.getByText('Edit these fields in the profile configuration file: tags, mixed')).toBeTruthy()
     expect((screen.getByLabelText('apiKey') as HTMLInputElement).type).toBe('password')
     expect(screen.getByText(en.autoConfigSecretUnset)).toBeTruthy()
@@ -126,14 +129,22 @@ describe('AutoConfigForm', () => {
     ])
   })
 
-  it('blocks the save while a choice or number draft is not accepted', () => {
+  it('blocks the save while a number draft is not accepted', () => {
     renderForm()
-    fireEvent.change(screen.getByLabelText('mode'), { target: { value: 'fast' } })
-    expect(screen.getByText('Enter one of: auto / neural. Leave blank to use the default.')).toBeTruthy()
-    expect((screen.getByRole('button', { name: en.autoConfigSave }) as HTMLButtonElement).disabled).toBe(true)
-    fireEvent.change(screen.getByLabelText('mode'), { target: { value: 'auto' } })
     fireEvent.change(screen.getByLabelText('count'), { target: { value: 'many' } })
     expect(screen.getByText(en.autoConfigInvalidNumber)).toBeTruthy()
+    expect((screen.getByRole('button', { name: en.autoConfigSave }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('shows a stored choice outside the declared values until another one replaces it', async () => {
+    const { stub } = renderForm([], autoConfig(SCHEMA, 'en'), 'fast')
+    const mode = screen.getByLabelText('mode') as HTMLSelectElement
+    expect(mode.value).toBe('fast')
+    expect([...mode.options].map(option => option.value)).toEqual(['', 'fast', 'auto', 'neural'])
+    fireEvent.change(mode, { target: { value: '' } })
+    expect([...mode.options].map(option => option.value)).toEqual(['', 'auto', 'neural'])
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.autoConfigSave })) })
+    expect(stub.mutate.mock.calls).toEqual([[[{ op: 'unset', path: ['mode'] }], 4]])
   })
 
   it('stages a reset of an overridden switch back to the composition value', async () => {

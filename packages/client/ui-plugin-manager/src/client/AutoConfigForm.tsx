@@ -83,9 +83,18 @@ function AutoConfigFields({ bound, scope, config, storedSecrets, t }: AutoConfig
   const disabled = !state.shell.writable
   const hintOf = (field: AutoField): string => [
     field.description,
-    field.choices === undefined ? undefined : t('autoConfigChoices', { values: field.choices.join(' / ') }),
     field.defaultText === undefined ? undefined : t('autoConfigDefault', { value: field.defaultText }),
   ].filter(part => part !== undefined).join(' ')
+  const overrideBadge = (field: AutoField, fieldState: SettingsFieldState): ReactNode => fieldState.overridden
+    ? (
+      <span className={css.badges}>
+        <Tag tone="neutral">{t('autoConfigOverridden')}</Tag>
+        <button type="button" className={css.reset} disabled={disabled} onClick={() => { actions.resetField(field.name) }}>
+          {t('autoConfigReset')}
+        </button>
+      </span>
+    )
+    : null
   const control = (field: AutoField): ReactNode => {
     const id = `plugin-auto-config-${field.name}`
     const fieldState = state.fields[field.name]
@@ -121,19 +130,30 @@ function AutoConfigFields({ bound, scope, config, storedSecrets, t }: AutoConfig
         <div key={field.name} className={css.field}>
           <div className={css.head}>
             <span className={css.label}>{field.name}</span>
-            {fieldState.overridden
-              ? (
-                <span className={css.badges}>
-                  <Tag tone="neutral">{t('autoConfigOverridden')}</Tag>
-                  <button type="button" className={css.reset} disabled={disabled} onClick={() => { actions.resetField(field.name) }}>
-                    {t('autoConfigReset')}
-                  </button>
-                </span>
-              )
-              : null}
+            {overrideBadge(field, fieldState)}
             <Switch checked={fieldState.text === 'true'} label={field.name} disabled={disabled}
               onChange={(next) => { actions.edit(field.name, String(next)) }} />
           </div>
+          {hint === '' ? null : <p className={css.hint}>{hint}</p>}
+        </div>
+      )
+    }
+    if (field.kind === 'choice') {
+      const choices = field.choices ?? []
+      const hint = hintOf(field)
+      // A stored value outside the declared choices stays selectable, so the dropdown shows what the profile holds.
+      const options = fieldState.text === '' || choices.includes(fieldState.text) ? choices : [fieldState.text, ...choices]
+      return (
+        <div key={field.name} className={css.field}>
+          <div className={css.head}>
+            <label className={css.label} htmlFor={id}>{field.name}</label>
+            {overrideBadge(field, fieldState)}
+          </div>
+          <select id={id} className={css.select} value={fieldState.text} disabled={disabled}
+            onChange={(event) => { actions.edit(field.name, event.target.value) }}>
+            <option value="">{t('autoConfigChoiceDefault')}</option>
+            {options.map(option => <option key={option} value={option}>{option}</option>)}
+          </select>
           {hint === '' ? null : <p className={css.hint}>{hint}</p>}
         </div>
       )
@@ -146,9 +166,7 @@ function AutoConfigFields({ bound, scope, config, storedSecrets, t }: AutoConfig
         hint={hintOf(field)}
         overriddenLabel={t('autoConfigOverridden')}
         resetLabel={t('autoConfigReset')}
-        invalidLabel={field.kind === 'choice'
-          ? t('autoConfigInvalidChoice', { values: (field.choices ?? []).join(' / ') })
-          : t('autoConfigInvalidNumber')}
+        invalidLabel={t('autoConfigInvalidNumber')}
         numeric={field.kind === 'number'}
         disabled={disabled}
         {...fieldState}
