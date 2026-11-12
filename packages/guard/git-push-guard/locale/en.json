@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Git push guard",
+    "description": "Asks for confirmation before a shell command runs git push."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Proteção de push do Git",
+    "description": "Pede confirmação antes que um comando de shell execute git push."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Git プッシュガード",
+    "description": "シェルコマンドが git push を実行する前に確認します。"
+  }
+}

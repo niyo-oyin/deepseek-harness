@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Garde-fou git push",
+    "description": "Demande une confirmation avant qu’une commande shell exécute git push."
+  }
+}

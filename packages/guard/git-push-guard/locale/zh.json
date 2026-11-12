@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Git 推送守卫",
+    "description": "在 shell 命令执行 git push 之前先请求确认。"
+  }
+}
