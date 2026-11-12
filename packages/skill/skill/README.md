@@ -33,7 +33,7 @@ Use `dsh-skill` when agents should load skills from more than one source through
 
 ### Mount and configure
 
-Load the plugin like any Cordis plugin. The only configuration limits how many completed provider catalogs are kept in memory; everything else is provider behavior.
+Load the plugin like any Cordis plugin. The configuration limits how many completed provider catalogs are kept in memory and names the skills that are switched off; everything else is provider behavior.
 
 ```yaml
 - name: '@deepseek-ai/dsh-skill'
@@ -42,6 +42,9 @@ Load the plugin like any Cordis plugin. The only configuration limits how many c
 | Field | Default | Meaning |
 |---|---|---|
 | `collectCacheMaxEntries` | `128` | Completed cwd/provider catalogs kept in memory |
+| `disabled` | `[]` | Names of skills switched off for every agent; applies without a restart |
+
+A switched-off skill is left out of every `list`/`snapshot` and `get()` returns `undefined` for it, whichever provider or layer supplies it. The name is what is switched off, so a lower-priority skill of the same name does not take its place. A management surface passes `includeDisabled` in its view options to see and load those skills too. Settings exposes the field under the registry's entry id; the [Skills page](../../client/ui-settings-skills/README.md) writes it.
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-skill) is the exhaustive source for every accepted field.
 
@@ -99,7 +102,7 @@ A read (`list`/`snapshot`) collects each layer's candidates: runtime skills firs
 
 ### Invalidation
 
-The registry has no TTL: only a provider calling its registration-scoped `invalidate()`, or a runtime registration or disposal, clears completed catalogs. Each invalidation bumps a revision, clears the cache, and emits the unfiltered `skills/change` event; consumers refetch with their own lookup options. `invalidate()` takes effect only while the exact registration that received it is still active, so a late callback cannot disturb a replacement provider with the same name.
+The registry has no TTL: only a provider calling its registration-scoped `invalidate()`, or a runtime registration or disposal, clears completed catalogs. Each invalidation bumps a revision, clears the cache, and emits the unfiltered `skills/change` event; consumers refetch with their own lookup options. A change of the `disabled` setting emits the same event without clearing the cache, because collected catalogs hold every skill and the setting is applied on each read. `invalidate()` takes effect only while the exact registration that received it is still active, so a late callback cannot disturb a replacement provider with the same name.
 
 </details>
 

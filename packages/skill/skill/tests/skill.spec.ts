@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { bindScopeParent, createScope, scopeOf } from '@deepseek-ai/dsh-scope'
+import { liveConfig } from '../../../settings/settings/tests/live-config.ts'
 import SkillRegistry, {
   isModelInvocable,
   isUserInvocable,
@@ -763,6 +764,27 @@ describe('SkillRegistry registry', () => {
     expect(changes).toBe(5)
     invalidate()
     expect(changes).toBe(5)
+  })
+
+  it('leaves switched-off skills out of every catalog and load, and follows the setting without a restart', async () => {
+    const ctx = new Context()
+    const live = await liveConfig(ctx, SkillRegistry, { disabled: ['review'] })
+    registerProvider(ctx, new MemoryProvider([memorySkill('review', 'Review', 10), memorySkill('deploy', 'Deploy', 10)]))
+    const names = async (options = {}): Promise<string[]> => (await ctx.skills.list(options)).map(skill => skill.name)
+
+    expect(await names()).toEqual(['deploy'])
+    expect(await ctx.skills.get('review')).toBeUndefined()
+    // A management surface still sees and reads what is switched off.
+    expect(await names({ includeDisabled: true })).toEqual(['deploy', 'review'])
+    expect(await ctx.skills.get('review', { includeDisabled: true })).toMatchObject({ name: 'review', content: 'review body.' })
+
+    let changes = 0
+    ctx.on('skills/change', () => { changes += 1 })
+    await live.update({ disabled: ['deploy'] })
+    expect(changes).toBe(1)
+    expect(await names()).toEqual(['review'])
+    expect(await ctx.skills.get('review')).toMatchObject({ name: 'review' })
+    expect(await ctx.skills.get('deploy')).toBeUndefined()
   })
 
   it('contains synchronous and asynchronous catalog observer failures', async () => {

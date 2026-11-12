@@ -10,7 +10,9 @@
  * @module @deepseek-ai/dsh-skill
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service, type Volatile } from '@deepseek-ai/cordis'
+// Type-only: the Loader event that reports a committed change of the volatile `disabled` list.
+import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-llm'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { NamedEntries, ScopedLayers, scopeChainOf, scopeOf } from '@deepseek-ai/dsh-scope'
@@ -116,6 +118,8 @@ export interface SkillLookupOptions {
 export interface SkillViewOptions extends SkillLookupOptions {
   /** Viewing scope (the calling agent); omitted reads the global layer alone. */
   readonly scope?: ScopeKey | undefined
+  /** Whether skills switched off by the registry's `disabled` setting are included; a management surface sets it. */
+  readonly includeDisabled?: boolean | undefined
 }
 
 /**
@@ -278,6 +282,19 @@ export interface SkillProviderControl {
 export interface Config {
   /** Maximum number of completed cwd/provider catalogs kept in memory. */
   readonly collectCacheMaxEntries?: number
+  /**
+   * Names of skills switched off for every agent: left out of every catalog and
+   * not loadable, whichever provider or layer supplies them. Applies without a restart.
+   */
+  readonly disabled?: Volatile<string[]>
+}
+
+/** Accepted (unresolved) form of {@link Config}. */
+export interface ConfigInput {
+  /** Maximum number of completed cwd/provider catalogs kept in memory. */
+  readonly collectCacheMaxEntries?: number
+  /** Names of skills switched off for every agent. */
+  readonly disabled?: string[]
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -287,8 +304,8 @@ declare module '@deepseek-ai/cordis' {
 
   interface Events {
     /**
-     * A skill provider, runtime contribution, or provider-backed catalog may
-     * have changed. This is an unfiltered invalidation notification; consumers
+     * A skill provider, runtime contribution, provider-backed catalog, or the
+     * `disabled` setting may have changed. This is an unfiltered invalidation notification; consumers
      * refetch the catalog for their own lookup options. Listener failures are
      * contained and cannot veto the registry mutation.
      * @mode emit
@@ -354,11 +371,13 @@ class SkillLayer implements ScopeLayer {
  * on demand.
  */
 export class SkillRegistry extends Service {
-  static Config: Schema<Config> = z.object({
+  static Config = z.object({
     collectCacheMaxEntries: z.number().default(DEFAULT_COLLECT_CACHE_ENTRIES),
-  })
+    disabled: z.array(z.string()).default([]).volatile(),
+  }) as Schema<ConfigInput, Config>
 
   private readonly collectCacheMaxEntries: number
+  private readonly disabled: Volatile<string[]> | undefined
   private readonly layers = new ScopedLayers<SkillLayer>(
     scope => new SkillLayer(scope),
     () => { this.invalidateCache() },
@@ -374,6 +393,9 @@ export class SkillRegistry extends Service {
     super(ctx, 'skills')
     this.collectCacheMaxEntries = config.collectCacheMaxEntries ?? DEFAULT_COLLECT_CACHE_ENTRIES
     assertPositiveInteger('collectCacheMaxEntries', this.collectCacheMaxEntries)
+    this.disabled = config.disabled
+    // The collected catalogs are unfiltered, so a changed list needs no rediscovery: observers only re-read.
+    ctx.on('loader/volatile-update', () => { this.notifyChange() })
   }
 
   /**
@@ -480,8 +502,10 @@ export class SkillRegistry extends Service {
    */
   async snapshot(options: SkillViewOptions = {}): Promise<SkillCatalogSnapshot> {
     const collected = await this.collect(options)
+    const hidden = this.hiddenNames(options)
     return {
       skills: [...collected.entries.values()]
+        .filter(entry => !hidden.has(entry.candidate.name))
         .map(entry => toSummary(entry.candidate))
         .sort(compareSkillSummary),
       complete: collected.cacheable,
@@ -498,7 +522,7 @@ export class SkillRegistry extends Service {
    * @returns the full skill, including body content, or `undefined`.
    */
   async get(name: string, options: SkillViewOptions = {}): Promise<SkillDefinition | undefined> {
-    if (!isSkillName(name)) return undefined
+    if (!isSkillName(name) || this.hiddenNames(options).has(name)) return undefined
     const collected = await this.collect(options)
     throwIfAborted(options.signal)
     const match = collected.entries.get(name)
@@ -514,6 +538,11 @@ export class SkillRegistry extends Service {
       return undefined
     }
     return definition
+  }
+
+  /** Names this view leaves out: the `disabled` setting, unless the view asks for those skills too. */
+  private hiddenNames(options: SkillViewOptions): ReadonlySet<string> {
+    return new Set(options.includeDisabled === true ? [] : this.disabled?.get())
   }
 
   private async collect(options: SkillViewOptions): Promise<CollectResult> {
