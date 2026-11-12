@@ -10,6 +10,8 @@ const locale = process.argv.find(argument => argument.startsWith(prefix))?.slice
 if (locale === undefined) throw new Error('desktop welcome: missing window locale')
 const api: WelcomeApi = {
   ...resolveDesktopLocale(locale),
+  // This distribution offers no vendor account sign-in.
+  accountSignIn: false,
   analytics: async (eventName, attributes) => {
     if (await api.analyticsEnabled()) await ipcRenderer.invoke(WELCOME_IPC.analytics, eventName, attributes)
   },
