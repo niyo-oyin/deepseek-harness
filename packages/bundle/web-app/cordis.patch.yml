@@ -160,6 +160,11 @@
       name: '@deepseek-ai/dsh-mcp-manager'
       inject: [credentials]
 
+    # Fork: skill management over Remote — the full skill list, switched-off
+    # skills included, and writes to the user's own skill folders.
+    - id: skill-manager
+      name: '@deepseek-ai/dsh-skill-manager'
+
     # Workspace commands and reconnect-safe projection over Typert Remote.
     - id: workspace-controller
       name: '@deepseek-ai/dsh-api-workspace-controller'

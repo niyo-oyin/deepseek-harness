@@ -713,6 +713,13 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Reconciles mcp-client instances against its volatile servers configuration, aggregates their connection statuses, and serves restart and probe to management surfaces.',
   },
   {
+    key: 'skillManager',
+    pkg: 'skill-manager',
+    title: 'Skill management Remote',
+    mode: 'core',
+    note: 'Lists every skill of the default preset, switched-off ones included, and writes to the user skill folders for a management surface.',
+  },
+  {
     key: 'schedule',
     pkg: 'schedule',
     title: 'Host scheduled messages',

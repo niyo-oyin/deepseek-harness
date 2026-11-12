@@ -215,6 +215,13 @@ export const VIEWER_ENDPOINT_CLASSES = {
   'mcpManager/probe': 'owner-only', // owner MCP server management
   'mcpManager/restart': 'owner-only', // owner MCP server management
   'mcpManager/watch': 'owner-only', // owner MCP server management
+  'skillManager/create': 'owner-only', // owner skill management
+  'skillManager/delete': 'owner-only', // owner skill management
+  'skillManager/exportArchive': 'owner-only', // owner skill management
+  'skillManager/importArchive': 'owner-only', // owner skill management
+  'skillManager/read': 'owner-only', // owner skill management
+  'skillManager/update': 'owner-only', // owner skill management
+  'skillManager/watch': 'owner-only', // owner skill management
   'commands/execute': 'owner-only', // owner executes a slash command
   'permissionPresets/catalog': 'owner-only', // owner permission presets
   'userQuestions/answer': 'owner-only', // owner answers a pending question
