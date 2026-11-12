@@ -31,6 +31,7 @@ import type {} from '@deepseek-ai/dsh-session-persistence'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { Remote, RemoteError, TypertRemoteService, type TypertLookup } from '@deepseek-ai/dsh-typert-protocol'
 import { WorkspaceChangeFeed } from './changes.ts'
+import { readGitBranch } from './git.ts'
 import { searchWorkspace, type SearchLimits } from './search.ts'
 import type {
   WorkspaceByteRange,
@@ -41,6 +42,7 @@ import type {
   WorkspaceFileRange,
   WorkspaceFileSearchRequest,
   WorkspaceFileSearchResult,
+  WorkspaceGitBranch,
   WorkspaceFileStat,
   WorkspaceFileText,
   WorkspaceFileWatchFrame,
@@ -385,6 +387,22 @@ export class WorkspaceFiles extends TypertRemoteService {
       respectGitignore: request.respectGitignore,
       ...this.config.search,
     }, signal)
+  }
+
+  /**
+   * Read what Git has checked out in the Session's workspace directory.
+   * @param workspaceFileScope - header-derived workspace root for the Session identity on the wire.
+   * @param signal - caller cancellation.
+   * @returns the branch, the detached commit, or `none` outside a repository, without a subprocess
+   *   provider or Git, and when the directory is missing or the read fails.
+   */
+  @Remote
+  async gitBranch(workspaceFileScope: WorkspaceFileScope, signal: AbortSignal): Promise<WorkspaceGitBranch> {
+    const subprocess = this.ctx.get('subprocess')
+    if (subprocess === undefined) return { kind: 'none' }
+    const root = await this.ctx.fs.resolve(workspaceFileScope.workspaceRoot, { signal })
+    if ((await this.ctx.fs.stat(root, signal))?.type !== 'directory') return { kind: 'none' }
+    return readGitBranch(subprocess, this.ctx.fs.processPath(root), signal)
   }
 
   /**

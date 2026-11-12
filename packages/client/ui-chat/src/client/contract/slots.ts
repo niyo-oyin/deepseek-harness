@@ -4,6 +4,7 @@ import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { SessionId, SessionSeq } from '@deepseek-ai/dsh-session/types'
 import type { PendingSubmission } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { FileAttachmentRef } from '@deepseek-ai/dsh-attachment'
+import type { WorkspaceGitBranch } from '@deepseek-ai/dsh-api-workspace-files/types'
 import type { InboxState } from '@deepseek-ai/dsh-agent/types'
 import type {
   CommandNode, CompactionSummaryNode, ConversationLocationDataStore, ConversationTurnDataMap,
@@ -320,6 +321,16 @@ export interface PerformanceUsageInjected {
     /** Accepted performance and usage detail preference. */
     performanceUsage: ObservableSnapshot<PerformanceUsageMode>
   }
+}
+
+/** One Session's Git branch reading and the request for a fresh one, injected into the dock's branch pill. */
+export interface GitBranchInjected {
+  hooks: {
+    /** What Git has checked out in the Session's workspace. */
+    gitBranch: ObservableSnapshot<WorkspaceGitBranch>
+  }
+  /** Read the checkout again; an unchanged answer publishes nothing. */
+  refreshGitBranch: () => void
 }
 
 /** Business callbacks injected into the Chat view. */

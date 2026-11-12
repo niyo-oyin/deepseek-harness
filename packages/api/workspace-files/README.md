@@ -35,6 +35,7 @@ Mount the package beside `dsh-fs`, `dsh-sandbox-policy`, the Session store, and 
 | `list(path)` | `WorkspaceDirectoryListing { path, entries, truncated }` | Direct children of one directory |
 | `search({ query, excludedPaths, includeHidden, respectGitignore })` | `WorkspaceFileSearchResult { matches, truncated, incomplete }` | Entries anywhere in the workspace whose name or relative path contains the query |
 | `changes(path)` | stream of `WorkspaceFileWatchFrame` | Subscription readiness, then invalidations of one file or a directory's direct entries |
+| `gitBranch()` | `WorkspaceGitBranch`: `{ kind: 'branch', name }`, `{ kind: 'detached', head }`, or `{ kind: 'none' }` | What Git has checked out in the workspace root: the branch, the short commit id of a detached HEAD, or `none` outside a repository, without Git or a subprocess provider, and when the read fails or exceeds five seconds |
 
 ### Addressing and paths
 

@@ -158,6 +158,15 @@ export interface WorkspaceFileSearchMatch {
   readonly type: WorkspaceDirectoryEntry['type']
 }
 
+/**
+ * What Git has checked out in a Session's workspace directory: a branch by name, a detached HEAD by
+ * its short commit id, or `none` when the directory is outside a repository or Git cannot be read.
+ */
+export type WorkspaceGitBranch =
+  | { readonly kind: 'branch'; readonly name: string }
+  | { readonly kind: 'detached'; readonly head: string }
+  | { readonly kind: 'none' }
+
 /** The outcome of one workspace search. */
 export interface WorkspaceFileSearchResult {
   /**

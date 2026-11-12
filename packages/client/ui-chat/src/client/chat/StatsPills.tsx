@@ -1,18 +1,18 @@
 // Composer statistics pills, each its own 'conversation.composer.dock' list
-// entry (activity, usage) so a plugin can replace or add one pill by id.
+// entry (branch, activity, usage) so a plugin can replace or add one pill by id.
 // Compact keeps speed and cache hit as plain readings; Detailed adds counts,
 // token totals, and click-open dialogs. Settled-node identity prevents
 // stream-delta updates from rerendering the pills.
 
-import { memo, useMemo, type ReactNode } from 'react'
+import { memo, useEffect, useMemo, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { IconDatabaseOutlineRegular, IconGaugeOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconBranchOutlineRegular, IconDatabaseOutlineRegular, IconGaugeOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { UseProjection } from '@deepseek-ai/dsh-api-session-controller/client'
-import type { InjectFace, SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
+import type { InjectFace, PropsRuntime, SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: merges the sessionStats key into SessionProjectionMap for useProjection.
 import type {} from '@deepseek-ai/dsh-session-stats/client'
 import type { TokenUsageProjection } from '@deepseek-ai/dsh-token-meter/client'
-import type { ChatViewSlotProps, PerformanceUsageInjected } from '../contract/slots.ts'
+import type { ChatViewSlotProps, GitBranchInjected, PerformanceUsageInjected } from '../contract/slots.ts'
 import type { ChatSnapshot } from '../contract/snapshot.ts'
 import { formatTokensPerSecond } from './message-chrome.ts'
 import { assistantStepReading } from '../contract/turn-metrics.ts'
@@ -37,6 +37,30 @@ interface WindowStats {
   /** Summed output tokens over the same decode-timed steps. */
   decodeTokens: number
 }
+
+/**
+ * The branch checked out in the Session's workspace, or `@` and the short commit id of a detached
+ * HEAD; nothing outside a repository. It asks for a fresh reading when it mounts, when a turn starts
+ * or ends, and when the window comes back into view, the moments a checkout can have changed.
+ */
+export const BranchPill = memo(function BranchPill({
+  useSession, useGitBranch, refreshGitBranch,
+}: PropsRuntime<'conversation.composer.dock'> & InjectFace<GitBranchInjected>) {
+  const branch = useGitBranch(value => value)
+  const running = useSession(snapshot => snapshot.running)
+  useEffect(() => { refreshGitBranch() }, [running, refreshGitBranch])
+  useEffect(() => {
+    const onShown = (): void => { if (document.visibilityState === 'visible') refreshGitBranch() }
+    window.addEventListener('focus', onShown)
+    document.addEventListener('visibilitychange', onShown)
+    return () => {
+      window.removeEventListener('focus', onShown)
+      document.removeEventListener('visibilitychange', onShown)
+    }
+  }, [refreshGitBranch])
+  if (branch.kind === 'none') return null
+  return <PlainPill stat="branch" icon={<IconBranchOutlineRegular />} {...reading(branch.kind === 'branch' ? branch.name : `@${branch.head}`, null)} />
+})
 
 /**
  * Fold assistant and tool-result nodes into window-scoped display totals —
@@ -130,7 +154,7 @@ export interface StatPillProps extends InjectFace<PerformanceUsageInjected> {
 }
 
 /** Dock entry id carried as `data-composer-stat` on each pill. */
-type StatId = 'activity' | 'usage'
+type StatId = 'branch' | 'activity' | 'usage'
 
 interface PillContent {
   stat: StatId

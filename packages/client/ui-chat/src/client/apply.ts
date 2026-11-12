@@ -26,7 +26,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import type {
   ChatFlowDataInjected, ChatFlowInjected, ChatNodeInjected, ChatScrollPosition, ChatViewInjected,
-  QuotaNoticeInjected, QuotaNoticeState,
+  GitBranchInjected, QuotaNoticeInjected, QuotaNoticeState,
 } from './contract/slots.ts'
 import type { ChatSnapshot } from './contract/snapshot.ts'
 import { EMPTY_CHAT_SNAPSHOT } from './contract/snapshot.ts'
@@ -36,7 +36,8 @@ import { ChatView } from './chat/ChatView.tsx'
 import { ChatFlow } from './chat/ChatFlow.tsx'
 import { registerChatNodeRenderers } from './chat/register-node-renderers.ts'
 import { UserContent } from './chat/UserContent.tsx'
-import { ActivityPill, UsagePill } from './chat/StatsPills.tsx'
+import { ActivityPill, BranchPill, UsagePill } from './chat/StatsPills.tsx'
+import { GitBranchReadings } from './git-branch.ts'
 import { registerConversationNodes } from './conversation-nodes/register.ts'
 import { registerFenceLayers } from './fence/register.ts'
 import { QuotaNoticeHost } from './chat/QuotaNoticeHost.tsx'
@@ -349,6 +350,19 @@ export function apply(ctx: Context): void {
     yield ctx.slots.register({
       name: 'conversation.composer.dock', id: 'usage', order: 1, locale: NS, inject: statPillInject,
     }, UsagePill)
+  })
+
+  // The branch pill needs the Workspace files namespace; an assembly without it shows the other pills alone.
+  ctx.inject(['remote.workspaceFiles'], (scope) => {
+    const readings = new GitBranchReadings((sessionId, signal) => scope.remote.workspaceFiles.gitBranch(sessionId, signal))
+    scope.effect(() => () => { readings.dispose() }, 'chat: git branch readings')
+    scope.slots.inject('conversation.composer.dock', () => scope.slots.register({
+      name: 'conversation.composer.dock', id: 'branch', order: -1,
+      inject: (sessionId): GitBranchInjected => ({
+        hooks: { gitBranch: readings.source(sessionId) },
+        refreshGitBranch: () => { readings.refresh(sessionId) },
+      }),
+    }, BranchPill))
   })
 
   ctx.slots.inject('conversation.approval.detail', () =>
