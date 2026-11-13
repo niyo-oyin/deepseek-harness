@@ -15,7 +15,6 @@ import type { Options as Config } from '../src/config.ts'
 import type { DeepSeekAdapterOptions } from '../src/types.ts'
 import { DeepSeekFileStore } from '../src/file-store.ts'
 
-export const prepareExtensions = async () => ({ fields: {}, accept: async () => {} })
 
 export const MODEL = 'deepseek-v4-flash'
 export const user = (text = 'hello') => createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text }] })
@@ -45,7 +44,7 @@ export async function assemble(stream: AsyncIterable<StreamChunk>, model = MODEL
 }
 export function adapter(config: Config = {}, dependencies: Partial<DeepSeekAdapterOptions> = {}) {
   const files = new DeepSeekFileStore()
-  return new DeepSeekAdapter({ options: () => resolveAdapterOptions(config), resolveAuth: () => Promise.resolve({ headers: { 'x-api-key': 'test-key' } }), resolveUserId: () => 'test-user' as AnonymousUserId, resolveAttachments: () => undefined, resolveImageAccess: () => undefined, resolveFiles: () => files, prepareExtensions, ...dependencies })
+  return new DeepSeekAdapter({ options: () => resolveAdapterOptions(config), resolveAuth: () => Promise.resolve({ headers: { 'x-api-key': 'test-key' } }), resolveUserId: () => 'test-user' as AnonymousUserId, resolveAttachments: () => undefined, resolveImageAccess: () => undefined, resolveFiles: () => files, ...dependencies })
 }
 /**
  * Loopback Messages endpoint recording each model request.

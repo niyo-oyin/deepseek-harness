@@ -1,7 +1,5 @@
 # Web Access
 
-English | [中文](web.zh.md)
-
 The web access seam — a [capability seam](../../.agents/notes/implemented/architecture/2026-06-24-web-capability-seam.md) that spans **two operations** (search and fetch) on one `ctx.web` service, split across packages: Service Definition ([dsh-web](../../packages/web/web), `ctx.web` + the provider registries), Service Providers ([dsh-web-search-deepseek](../../packages/web/web-search-deepseek), [dsh-web-deepseek-api](../../packages/web/web-deepseek-api), [dsh-web-fetch-http](../../packages/web/web-fetch-http)), and Consumer ([dsh-tool-web](../../packages/web/tool-web), the `web_search`/`web_fetch` tool schemas). Web is **one optional capability**, not part of the agent-loop spine — so its vocabulary lives here, not in [core.md](core.md). A search-provider swap does not change how the model asks for a query, and a fetch-provider swap does not change how the model asks for a URL.
 
 Source: [`packages/web/web/src/types.ts`](../../packages/web/web/src/types.ts)
@@ -165,6 +163,8 @@ Selection semantics (resolved at execution time, never order-dependent):
 - No id configured, exactly one registered usable provider → that provider.
 - No id configured, multiple usable providers → `WEB_PROVIDER_AMBIGUOUS`.
 - No id configured, no usable provider → `WEB_PROVIDER_UNAVAILABLE`.
+
+Search then substitutes the only other available and ready provider when the selected provider's `ready()` answers false, so an installed search provider serves without an explicit selection while the default provider has no credential.
 
 ```ts cordis-catalog
 /**

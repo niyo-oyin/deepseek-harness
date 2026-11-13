@@ -1,7 +1,5 @@
 # Workspaces
 
-English | [中文](workspace.zh.md)
-
 A workspace is the persistent record of a directory the user works in: a stable id over a canonical path, a display title, and the ordered account of sessions that belong to it. The subsystem is one package ([dsh-workspace](../../packages/workspace/workspace), `ctx.workspaceRegistry`) — an optional host-side capability, not part of the agent-loop spine, and invisible to models (no tools, no prompt text, no session events). It stores its records through the [storage domain form](storage.md) and validates session membership against [`SessionHeader.cwd`](persistence.md#sessionheader--metadata-beside-the-log), so `storageDomain` and `sessionPersistence` are mandatory startup dependencies: an unavailable persistence peer leaves the plugin pending rather than being mistaken for an empty history. Design record: [domain KV storage Agent Note](../../.agents/notes/proposed/architecture/2026-07-24-domain-kv-storage-and-workspace.md); bootstrap and GUI ordering: [Workspace UI product-flow Agent Note](../../.agents/notes/archived/feature/2026-07-25-workspace-ui-product-flow.md).
 
 Source: [`packages/workspace/workspace/src/types.ts`](../../packages/workspace/workspace/src/types.ts)
@@ -383,6 +381,21 @@ Host service backing the generated `ctx.remote.workspace` namespace.
 @Remote('delete') delete(request: WorkspaceDeleteRequest): Promise<WorkspaceDeleteValue>
 
 /**
+ * Report whether this Host's process sandbox leaves standing access on
+ * Workspace directories, which {@link releaseSandboxAccess} undoes.
+ * @returns the Host-wide fact.
+ */
+@Remote('sandboxAccess') sandboxAccess(): Promise<WorkspaceSandboxAccessValue>
+
+/**
+ * Return one Workspace's directory to the state before the process sandbox
+ * prepared it, keeping the Workspace registered.
+ * @param request - Workspace identity whose directory is released.
+ * @returns whether the directory carried anything to undo.
+ */
+@Remote('releaseSandboxAccess') releaseSandboxAccess(request: WorkspaceReleaseSandboxAccessRequest): Promise<WorkspaceReleaseSandboxAccessValue>
+
+/**
  * Move one Workspace within the registry display order.
  * @param request - moved Workspace and optional anchor.
  * @returns the complete resulting Workspace order.
@@ -500,6 +513,15 @@ Host Remote file reads and workspace directory observations over the composed fi
  * @throws RemoteError `workspace-file/search-failed`: subprocess is missing, rg cannot launch or execute, or the search times out.
  */
 @Remote async search( workspaceFileScope: WorkspaceFileScope, request: WorkspaceFileSearchRequest, signal: AbortSignal, ): Promise<WorkspaceFileSearchResult>
+
+/**
+ * Read what Git has checked out in the Session's workspace directory.
+ * @param workspaceFileScope - header-derived workspace root for the Session identity on the wire.
+ * @param signal - caller cancellation.
+ * @returns the branch, the detached commit, or `none` outside a repository, without a subprocess
+ *   provider or Git, and when the directory is missing or the read fails.
+ */
+@Remote async gitBranch(workspaceFileScope: WorkspaceFileScope, signal: AbortSignal): Promise<WorkspaceGitBranch>
 
 /**
  * Watch one file or a directory's direct entries in the Session's filesystem.

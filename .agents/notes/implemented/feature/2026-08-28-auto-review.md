@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-08-28-auto-review.zh.md)
-
 ## Problem
 
 Full access lets useful project work proceed without repeated approvals, but it also permits destructive operations and sensitive exfiltration. A permission mode that delegates approval to a model needs an explicit authority policy, a complete description of the pending action, and a failure path that never executes the rejected body. Sharing Full access's enforcement knobs also makes a separate durable mode identity necessary, including when a child inherits an older fork prefix.
@@ -41,7 +39,7 @@ The integration uses only the latest `request/header.config` provider/model and 
 
 Each item is its own message and keeps the same text in later reviews: the pending call becomes a historical call, and the integration remembers, for each live Session, the schema each reviewed call showed so that it reappears at the same position. A review's messages therefore begin with all messages of the previous review. Providers that cache only at message ends, such as OpenAI implicit breakpoints on GPT-5.6 and later, or at a final marker with lookback, such as Anthropic `cache_control`, reuse the previous review; one growing user message let them reuse only the policy. The schema memory is process-local, so the first review after a restart omits earlier schemas and misses the cache once.
 
-The request also carries the reviewed Session's `sessionId` and `purpose: 'auto-review'`. Routes that require a per-conversation identity or key prompt caching on one, such as the `x-opencode-session` header OpenCode requires and OpenAI `prompt_cache_key`, derive it from that id; without it OpenCode rejects every review, and Auto fails every call. The [DeepSeek Session-log upload](../../../../packages/session/session-log-deepseek/README.md#request-field) applies the same eligibility and registered exclusions to reviews as to other requests. The uploaded data is the canonical Session log; review prompts and decisions remain outside that log.
+The request also carries the reviewed Session's `sessionId` and `purpose: 'auto-review'`. Routes that require a per-conversation identity or key prompt caching on one, such as the `x-opencode-session` header OpenCode requires and OpenAI `prompt_cache_key`, derive it from that id; without it OpenCode rejects every review, and Auto fails every call. The DeepSeek Session-log upload (`session-log-deepseek`, since removed) applies the same eligibility and registered exclusions to reviews as to other requests. The uploaded data is the canonical Session log; review prompts and decisions remain outside that log.
 
 The reviewer builds the history and the pending call from the Session's complete action history: an authorization is the earlier call the `REVIEW_POLICY` source rules make eligible, and a duplicate or conflicting identity has to be visible anywhere in the log rather than inside a recent window, so neither the Session projections nor a bounded read serves the decision. The read is the deprecated synchronous `snapshotEvents()` under a line-scoped `typescript/no-deprecated` waiver.
 

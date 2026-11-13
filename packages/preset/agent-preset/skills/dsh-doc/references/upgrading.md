@@ -14,7 +14,7 @@ When the user asks what an upgrade affects, report the applicable guides and the
 
 ## Find and read them
 
-- Installed DSH: `docs/upgrade-guide/README.md` under the installation directory lists every guide in one `## v<T>` section per version directory, with a summary and English and Chinese paths. The index and its sections can exceed one read, so first print its section headings with their line numbers, then read each chosen section at most 12 lines per call with the file-read tool's offset and limit. With the runtime from `references/locate-docs.md`, in bash, or in PowerShell through its process form with this script and the index path as the argument:
+- Installed DSH: `docs/upgrade-guide/README.md` under the installation directory lists every guide in one `## v<T>` section per version directory, with a summary and path. The index and its sections can exceed one read, so first print its section headings with their line numbers, then read each chosen section at most 12 lines per call with the file-read tool's offset and limit. With the runtime from `references/locate-docs.md`, in bash, or in PowerShell through its process form with this script and the index path as the argument:
 
   ```sh
   ELECTRON_RUN_AS_NODE=1 "$DSH_NODE_EXECUTABLE" -e "require('node:fs').readFileSync(process.argv[1], 'utf8').split(/\r?\n/).forEach((line, index) => { if (line.startsWith('## ')) console.log(index + 1, line) })" "$DSH_INSTALL_DIR/docs/upgrade-guide/README.md"
@@ -22,4 +22,4 @@ When the user asks what an upgrade affects, report the applicable guides and the
   Without that runtime, read the index 12 lines per call from its start.
 - Source checkout: the repository has no such index. Read the `description` line at the top of each `docs/upgrade-guide/v<T>/<item>/guide.md` in the chosen directories.
 
-Read only the `guide.md`, or `guide.zh.md` for a Chinese-speaking user, of items that change a surface from step 3. Report the guides used and the ones skipped with the reason. When a needed guide or the documentation directory is missing, say so instead of answering from another version.
+Read only the `guide.md` of items that change a surface from step 3. Report the guides used and the ones skipped with the reason. When a needed guide or the documentation directory is missing, say so instead of answering from another version.

@@ -5,8 +5,6 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-session-title
 
-English | [中文](README.zh.md)
-
 ## Summary
 
 Use `dsh-session-title` to give each session a client-visible title from the first eligible human message, an optional asynchronous generator, or an explicit user rename. Accepted titles persist through replay, resume, and paging but never enter model input. Automatic generation never delays the main agent response, and newer title requests supersede older work. Choose the package when clients need durable titles with configurable length limits and a deliberate `refresh()` path for regenerating them.
@@ -109,7 +107,7 @@ Read these pages when the service contract is not enough. They move from the sub
 - [Shared LLM execution module](../session-title-llm/README.md) — the model-backed execution module both shipped providers use.
 - [First-message title provider](../session-title-first-prompt-llm/README.md) — titles from the first eligible human message.
 - [All-messages title provider](../../experimental/session-title-all-prompts-llm/README.md) — titles from every eligible human message.
-- [Session package map](../README.md) — adjacent persistence, projection, title, and telemetry packages.
+- [Session package map](../README.md) — adjacent persistence, projection, and title packages.
 
 -----
 

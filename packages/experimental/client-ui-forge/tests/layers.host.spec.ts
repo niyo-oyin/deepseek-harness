@@ -64,7 +64,7 @@ describe('attributesOf', () => {
     const paths = [
       'packages/experimental/client-ui-forge/locale/en.json', 'packages/experimental/client-ui-forge/src/client/locales.ts',
       'packages/experimental/client-ui-forge/src/types.ts', 'packages/typert/generator/tests/fixtures/remote-model/packages/domain/src/types.ts',
-      'packages/client/locale/package.json', 'snapshots/session/headless.snapshot.ts', 'README.i18n.yaml', 'docs/persistence-schema.json',
+      'packages/client/locale/package.json', 'snapshots/session/headless.snapshot.ts', 'README.md', 'docs/persistence-schema.json',
     ]
     const { stdout } = await run('git', ['check-attr', 'dsh-review-layer', 'linguist-generated', '--', ...paths])
     const expected = paths.map((path) => {

@@ -5,8 +5,6 @@ kind: "package-reference"
 
 # @deepseek-ai/dsh-session-checkpoint-policy
 
-English | [中文](README.zh.md)
-
 ## Summary
 
 Use this package with a session persistence backend to make work durable before a model request, before a top-level tool can cause external effects, and before the next agent step begins. After each checkpoint, work can resume after a crash from stored requests, tool calls, responses, and results without loss. Checkpoint failures are fail-closed: a model adapter or top-level tool body does not run until the durable write succeeds. The package has no configuration and adds no prompt or tool schema; unfinished Assistant streams remain transient, and interrupted tool calls recover with an unknown outcome instead of an automatic retry.
@@ -81,7 +79,7 @@ The plugin is a listener-only composition over three seams, with no state of its
 Read these pages when the package-level contract is not enough. They move from the durability model to the seam it joins and the shipped backends.
 
 - [Session persistence subsystem](../../../docs/subsystems/persistence.md) — the flush checkpoint, batching window, and crash recovery every backend shares.
-- [Session package map](../README.md) — adjacent persistence, projection, title, and telemetry packages.
+- [Session package map](../README.md) — adjacent persistence, projection, and title packages.
 - [Session persistence seam](../session-persistence/README.md) — the `ctx.sessionPersistence` service this policy flushes through.
 - [JSONL persistence backend](../session-persistence-jsonl/README.md) — the shipped backend this policy is usually loaded beside.
 
