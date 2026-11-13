@@ -1,4 +1,8 @@
 /** Windows provider registration through the Loader without an interactive desktop. */
+import { copyFileSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import Include from '@deepseek-ai/cordis-plugin-include'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
@@ -11,8 +15,15 @@ import { expect, it, onTestFinished } from 'vitest'
 import * as WindowsProvider from '../src/index.ts'
 
 it.skipIf(process.platform !== 'win32')('loads the Windows provider and rejects a numeric window ID before native dispatch', async () => {
+  // Disposing the provider's fiber records `disabled: true` in its included file, so the Loader reads a copy.
+  const directory = mkdtempSync(join(tmpdir(), 'dsh-cua-windows-loader-'))
+  const included = join(directory, 'provider.yml')
+  copyFileSync(fileURLToPath(new URL('./fixtures/provider.yml', import.meta.url)), included)
   const ctx = new Context()
-  onTestFinished(() => ctx.fiber.dispose())
+  onTestFinished(async () => {
+    await ctx.fiber.dispose()
+    rmSync(directory, { recursive: true, force: true })
+  })
   await mountAgentLoopTestDependencies(ctx)
   await mountAgentLoopTestHarness(ctx)
   await ctx.plugin(ComputerUseRegistry)
@@ -20,7 +31,7 @@ it.skipIf(process.platform !== 'win32')('loads the Windows provider and rejects 
   ctx.baseUrl = import.meta.url
   await ctx.plugin(Loader)
   Object.assign(ctx.loader.builtins, { include: Include, 'windows-provider': WindowsProvider })
-  await ctx.loader.create({ name: 'cordis:include', config: { path: new URL('./fixtures/provider.yml', import.meta.url).href } })
+  await ctx.loader.create({ name: 'cordis:include', config: { path: pathToFileURL(included).href } })
   await ctx.loader.await()
   const entry = [...ctx.loader.entries()].find(entry => entry.options.id === 'windows-provider')
   if (!entry?.fiber) throw new Error('Loader did not activate the Windows provider')
