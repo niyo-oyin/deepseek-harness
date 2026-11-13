@@ -305,9 +305,9 @@ declare module '@deepseek-ai/cordis' {
   interface Events {
     /**
      * A skill provider, runtime contribution, provider-backed catalog, or the
-     * `disabled` setting may have changed. This is an unfiltered invalidation notification; consumers
-     * refetch the catalog for their own lookup options. Listener failures are
-     * contained and cannot veto the registry mutation.
+     * `disabled` setting may have changed. This is an unfiltered invalidation
+     * notification; consumers refetch the catalog for their own lookup options.
+     * Listener failures are contained and cannot veto the registry mutation.
      * @mode emit
      */
     'skills/change'(): void

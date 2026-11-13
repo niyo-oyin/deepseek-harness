@@ -19,9 +19,10 @@ export interface McpManagerFace {
   /**
    * Follow the manager's server list.
    * @param onList - receives the complete list at subscription and after every change.
+   * @param onFailure - receives the reason once when the list can no longer be followed; no list follows it.
    * @returns the disposer ending the subscription.
    */
-  watch(onList: (servers: readonly McpManagedServerView[]) => void): () => void
+  watch(onList: (servers: readonly McpManagedServerView[]) => void, onFailure: (reason: string) => void): () => void
   /**
    * Test one configured server without touching its live instance.
    * @param name - the server to test.
@@ -55,6 +56,8 @@ export interface McpServerRow {
   readonly entry: McpServerEntry | undefined
   /** Whether the entry asks for a running instance; a plugin's server always does. */
   readonly enabled: boolean
+  /** Whether a switch of this server is still being written. */
+  readonly switching: boolean
   /** Live status from the manager; absent until its first list arrives. */
   readonly status: McpManagedServerStatus | undefined
   readonly probe: McpProbeState | undefined
@@ -69,6 +72,8 @@ export type McpNotice =
 export interface McpPageState {
   readonly status: 'loading' | 'ready' | 'unavailable'
   readonly writable: boolean
+  /** Why the live server list is no longer followed; the statuses shown may be out of date until the page is opened again. */
+  readonly stale: string | null
   readonly rows: readonly McpServerRow[]
   readonly notice: McpNotice | null
 }
@@ -81,7 +86,9 @@ export interface McpServersFace {
   }
   /** Follow the live server list while the page is shown; returns the disposer. */
   observe: () => () => void
+  /** Write `servers.<name>.enabled`; the row shows the switch as busy until the write returns. */
   setEnabled: (name: string, enabled: boolean) => void
+  /** Unset `servers.<name>`; a refusal or failure becomes the page notice. */
   remove: (name: string) => void
   /**
    * Write a new server, or the edited fields of the existing server named by the draft.
@@ -90,8 +97,11 @@ export interface McpServersFace {
    * @returns the draft's problem, `refused` when the Host did not accept the entry, or nothing once written.
    */
   save: (draft: McpServerDraft, existing: boolean) => Promise<DraftProblem | { kind: 'refused' } | undefined>
+  /** Test one server without touching its live instance; the row shows the test while it runs and what it found. */
   probe: (name: string) => void
+  /** Replace one server's live instance; a restart the manager could not perform becomes the page notice. */
   restart: (name: string) => void
+  /** Clear the page notice. */
   dismissNotice: () => void
 }
 
@@ -102,8 +112,12 @@ export class McpServersController {
   private live: readonly McpManagedServerView[] | undefined
   private readonly probes = new Map<string, McpProbeState>()
   private notice: McpNotice | null = null
+  private stale: string | null = null
+  /** Switch writes still in flight, by the server each one switches. */
+  private readonly switching = new Map<string, number>()
   private observers = 0
   private unwatch: (() => void) | undefined
+  private disposed = false
 
   /**
    * @param form - the shared configuration form of the MCP manager's entry.
@@ -114,8 +128,26 @@ export class McpServersController {
     this.unsubscribe = form.subscribe(() => { this.publish() })
   }
 
+  /** Publish the page; a result that arrives after the page's plugin is gone has nobody to show it to. */
   private publish(): void {
-    this.store.set(this.projection())
+    if (!this.disposed) this.store.set(this.projection())
+  }
+
+  /** Follow the manager's list unless it is followed already; a subscription that failed is opened again. */
+  private follow(): void {
+    if (this.unwatch !== undefined) return
+    const stop = this.manager.watch((servers) => {
+      this.live = servers
+      this.stale = null
+      this.publish()
+    }, (reason) => {
+      if (this.unwatch !== stop) return
+      // The statuses on screen may be out of date from here on; the next visit to the page subscribes again.
+      this.unwatch = undefined
+      this.stale = reason
+      this.publish()
+    })
+    this.unwatch = stop
   }
 
   private projection(): McpPageState {
@@ -128,6 +160,7 @@ export class McpServersController {
       origin: name in stored ? 'profile' : 'composition',
       entry,
       enabled: entry.enabled !== false,
+      switching: this.switching.has(name),
       status: statusOf(name),
       probe: this.probes.get(name),
     }))
@@ -135,9 +168,12 @@ export class McpServersController {
       // A server the manager lists without a settings entry was registered by a plugin; one that is no
       // longer configured or registered remains listed only while its cleanup failure stands.
       if (server.name in servers || !server.configured) continue
-      rows.push({ name: server.name, origin: 'plugin', entry: undefined, enabled: true, status: server.status, probe: this.probes.get(server.name) })
+      rows.push({
+        name: server.name, origin: 'plugin', entry: undefined, enabled: true, switching: false, status: server.status,
+        probe: this.probes.get(server.name),
+      })
     }
-    return { status: snapshot.status, writable: snapshot.writable, rows, notice: this.notice }
+    return { status: snapshot.status, writable: snapshot.writable, stale: this.stale, rows, notice: this.notice }
   }
 
   /** Apply ordered writes to the `servers` map and report a refusal or a carrier failure as the page notice. */
@@ -162,19 +198,24 @@ export class McpServersController {
     return {
       hooks: { mcpServers: this.store },
       observe: () => {
-        if (this.observers++ === 0) {
-          this.unwatch = this.manager.watch((servers) => {
-            this.live = servers
-            this.publish()
-          })
-        }
+        this.observers += 1
+        this.follow()
         return () => {
           if (--this.observers > 0) return
           this.unwatch?.()
           this.unwatch = undefined
         }
       },
-      setEnabled: (name, enabled) => { void this.write([{ op: 'set', path: ['servers', name, 'enabled'], value: enabled }]) },
+      setEnabled: (name, enabled) => {
+        this.switching.set(name, (this.switching.get(name) ?? 0) + 1)
+        this.publish()
+        void this.write([{ op: 'set', path: ['servers', name, 'enabled'], value: enabled }]).finally(() => {
+          const left = (this.switching.get(name) ?? 1) - 1
+          if (left === 0) this.switching.delete(name)
+          else this.switching.set(name, left)
+          this.publish()
+        })
+      },
       remove: (name) => {
         this.probes.delete(name)
         void this.write([{ op: 'unset', path: ['servers', name] }])
@@ -220,6 +261,7 @@ export class McpServersController {
 
   /** Release the form subscription and the live list. */
   dispose(): void {
+    this.disposed = true
     this.unsubscribe()
     this.unwatch?.()
     this.unwatch = undefined

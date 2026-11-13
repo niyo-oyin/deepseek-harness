@@ -13,8 +13,6 @@ import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import { UserQuestionError } from '@deepseek-ai/dsh-user-questions'
 import { runsGitPush } from './push-command.ts'
 
-export { runsGitPush } from './push-command.ts'
-
 /** Cordis function-plugin name. */
 export const name = 'git-push-guard'
 

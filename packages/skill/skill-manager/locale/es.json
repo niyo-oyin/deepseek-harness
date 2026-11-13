@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Administrador de habilidades",
-    "description": "Enumera todas las habilidades para la página Habilidades y crea, modifica y elimina habilidades en tus carpetas de habilidades."
+    "description": "Enumera todas las habilidades para la página Habilidades, crea, modifica y elimina habilidades en tus carpetas de habilidades, e importa y exporta carpetas de habilidades como archivos ZIP."
   }
 }

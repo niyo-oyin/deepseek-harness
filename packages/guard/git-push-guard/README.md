@@ -15,6 +15,7 @@ While this plugin is mounted, a shell command that runs `git push` does not star
 - [Understand the implementation](#understand-the-implementation)
 - [Model Experience](#model-experience)
 - [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
 -----
 
@@ -48,17 +49,29 @@ The scan errs toward asking. `echo git push` is reported although it runs nothin
 <a id="model-experience"></a>
 ## Model Experience
 
-The plugin adds nothing to the system prompt or the tool schemas, so it does not change the request prefix or its cache.
-
 ### Conditional tool result
 
 #### What the model sees
 
-Only a blocked push produces model-visible text, as the denied call's error:
+Only a blocked push produces model-visible text: the denied shell call's error is one of the three literals below, chosen by why the push did not run. The plugin adds nothing to the system prompt or the tool schemas.
 
-- declined: `Git push guard: the user declined this push, so the command did not run. Do not push again unless the user asks for it.`
-- attempted by a subagent: `Git push guard: a subagent cannot ask the user to confirm a push, so the command did not run. Report the push you intended to the agent that started you.`
-- nobody to ask: `Git push guard: the user could not be asked to confirm this push, so the command did not run.`
+##### The user declined the push
+
+```markdown
+Git push guard: the user declined this push, so the command did not run. Do not push again unless the user asks for it.
+```
+
+##### A subagent attempted the push
+
+```markdown
+Git push guard: a subagent cannot ask the user to confirm a push, so the command did not run. Report the push you intended to the agent that started you.
+```
+
+##### Nobody could be asked
+
+```markdown
+Git push guard: the user could not be asked to confirm this push, so the command did not run.
+```
 
 #### Token effect
 
@@ -66,12 +79,23 @@ About 30 tokens per blocked push; none otherwise.
 
 #### KV Cache effect
 
-None: the text is a tool result at the end of the conversation.
+Append-only: the text is a tool result at the end of the conversation, and the request prefix is unchanged.
+
+## Known Limitations and Deferred Work
 
 <a id="known-limitations-and-deferred-work"></a>
-## Known Limitations and Deferred Work
 
 - **A push the command text does not show is not seen** — a Git alias, a script or a Makefile target that pushes, `gh pr merge`, a base64 `-EncodedCommand`, and a push typed into an interactive program are not recognised.
 - **Other ways to publish are out of scope** — `git send-pack`, `gh release create`, and package publishing commands run unasked.
 - **One switch for every Session, in a file** — the guard is on or off for the whole profile through its patch file; there is no per-Session toggle and no control in the application.
 - **The question blocks the turn** — the agent waits until the user answers, as with any approval card.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

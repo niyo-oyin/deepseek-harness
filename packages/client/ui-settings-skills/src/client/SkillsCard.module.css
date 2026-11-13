@@ -1,4 +1,6 @@
-/* Skills page: a list of skill rows and the editor that adds, changes, or shows one. */
+/* Skills page: a list of skill rows and the editor that adds, changes, or shows one.
+   Text fields take a 16px floor under @media (pointer: coarse), as on the Plugins page:
+   iOS Safari zooms the visual viewport for a focused field under 16px. */
 
 .page {
   display: flex;
@@ -6,16 +8,24 @@
   gap: 12px;
 }
 
+/* The note takes the free space; once it would be narrower than its basis, the buttons wrap below it. */
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
 }
 
-/* The note takes the free space, so the button keeps its width at the row's end. */
-.toolbar .hint {
-  flex: 1;
+.toolbar > .hint {
+  flex: 1 1 240px;
+}
+
+.toolbarActions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
 }
 
 .list {
@@ -34,34 +44,44 @@
   border-top: 0.5px solid var(--dsw-alias-border-l2);
 }
 
+/* The name and tags wrap as one group; the switch keeps the trailing edge on the first line. */
 .rowHead {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
+}
+
+.title {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
   min-width: 0;
 }
 
 .name {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   font-size: 13px;
   font-weight: 500;
-  line-height: 1.5;
+  line-height: 20px;
   color: var(--dsw-alias-label-primary);
 }
 
-/* Takes the free space, so the switch sits at the row's end. */
-.spacer {
-  flex: 1;
+/* A switched-off skill reads as set aside, as an off row does on the Plugins page; its controls stay at full strength. */
+.row[data-enabled='false'] .name {
+  color: var(--dsw-alias-label-secondary);
 }
 
-/* A switched-off skill reads as set aside; its controls stay at full strength. */
-.row[data-enabled='false'] .name,
-.row[data-enabled='false'] .text,
-.row[data-enabled='false'] .target {
-  color: var(--dsw-alias-label-tertiary);
+/* Holds the progress of a switch being written, so the switch does not move when it appears. */
+.busy {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 20px;
 }
 
 .text {
@@ -75,24 +95,30 @@
 .target {
   margin: 0;
   overflow-wrap: anywhere;
-  font-family: var(--dsh-font-family-code, monospace);
+  font-family: var(--ds-font-family-code);
   font-size: 12px;
   line-height: 1.5;
   color: var(--dsw-alias-label-tertiary);
 }
 
-.rowActions,
-.editorActions {
+.actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
 
-.confirm {
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--dsw-alias-label-secondary);
+/* The removal in a row: red ink inside a 30% red frame, with a red hover wash, as on the Plugins page. */
+.danger {
+  color: var(--dsw-alias-state-error-primary);
+  --dsh-button-outline-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent);
+  --dsw-alias-interactive-bg-hover: color-mix(in srgb, var(--dsw-alias-state-error-primary) 8%, transparent);
+}
+
+/* The confirmation's removal fills red. */
+.dangerButton {
+  --dsw-alias-button-primary-fill: var(--dsw-alias-state-error-primary);
+  --dsw-alias-button-primary-hover: var(--dsw-alias-state-error-primary);
 }
 
 .hint,
@@ -108,28 +134,24 @@
   color: var(--dsw-alias-state-error-primary);
 }
 
-.notice {
+.progress {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   margin: 0;
-  padding: 8px 12px;
-  border-radius: var(--dsw-radius-md);
-  background: var(--dsw-alias-bg-layer-3);
   font-size: 12px;
   line-height: 1.5;
-  color: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-label-tertiary);
 }
 
-/* The outcome of the latest import or export. */
+/* What the latest import came to: a multiline group, R16 on the module fill. */
 .transfer {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 8px 12px;
-  border-radius: var(--dsw-radius-md);
-  background: var(--dsw-alias-bg-layer-3);
+  padding: 12px 16px;
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-module-platform);
   overflow-wrap: anywhere;
   font-size: 12px;
   line-height: 1.5;
@@ -147,20 +169,30 @@
 
 .outcomes [data-outcome='exists'],
 .outcomes [data-outcome='name-taken'],
-.outcomes [data-outcome='invalid'] {
+.outcomes [data-outcome='invalid'],
+.outcomes [data-outcome='failed'] {
   color: var(--dsw-alias-state-error-primary);
 }
 
+/* A nested editor: R16 on the module fill, as the settings card materials ask. */
 .editor {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 12px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--dsw-radius-md);
+  padding: 12px 16px;
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-module-platform);
 }
 
-.editorField {
+/* The editor while the skill is read: the spinner centered where the form will be. */
+.editorLoading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+}
+
+.field {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -192,7 +224,7 @@
 .textarea {
   padding: 8px 12px;
   resize: vertical;
-  font-family: var(--dsh-font-family-code, monospace);
+  font-family: var(--ds-font-family-code);
 }
 
 .input:focus-visible,
@@ -205,4 +237,50 @@
 .textarea:disabled {
   color: var(--dsw-alias-label-tertiary);
   cursor: default;
+}
+
+.input[aria-invalid='true'],
+.textarea[aria-invalid='true'] {
+  border-color: var(--dsw-alias-state-error-primary);
+}
+
+@media (pointer: coarse) {
+  .input,
+  .textarea {
+    font-size: 16px;
+  }
+}
+
+/* First-read placeholders keep a row's text-line heights; the painted bar sits centered in each. */
+.skeletonLine {
+  display: flex;
+  align-items: center;
+  height: 20px;
+}
+
+.skeletonName {
+  width: min(144px, 60%);
+}
+
+.skeletonDetail {
+  width: min(280px, 85%);
+  height: 18px;
+}
+
+.skeletonBar {
+  width: 100%;
+  height: 12px;
+  border-radius: var(--dsw-radius-xs);
+  background: var(--dsw-alias-bg-skeleton);
+  animation: dsh-skills-skeleton 2s cubic-bezier(0.36, 0, 0.64, 1) infinite;
+}
+
+@keyframes dsh-skills-skeleton {
+  0% { opacity: 1; }
+  40% { opacity: 0.6; }
+  80%, 100% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeletonBar { animation: none; }
 }

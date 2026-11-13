@@ -96,7 +96,7 @@ describe('BranchPill', () => {
       useGitBranch: bindSnapshotSelector(branch),
       useSession: bindSnapshotSelector(session),
       refreshGitBranch,
-    } as unknown as ComponentProps<typeof BranchPill>
+    } as ComponentProps<typeof BranchPill>
     const view = render(<BranchPill {...props} />)
     return { branch, session, refreshGitBranch, view }
   }

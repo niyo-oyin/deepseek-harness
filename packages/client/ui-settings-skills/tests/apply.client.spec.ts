@@ -34,7 +34,9 @@ async function bench(served: ReturnType<typeof view>[]) {
   const update = vi.fn(() => Promise.resolve({ ok: false, error: { code: 'gateway/internal', message: 'EACCES', details: {} } }))
   const remove = vi.fn(() => Promise.resolve({ ok: true, value: { ok: true } }))
   const importArchive = vi.fn(() => Promise.resolve({ ok: true, value: { ok: true, skills: [{ name: 'review', outcome: 'imported' }] } }))
-  const exportArchive = vi.fn(() => Promise.resolve({ ok: true, value: { fileName: 'review.zip', data: btoa('zip bytes') } }))
+  const exportArchive = vi.fn(() => Promise.resolve({
+    ok: true, value: { ok: true, archive: { fileName: 'review.zip', data: btoa('zip bytes') } },
+  }))
   const remote = new TestRemote(ctx, {
     settings: { describe: describeSettings },
     skillManager: { read, create, update, delete: remove, importArchive, exportArchive },

@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Skill manager",
-    "description": "Lists every skill for the Skills page, and creates, changes, and removes skills in your skill folders."
+    "description": "Lists every skill for the Skills page, creates, changes, and removes skills in your skill folders, and imports and exports skill folders as ZIP archives."
   }
 }

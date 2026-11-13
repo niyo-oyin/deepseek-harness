@@ -5,8 +5,9 @@
  * `disabled` setting, written through its settings namespace, so it takes
  * effect without a restart; the list, the file writes, and ZIP import and
  * export go through the skill manager's Remote namespace, and an exported
- * archive is saved through the file-actions service. The page registers into the Plugins page's
- * `plugins.item` slot while the Host serves that settings namespace.
+ * archive is saved through the file-actions service. The page registers into
+ * the Plugins page's `plugins.item` slot while the Host serves that settings
+ * namespace.
  */
 
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
@@ -66,7 +67,7 @@ export function apply(ctx: ClientContext): void {
   const t = ctx.locale.bind(NS)
   ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-settings-skills: dictionaries')
   const manager: SkillManagerFace = {
-    watch: (onList) => {
+    watch: (onList, onFailure) => {
       const stream = ctx.remote.$stream<ManagedSkillView[]>({
         name: 'skills',
         open: signal => ctx.remote.skillManager.watch(signal),
@@ -77,8 +78,9 @@ export function apply(ctx: ClientContext): void {
           onList(frame.value)
           frame.accept()
         }
-      })().catch(() => {
-        // A list that cannot be followed leaves the last one on screen; reopening the page subscribes again.
+      })().catch((error: unknown) => {
+        // The page says so and keeps the last list; it subscribes again the next time it is opened.
+        onFailure(error instanceof Error ? error.message : String(error))
       })
       return () => { void stream.dispose() }
     },
@@ -91,9 +93,10 @@ export function apply(ctx: ClientContext): void {
       return await valueOf(ctx.remote.skillManager.importArchive({ data, replace }))
     },
     exportArchive: async (name): Promise<SkillExportOutcome | CallFailure> => {
-      const archive = await valueOf(ctx.remote.skillManager.exportArchive(name))
-      if (archive === null) return { status: 'unavailable' }
-      if ('failed' in archive) return archive
+      const result = await valueOf(ctx.remote.skillManager.exportArchive(name))
+      if ('failed' in result) return result
+      if (!result.ok) return { status: 'refused', reason: result.refused }
+      const { archive } = result
       const bytes = Uint8Array.from(atob(archive.data), character => character.charCodeAt(0))
       try {
         // Desktop asks where to save; a browser hands the archive to its download manager.

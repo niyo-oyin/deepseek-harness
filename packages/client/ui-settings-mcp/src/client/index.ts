@@ -56,7 +56,7 @@ export function apply(ctx: ClientContext): void {
   const t = ctx.locale.bind(NS)
   ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-settings-mcp: dictionaries')
   const manager: McpManagerFace = {
-    watch: (onList) => {
+    watch: (onList, onFailure) => {
       const stream = ctx.remote.$stream<McpManagedServerView[]>({
         name: 'MCP servers',
         open: signal => ctx.remote.mcpManager.watch(signal),
@@ -67,8 +67,9 @@ export function apply(ctx: ClientContext): void {
           onList(frame.value)
           frame.accept()
         }
-      })().catch(() => {
-        // A list that cannot be followed leaves the last one on screen; reopening the page subscribes again.
+      })().catch((error: unknown) => {
+        // The page says so and keeps the last list; it subscribes again the next time it is opened.
+        onFailure(error instanceof Error ? error.message : String(error))
       })
       return () => { void stream.dispose() }
     },

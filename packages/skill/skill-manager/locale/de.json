@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Skill-Verwaltung",
-    "description": "Listet alle Skills für die Seite „Skills“ auf und erstellt, ändert und entfernt Skills in Ihren Skill-Ordnern."
+    "description": "Listet alle Skills für die Seite „Skills“ auf, erstellt, ändert und entfernt Skills in Ihren Skill-Ordnern und importiert und exportiert Skill-Ordner als ZIP-Archive."
   }
 }

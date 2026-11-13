@@ -1,5 +1,5 @@
 ---
-description: "MCP servers page of the dsh web client's Plugins page, for users adding or debugging MCP servers and maintainers changing the page."
+description: "MCP servers settings page for users who add, edit, enable, test, restart, or remove MCP servers and watch their live connection status, and for maintainers changing that page."
 kind: "package-reference"
 ---
 
@@ -7,14 +7,16 @@ kind: "package-reference"
 
 ## Summary
 
-This package adds the **MCP servers** page to the Plugins page's built-in settings. It lists the servers of the [MCP manager](../../mcp/mcp-manager/README.md) with their live status, and lets the user add, change, enable, test, restart, and remove one. A change takes effect at once, without restarting the application, and the page is available in all eight interface languages.
+Open **Plugins** and select **MCP servers** to see the servers of the [MCP manager](../../mcp/mcp-manager/README.md) with their live connection status. You can add, edit, enable, test, restart, and remove a server; a change applies without restarting the application. Secrets belong in `${credential:NAME}` references, because everything typed is stored as written. A deployment without the MCP manager shows no page.
 
 ## Table of Contents
 
 - [Use this package](#use-this-package)
 - [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
 - [Model Experience](#model-experience)
 - [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
 -----
 
@@ -25,7 +27,7 @@ The `dsh-web-app` bundle mounts the page as the row `ui-settings-mcp`. It appear
 
 ### What the page shows
 
-Each server is one row: its name, where the entry lives, its live status, and the command or URL it runs.
+Each server is one row: its name, where the entry lives, its live status, and the command or URL it runs. The list shows placeholder rows while the settings load.
 
 | Where the entry lives | Meaning | Controls |
 |---|---|---|
@@ -33,13 +35,15 @@ Each server is one row: its name, where the entry lives, its live status, and th
 | Built in | Shipped by the deployment's composition | Switch, Test, Restart, Edit (stored as an override in this profile) |
 | From a plugin | Registered by an installed plugin for as long as it runs | Restart only |
 
-The status comes from the manager's live list: connected with the number of tools, connecting, reconnecting with the attempt count and the last error, waiting for credentials, failed, disabled, or stopped. The page follows that list only while it is on screen.
+The status comes from the manager's live list: connected with the number of tools, connecting, reconnecting with the attempt count and the last error, waiting for credentials, failed, disabled, or stopped. The page follows that list only while it is on screen. If it stops receiving updates, it says so in a line that stays until the page is opened again; the statuses shown may be out of date until then.
 
-**Test** connects to the server without touching the running instance and reports the tools it offers, or why it could not connect. A disabled server can be tested, which is how to try an entry before switching it on. **Restart** replaces the running instance, which also recovers a server whose reconnect attempts ran out.
+**Test** connects to the server without touching the running instance and reports the tools it offers, or why it could not connect. A disabled server can be tested, which is how to try an entry before switching it on. **Restart** replaces the running instance, which also recovers a server whose reconnect attempts ran out; it is unavailable while the server is switched off. A switch shows a busy mark until its write returns. **Remove** asks for confirmation in a dialog. A failed operation appears as a message that fades on its own.
+
+When the deployment stores settings read-only, **Add server**, **Edit**, **Remove**, and the switches are locked; **Test** and **Restart** still work.
 
 ### Adding or changing a server
 
-**Add server** opens the editor. The name namespaces the server's tools, so it cannot be changed afterwards; remove the server and add it again to rename it.
+**Add server** opens the editor. While an editor is open, the other **Edit** buttons and **Add server** are disabled. The name namespaces the server's tools, so it cannot be changed afterwards; remove the server and add it again to rename it.
 
 | Connection | Fields |
 |---|---|
@@ -48,10 +52,15 @@ The status comes from the manager's live list: connected with the number of tool
 
 A value in the environment variables, the headers, the command, the arguments, the working directory, or the URL may be written as `${credential:NAME}` to use a stored credential. Everything typed here is stored as written in the profile's configuration, so write a secret as such a reference and not as the value itself.
 
-The editor explains a draft it cannot write: a name outside letters, digits, `-` and `_` or longer than 32 characters, a name already in use, a missing command or URL, and a line that is not a pair. The Host validates every write as well; a refused write leaves the editor open.
+The editor explains a draft it cannot write beside the field at fault: a name outside letters, digits, `-` and `_` or longer than 32 characters, a name already in use, a missing command or URL, and a line that is not a pair. The Host validates every write as well; a refused write leaves the editor open.
+
+-----
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
 
 [`McpServersController`](src/client/controller.ts) joins two sources. The configured entries come from `ctx.configForms.get('mcp-manager')`: the resolved `servers` map gives the rows, and the raw user layer tells a profile entry from a built-in one. The live list comes from `ctx.remote.mcpManager.watch`, opened when the first page mounts and disposed when the last one unmounts; a server it lists without a settings entry is a plugin's.
 
@@ -59,15 +68,44 @@ Writes are path edits on the `servers` map. The switch sets `servers.<name>.enab
 
 [`mcp-entry.ts`](src/client/mcp-entry.ts) converts between a stored entry and the editor's text. [`McpServersCard.tsx`](src/client/McpServersCard.tsx) renders the Plugins page's two views: the one-line summary and the page.
 
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+- [ui-plugin-manager](../ui-plugin-manager/README.md) — the Plugins page and the `plugins.item` slot the page registers into.
+- [ui-settings](../ui-settings/README.md) — the settings forms the page writes through.
+- [dsh-mcp-manager](../../mcp/mcp-manager/README.md) — the `servers` map, the live list, tests, and restarts.
+- [dsh-mcp-client](../../mcp/mcp-client/README.md) — one server's connection, reconnect policy, and credential templates.
+
+-----
+
 <a id="model-experience"></a>
 ## Model Experience
 
-None directly. The page registers nothing model-facing; the servers it configures add their tools to requests through the MCP manager and `dsh-mcp-client`, as those packages document.
+None, as the package is a browser-side settings surface that registers no model surface.
+
+#### KV Cache effect
+
+None; this package neither assembles nor sends a provider request.
+
+## Known Limitations and Deferred Work
 
 <a id="known-limitations-and-deferred-work"></a>
-## Known Limitations and Deferred Work
 
 - **No credential editor** — the page accepts `${credential:NAME}` references but does not create the credential; store it through the credentials provider.
 - **A refused write carries no reason** — the settings write reports acceptance only, so the page says the entry was not accepted without naming the field the Host rejected.
 - **Timeouts and the reconnect policy are not editable here** — they keep their stored or default values; edit them in the profile's configuration file.
 - **A server cannot be renamed** — its name is the namespace of its tools.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

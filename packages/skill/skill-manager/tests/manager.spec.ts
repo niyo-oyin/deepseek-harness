@@ -10,6 +10,8 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import SkillManager from '../src/index.ts'
 
 const never = new AbortController().signal
+/** The catalog follows a write through a filesystem watcher, which a loaded machine delays. */
+const SETTLED = { timeout: 10_000 }
 
 function skillFile(name: string, description: string, extra = ''): string {
   return `---\nname: ${name}\ndescription: ${description}\n${extra}---\n\n${name} instructions.\n`
@@ -39,7 +41,8 @@ async function bench(disabled: string[] = []) {
   await ctx.plugin(SkillManager, { dshHome, agentsHome })
   onTestFinished(async () => {
     await ctx.fiber.dispose()
-    rmSync(base, { recursive: true, force: true })
+    // Windows releases a closed watcher's handles a moment after the close returns.
+    rmSync(base, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
   })
   const names = async (): Promise<string[]> => (await ctx.skillManager.list()).map(skill => skill.name)
   return { ctx, manager: ctx.skillManager, dshHome, agentsHome, builtIn, write, names }
@@ -70,7 +73,7 @@ describe('SkillManager', () => {
     expect(readFileSync(file, 'utf8')).toBe(
       '---\nname: triage\ndescription: Sort new issues\nwhenToUse: When an issue arrives\n---\n\nLabel it.\n',
     )
-    await vi.waitFor(async () => { expect(await names()).toContain('triage') })
+    await vi.waitFor(async () => { expect(await names()).toContain('triage') }, SETTLED)
 
     expect(await manager.create({ ...draft, name: 'Not Kebab' }, never)).toEqual({ ok: false, refused: 'invalid-name' })
     expect(await manager.create({ ...draft, name: 'empty', description: '  ' }, never)).toEqual({ ok: false, refused: 'no-description' })
@@ -87,7 +90,7 @@ describe('SkillManager', () => {
       join(dshHome, 'skills', 'audit', 'SKILL.md'),
       skillFile('audit', 'Old', '# keep me\ndisable-model-invocation: true\nwhenToUse: Sometimes\nmetadata:\n  owner: me\n'),
     )
-    await vi.waitFor(async () => { expect(await manager.read('audit', never)).not.toBeNull() })
+    await vi.waitFor(async () => { expect(await manager.read('audit', never)).not.toBeNull() }, SETTLED)
 
     const edit = { name: 'audit', description: 'Audit the dependencies: licenses, advisories', whenToUse: '', content: 'New steps.' }
     expect(await manager.update(edit, never)).toEqual({ ok: true })
@@ -99,7 +102,7 @@ describe('SkillManager', () => {
       expect(await manager.list()).toContainEqual(expect.objectContaining({
         name: 'audit', description: 'Audit the dependencies: licenses, advisories', modelInvocable: false,
       }))
-    })
+    }, SETTLED)
 
     expect(await manager.update({ ...edit, description: '' }, never)).toEqual({ ok: false, refused: 'no-description' })
     expect(await manager.update({ ...edit, name: 'deploy' }, never)).toEqual({ ok: false, refused: 'not-editable' })
@@ -115,7 +118,7 @@ describe('SkillManager', () => {
     expect(await manager.delete('notes', never)).toEqual({ ok: true })
     expect(existsSync(join(agentsHome, 'skills', 'notes.md'))).toBe(false)
     expect(existsSync(join(agentsHome, 'skills'))).toBe(true)
-    await vi.waitFor(async () => { expect(await names()).toEqual(['deploy']) })
+    await vi.waitFor(async () => { expect(await names()).toEqual(['deploy']) }, SETTLED)
 
     expect(await manager.delete('deploy', never)).toEqual({ ok: false, refused: 'not-editable' })
     expect(existsSync(join(builtIn, 'deploy', 'SKILL.md'))).toBe(true)
@@ -129,10 +132,10 @@ describe('SkillManager', () => {
     const done = (async () => {
       for await (const skills of manager.watch(subscriber.signal)) lists.push(skills.map(skill => skill.name))
     })()
-    await vi.waitFor(() => { expect(lists).toEqual([['deploy', 'notes', 'review']]) })
+    await vi.waitFor(() => { expect(lists).toEqual([['deploy', 'notes', 'review']]) }, SETTLED)
 
     write(join(dshHome, 'skills', 'triage', 'SKILL.md'), skillFile('triage', 'Sort new issues'))
-    await vi.waitFor(() => { expect(lists.at(-1)).toEqual(['deploy', 'notes', 'review', 'triage']) })
+    await vi.waitFor(() => { expect(lists.at(-1)).toEqual(['deploy', 'notes', 'review', 'triage']) }, SETTLED)
     // One list per change: discovery reporting a change of its own is not sent again.
     expect(new Set(lists.map(list => list.join())).size).toBe(lists.length)
 

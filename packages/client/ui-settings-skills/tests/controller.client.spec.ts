@@ -7,10 +7,12 @@ import { SkillsController, type SkillManagerFace, type SkillSettings } from '../
 function bench() {
   const host = stubConfigForm<SkillSettings>()
   let onList: ((skills: readonly ManagedSkillView[]) => void) | undefined
+  let onFailure: ((reason: string) => void) | undefined
   const unwatch = vi.fn()
   const manager = {
-    watch: vi.fn<SkillManagerFace['watch']>((listener) => {
+    watch: vi.fn<SkillManagerFace['watch']>((listener, failed) => {
       onList = listener
+      onFailure = failed
       return unwatch
     }),
     read: vi.fn<SkillManagerFace['read']>(),
@@ -26,6 +28,7 @@ function bench() {
     host, manager, unwatch, controller, face,
     state: () => face.hooks.skills.getSnapshot(),
     list: (skills: ManagedSkillView[]) => { onList?.(skills) },
+    failList: (reason: string) => { onFailure?.(reason) },
   }
 }
 
@@ -83,6 +86,40 @@ describe('SkillsController', () => {
       [[{ op: 'set', path: ['disabled'], value: ['project-only', 'review'] }]],
       [[{ op: 'set', path: ['disabled'], value: ['project-only'] }]],
     ])
+  })
+
+  it('keeps both switches when a second one is made before the first has been written', async () => {
+    const b = bench()
+    b.host.publish({ ...READY, value: { disabled: [] } })
+    b.face.observe()
+    b.list([skill('review', 'user-dsh', true), skill('notes', 'user-agents', true)])
+    const first = Promise.withResolvers<boolean>()
+    b.host.mutate.mockReturnValueOnce(first.promise)
+    b.face.setEnabled('review', false)
+    // The row shows the switch at once and marks it as being written.
+    expect(b.state().rows.map(row => [row.name, row.enabled, row.switching])).toEqual([['review', false, true], ['notes', true, false]])
+    b.face.setEnabled('notes', false)
+    expect(b.host.mutate.mock.calls.map(call => call[0])).toEqual([
+      [{ op: 'set', path: ['disabled'], value: ['review'] }],
+      [{ op: 'set', path: ['disabled'], value: ['review', 'notes'] }],
+    ])
+    first.resolve(true)
+    b.host.publish({ value: { disabled: ['review', 'notes'] } })
+    await vi.waitFor(() => { expect(b.state().rows.map(row => [row.enabled, row.switching])).toEqual([[false, false], [false, false]]) })
+  })
+
+  it('says when the skill list can no longer be followed, and follows it again on the next visit', () => {
+    const b = bench()
+    const leave = b.face.observe()
+    b.list([skill('review', 'user-dsh', true)])
+    b.failList('gateway/internal: discovery failed')
+    expect(b.state()).toMatchObject({ stale: 'gateway/internal: discovery failed', listed: true })
+    // Another part of the page still observes; a new visit subscribes again all the same, and its list is current.
+    b.face.observe()
+    expect(b.manager.watch).toHaveBeenCalledTimes(2)
+    b.list([skill('review', 'user-dsh', true)])
+    expect(b.state().stale).toBeNull()
+    leave()
   })
 
   it('reports a refused or failed switch as the page notice until it is dismissed', async () => {
@@ -172,6 +209,11 @@ describe('SkillsController', () => {
     b.face.importArchive(new Blob(['x']))
     await vi.waitFor(() => { expect(b.state().notice).toEqual({ kind: 'failed', message: 'gateway/internal: EACCES' }) })
     expect(b.state().transfer).toBeNull()
+    // A file that cannot even be read ends the import the same way, not on "importing" forever.
+    b.manager.importArchive.mockRejectedValueOnce(new Error('the file could not be read'))
+    b.face.importArchive(new Blob(['x']))
+    await vi.waitFor(() => { expect(b.state().notice).toEqual({ kind: 'failed', message: 'the file could not be read' }) })
+    expect(b.state().transfer).toBeNull()
   })
 
   it('shows where an exported skill was saved, and stays quiet about a dismissed save', async () => {
@@ -185,9 +227,12 @@ describe('SkillsController', () => {
 
     b.manager.exportArchive.mockResolvedValueOnce({ status: 'cancelled' })
     b.face.exportArchive('review')
-    b.manager.exportArchive.mockResolvedValueOnce({ status: 'unavailable' })
+    b.manager.exportArchive.mockResolvedValueOnce({ status: 'refused', reason: 'not-exportable' })
     b.face.exportArchive('office')
     await vi.waitFor(() => { expect(b.state().notice).toEqual({ kind: 'gone', name: 'office' }) })
+    b.manager.exportArchive.mockResolvedValueOnce({ status: 'refused', reason: 'too-large' })
+    b.face.exportArchive('datasets')
+    await vi.waitFor(() => { expect(b.state().notice).toEqual({ kind: 'exportTooLarge', name: 'datasets' }) })
     expect(b.state().transfer).toEqual({ kind: 'exported', name: 'notes' })
     b.manager.exportArchive.mockResolvedValueOnce({ failed: 'disk full' })
     b.face.exportArchive('review')

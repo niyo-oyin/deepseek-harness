@@ -8,10 +8,12 @@ import { EMPTY_DRAFT, type McpServerEntry, type McpSettings } from '../src/clien
 function bench() {
   const host = stubConfigForm<McpSettings>()
   let onList: ((servers: readonly McpManagedServerView[]) => void) | undefined
+  let onFailure: ((reason: string) => void) | undefined
   const unwatch = vi.fn()
   const manager = {
-    watch: vi.fn<McpManagerFace['watch']>((listener) => {
+    watch: vi.fn<McpManagerFace['watch']>((listener, failed) => {
       onList = listener
+      onFailure = failed
       return unwatch
     }),
     probe: vi.fn<McpManagerFace['probe']>(),
@@ -23,6 +25,7 @@ function bench() {
     host, manager, unwatch, controller, face,
     state: () => face.hooks.mcpServers.getSnapshot(),
     list: (servers: McpManagedServerView[]) => { onList?.(servers) },
+    failList: (reason: string) => { onFailure?.(reason) },
   }
 }
 
@@ -70,6 +73,32 @@ describe('McpServersController', () => {
     b.controller.dispose()
     expect(b.unwatch).toHaveBeenCalledTimes(2)
     expect(b.host.listenerCount()).toBe(0)
+  })
+
+  it('says when the server list can no longer be followed, and follows it again on the next visit', () => {
+    const b = bench()
+    b.host.publish({ ...READY, value: { servers: { github } }, user: { servers: { github } } })
+    const leave = b.face.observe()
+    b.list([{ name: 'github', configured: true, status: { state: 'connected', toolCount: 3, connectedAt: 1 } }])
+    b.failList('gateway/internal: manager stopped')
+    expect(b.state().stale).toBe('gateway/internal: manager stopped')
+    expect(b.state().rows[0]?.status).toMatchObject({ state: 'connected' })
+    b.face.observe()
+    expect(b.manager.watch).toHaveBeenCalledTimes(2)
+    b.list([{ name: 'github', configured: true, status: { state: 'connected', toolCount: 3, connectedAt: 1 } }])
+    expect(b.state().stale).toBeNull()
+    leave()
+  })
+
+  it('marks a server as switching until its switch has been written', async () => {
+    const b = bench()
+    b.host.publish({ ...READY, value: { servers: { github } }, user: { servers: { github } } })
+    const written = Promise.withResolvers<boolean>()
+    b.host.mutate.mockReturnValueOnce(written.promise)
+    b.face.setEnabled('github', false)
+    expect(b.state().rows[0]?.switching).toBe(true)
+    written.resolve(true)
+    await vi.waitFor(() => { expect(b.state().rows[0]?.switching).toBe(false) })
   })
 
   it('writes the switch and a removal as single path edits', async () => {

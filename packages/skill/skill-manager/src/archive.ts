@@ -19,6 +19,8 @@ export const MAX_ARCHIVE_FILES = 10_000
 const SKILL_FILE = 'SKILL.md'
 /** Characters no path segment may carry: Windows cannot store them, and a control character is never a file name. */
 const FORBIDDEN_IN_SEGMENT = /[<>:"|?*\u0000-\u001f]/u
+/** Names Windows reads as devices, with or without an extension: a write to one never reaches a file. */
+const DEVICE_NAME = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/iu
 
 /** One file of a skill bundle. */
 export interface BundleFile {
@@ -35,20 +37,34 @@ export interface ArchivedSkill {
   files: BundleFile[]
 }
 
-/** Signals an archive over a size or count limit from inside the unzip filter. */
-class ArchiveLimitError extends Error {}
+/** A bundle over a size or count limit, on the way in or out. */
+export class ArchiveLimitError extends Error {}
+
+/** An archive whose entries cannot all be stored as the files they name. */
+class ArchivePathError extends Error {}
+
+/**
+ * Whether a file or folder name can be stored the same way on every platform.
+ * @param name - one path segment, or a skill name about to become a folder.
+ * @returns false for an empty or relative segment, a forbidden character, a Windows device name, and a name
+ *   ending in a dot or a space, which Windows drops.
+ */
+export function isStorableName(name: string): boolean {
+  return name !== '' && name !== '.' && name !== '..' && !FORBIDDEN_IN_SEGMENT.test(name) && !DEVICE_NAME.test(name)
+    && !name.endsWith('.') && !name.endsWith(' ')
+}
 
 /**
  * Split an archive entry name into path segments, or say why it is not one this module writes.
  * @param name - entry name as stored; `\` is read as a separator, as archivers on Windows write it.
- * @returns the segments, `'skip'` for an entry that is not a skill file, or `'unsafe'` for a path that leaves its folder.
+ * @returns the segments, `'skip'` for an entry that is not a skill file, or `'unsafe'` for a path that leaves its
+ *   folder or cannot be stored.
  */
 function segmentsOf(name: string): string[] | 'skip' | 'unsafe' {
   const segments = name.replaceAll('\\', '/').split('/')
   // Finder's resource forks and folder metadata are not part of any skill.
   if (segments[0] === '__MACOSX' || segments.at(-1) === '.DS_Store') return 'skip'
-  const unsafe = segments.some(segment => segment === '' || segment === '.' || segment === '..' || FORBIDDEN_IN_SEGMENT.test(segment))
-  return unsafe ? 'unsafe' : segments
+  return segments.every(isStorableName) ? segments : 'unsafe'
 }
 
 function startsWith(path: readonly string[], prefix: readonly string[]): boolean {
@@ -65,28 +81,45 @@ function startsWith(path: readonly string[], prefix: readonly string[]): boolean
 export function unpackSkillArchive(archive: Uint8Array): ArchivedSkill[] | SkillImportRefusal {
   if (archive.byteLength > MAX_ARCHIVE_BYTES) return 'too-large'
   let entries: Record<string, Uint8Array>
-  let count = 0
+  const declared = new Map<string, number>()
   let unpacked = 0
   try {
     entries = unzipSync(archive, {
       filter: (entry) => {
         // Folder entries carry no bytes; folders are made for the files inside them.
         if (entry.name.endsWith('/') || entry.name.endsWith('\\')) return false
-        count += 1
-        unpacked += entry.originalSize
-        if (count > MAX_ARCHIVE_FILES || unpacked > MAX_UNPACKED_BYTES) throw new ArchiveLimitError()
+        // Two entries of one name would silently become one file.
+        if (declared.has(entry.name)) throw new ArchivePathError()
+        declared.set(entry.name, entry.originalSize)
+        // A stored entry is copied by its stored size whatever size it declares, so the larger of the two counts.
+        unpacked += Math.max(entry.size, entry.originalSize)
+        if (declared.size > MAX_ARCHIVE_FILES || unpacked > MAX_UNPACKED_BYTES) throw new ArchiveLimitError()
         return true
       },
     })
   } catch (error) {
-    return error instanceof ArchiveLimitError ? 'too-large' : 'not-zip'
+    return error instanceof ArchiveLimitError ? 'too-large' : error instanceof ArchivePathError ? 'unsafe-path' : 'not-zip'
   }
 
   const files: { segments: string[]; data: Uint8Array }[] = []
+  /** Case-folded paths already taken by a file, and by a folder: Windows and macOS store both spellings as one. */
+  const taken = { files: new Set<string>(), folders: new Set<string>() }
   for (const [name, data] of Object.entries(entries)) {
+    // An entry that unpacks to another size than it declares is truncated or padded, not the file that was packed.
+    if (data.byteLength !== declared.get(name)) return 'not-zip'
     const segments = segmentsOf(name)
     if (segments === 'unsafe') return 'unsafe-path'
-    if (segments !== 'skip') files.push({ segments, data })
+    if (segments === 'skip') continue
+    const folded = segments.map(segment => segment.toLowerCase())
+    const path = folded.join('/')
+    if (taken.files.has(path) || taken.folders.has(path)) return 'unsafe-path'
+    for (let depth = 1; depth < folded.length; depth += 1) {
+      const folder = folded.slice(0, depth).join('/')
+      if (taken.files.has(folder)) return 'unsafe-path'
+      taken.folders.add(folder)
+    }
+    taken.files.add(path)
+    files.push({ segments, data })
   }
   const roots: string[][] = []
   const candidates = files.filter(file => file.segments.at(-1) === SKILL_FILE).map(file => file.segments.slice(0, -1))
@@ -107,11 +140,11 @@ export function unpackSkillArchive(archive: Uint8Array): ArchivedSkill[] | Skill
  * @param name - skill name, the archive's top folder.
  * @param files - the skill's files.
  * @returns the archive's bytes.
- * @throws when the bundle is over the limits an import would accept.
+ * @throws ArchiveLimitError when the archive is over the size an import would accept.
  */
 export function packSkillBundle(name: string, files: readonly BundleFile[]): Uint8Array {
   const archive = zipSync(Object.fromEntries(files.map(file => [`${name}/${file.path}`, file.data])))
-  if (archive.byteLength > MAX_ARCHIVE_BYTES) throw new Error(`skill "${name}" is too large to export: its archive is over ${MAX_ARCHIVE_BYTES} bytes`)
+  if (archive.byteLength > MAX_ARCHIVE_BYTES) throw new ArchiveLimitError(`the archive of skill "${name}" is over ${MAX_ARCHIVE_BYTES} bytes`)
   return archive
 }
 
@@ -120,7 +153,7 @@ export function packSkillBundle(name: string, files: readonly BundleFile[]): Uin
  * bundle never reaches outside the folder.
  * @param folder - the skill's folder.
  * @returns the folder's files with `/`-separated paths relative to it.
- * @throws when the folder holds more files or bytes than an import would accept.
+ * @throws ArchiveLimitError when the folder holds more files or bytes than an import would accept.
  */
 export async function readSkillFolder(folder: string): Promise<BundleFile[]> {
   const files: BundleFile[] = []
@@ -136,7 +169,7 @@ export async function readSkillFolder(folder: string): Promise<BundleFile[]> {
         bytes += data.byteLength
         files.push({ path, data })
         if (files.length > MAX_ARCHIVE_FILES || bytes > MAX_UNPACKED_BYTES) {
-          throw new Error(`skill folder "${folder}" is too large to export: over ${MAX_ARCHIVE_FILES} files or ${MAX_UNPACKED_BYTES} bytes`)
+          throw new ArchiveLimitError(`skill folder "${folder}" holds over ${MAX_ARCHIVE_FILES} files or ${MAX_UNPACKED_BYTES} bytes`)
         }
       }
     }

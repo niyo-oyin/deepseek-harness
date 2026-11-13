@@ -47,8 +47,8 @@ export type {
 } from '@deepseek-ai/dsh-plugin-manager/types'
 export type { McpManagedServerStatus, McpManagedServerView } from '@deepseek-ai/dsh-mcp-manager/types'
 export type {
-  ManagedSkillDocument, ManagedSkillView, SkillArchive, SkillImportEntry, SkillImportOutcome, SkillImportRefusal, SkillImportRequest,
-  SkillImportResult, SkillWriteRefusal, SkillWriteResult,
+  ManagedSkillDocument, ManagedSkillView, SkillArchive, SkillExportRefusal, SkillExportResult, SkillImportEntry, SkillImportOutcome,
+  SkillImportRefusal, SkillImportRequest, SkillImportResult, SkillWriteRefusal, SkillWriteResult,
 } from '@deepseek-ai/dsh-skill-manager/types'
 export type {} from '@deepseek-ai/dsh-plugin-manager/remote'
 export type {} from '@deepseek-ai/dsh-mcp-manager/remote'

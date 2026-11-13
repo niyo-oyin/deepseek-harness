@@ -39,7 +39,7 @@ export interface ManagedSkillDocument {
 
 /** Why a write was refused without changing anything. */
 export type SkillWriteRefusal =
-  /** The name is not kebab-case (`a-z`, `0-9`, single hyphens between). */
+  /** The name is not kebab-case (`a-z`, `0-9`, single hyphens between), or Windows reads it as a device name such as `con`. */
   | 'invalid-name'
   /** A skill or a folder of that name already exists. */
   | 'name-taken'
@@ -58,6 +58,16 @@ export interface SkillArchive {
   data: string
 }
 
+/** Why a skill was not exported. */
+export type SkillExportRefusal =
+  /** No skill of that name is listed, or the listed one is not a file. */
+  | 'not-exportable'
+  /** The skill's folder is over the size or file-count limits an import accepts. */
+  | 'too-large'
+
+/** Outcome of `exportArchive`. */
+export type SkillExportResult = { ok: true; archive: SkillArchive } | { ok: false; refused: SkillExportRefusal }
+
 /** A ZIP archive of skill bundles to import. */
 export interface SkillImportRequest {
   /** The archive's bytes in base64. */
@@ -74,27 +84,30 @@ export type SkillImportOutcome =
   | 'replaced'
   /** Not written: the Harness home's skill folder already holds that name. Import again with `replace` to overwrite it. */
   | 'exists'
-  /** Not written: another source supplies a skill of that name. */
+  /** Not written: another source supplies a skill of that name, or something else holds its folder in the Harness home's skill folder. */
   | 'name-taken'
-  /** Not written: its `SKILL.md` has no frontmatter with a kebab-case `name` and a `description`. */
+  /** Not written: its `SKILL.md` has no frontmatter with a storable kebab-case `name` and a `description`. */
   | 'invalid'
+  /** Not written: the files could not be stored. A skill it was to replace is kept. */
+  | 'failed'
 
 /** One skill found in an imported archive. */
 export interface SkillImportEntry {
   /** The skill's name; for an `invalid` skill, the archive folder that holds its `SKILL.md`. */
   name: string
+  /** What became of the skill. */
   outcome: SkillImportOutcome
 }
 
 /** Why an archive was refused as a whole, without writing anything. */
 export type SkillImportRefusal =
-  /** The bytes are not a readable ZIP archive. */
+  /** The bytes are not a readable ZIP archive, or an entry unpacks to another size than it declares. */
   | 'not-zip'
   /** The archive, its unpacked size, or its file count is over the limit. */
   | 'too-large'
   /** The archive holds no `SKILL.md`. */
   | 'no-skill'
-  /** A file's path leaves its folder or cannot be stored. */
+  /** A file's path leaves its folder, cannot be stored on every platform, or collides with another entry's path. */
   | 'unsafe-path'
 
 /** Outcome of `importArchive`. */

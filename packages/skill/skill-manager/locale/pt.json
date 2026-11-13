@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Gerenciador de habilidades",
-    "description": "Lista todas as habilidades para a página Habilidades e cria, altera e remove habilidades nas suas pastas de habilidades."
+    "description": "Lista todas as habilidades para a página Habilidades, cria, altera e remove habilidades nas suas pastas de habilidades e importa e exporta pastas de habilidades como arquivos ZIP."
   }
 }

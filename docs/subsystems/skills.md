@@ -1,7 +1,5 @@
 # Skills
 
-English | [中文](skills.zh.md)
-
 The [skill capability family](../../packages/skill) includes the Service Definition ([dsh-skill](../../packages/skill/skill), `ctx.skills`), the local Service Provider ([dsh-skill-filesystem](../../packages/skill/skill-filesystem)), optional packaged providers ([dsh-skill-badge](../../packages/experimental/skill-badge), [dsh-skill-office](../../packages/skill/skill-office), and the Windows ACL diagnosis provider in [dsh-sandbox-windows-acl](../../packages/sandbox/sandbox-windows-acl)), and the Consumer ([dsh-tool-skill](../../packages/skill/tool-skill)). The registry merges provider catalogs across its host and per-scope layers; providers contribute local or packaged skills; the Consumer owns the initial and replacement catalogs plus the model-facing `skill` tool. Skills are optional instructions, not session events, so their vocabulary lives here rather than in [core.md](core.md).
 
 Source: [`packages/skill/skill/src/index.ts`](../../packages/skill/skill/src/index.ts), [`packages/skill/skill-filesystem/src/index.ts`](../../packages/skill/skill-filesystem/src/index.ts), [`packages/experimental/skill-badge/src/index.ts`](../../packages/experimental/skill-badge/src/index.ts), [`packages/skill/skill-office/src/index.ts`](../../packages/skill/skill-office/src/index.ts), [`packages/sandbox/sandbox-windows-acl/src/acl-skill.ts`](../../packages/sandbox/sandbox-windows-acl/src/acl-skill.ts), and [`packages/skill/tool-skill/src/index.ts`](../../packages/skill/tool-skill/src/index.ts).
@@ -211,16 +209,23 @@ interface SkillLookupOptions {
 interface SkillViewOptions extends SkillLookupOptions {
   /** Viewing scope (the calling agent); omitted reads the global layer alone. */
   readonly scope?: ScopeKey | undefined
+  /** Whether skills switched off by the registry's `disabled` setting are included; a management surface sets it. */
+  readonly includeDisabled?: boolean | undefined
 }
 ```
 
-The registry owns only its discovery-cache bound. The local provider owns filesystem roots (`dshHome`, `agentsHome`, `customSkillDirs`, and optional `bundledSkillDir`/`DSH_BUNDLED_SKILL_DIR`) plus watcher enablement, polling, stability, symlink, and project-capacity controls. The consumer owns its catalog description bound. Exact defaults and validation are in the generated [config catalog](../config-catalog.md).
+The registry owns its discovery-cache bound and the `disabled` list of skill names it leaves out of every catalog and load. The local provider owns filesystem roots (`dshHome`, `agentsHome`, `customSkillDirs`, and optional `bundledSkillDir`/`DSH_BUNDLED_SKILL_DIR`) plus watcher enablement, polling, stability, symlink, and project-capacity controls. The consumer owns its catalog description bound. Exact defaults and validation are in the generated [config catalog](../config-catalog.md).
 
 ```ts type-equiv
 /** Skill registry configuration. */
 interface Config {
   /** Maximum number of completed cwd/provider catalogs kept in memory. */
   readonly collectCacheMaxEntries?: number
+  /**
+   * Names of skills switched off for every agent: left out of every catalog and
+   * not loadable, whichever provider or layer supplies them. Applies without a restart.
+   */
+  readonly disabled?: Volatile<string[]>
 }
 ```
 
@@ -262,6 +267,83 @@ Host service backing `ctx.remote.skills` without activating a cold Agent.
 ```
 
 Source: [`packages/api/session-controller/src/skill-catalog.ts`](../../packages/api/session-controller/src/skill-catalog.ts)
+
+<a id="ctxskillmanager--skillmanager"></a>
+
+### `ctx.skillManager` — `SkillManager`
+
+The manager service.
+
+```ts cordis-catalog
+/**
+ * List every skill the default agent preset sees outside a project, switched off or not.
+ * @param signal - cancels discovery.
+ * @returns the winning skill of each name, sorted by name.
+ */
+async list(signal?: AbortSignal): Promise<ManagedSkillView[]>
+
+/**
+ * Stream the skill list for a management surface: the current list on
+ * subscription, then the complete list again whenever it differs after a
+ * catalog change.
+ * @param signal - subscription lifetime; aborting ends only this stream.
+ * @returns skill lists until the subscriber or the manager stops.
+ */
+@Remote({ mode: 'stream' }) async* watch(signal: AbortSignal): AsyncIterable<ManagedSkillView[]>
+
+/**
+ * Read one skill's editable text, switched off or not.
+ * @param name - skill name.
+ * @param signal - cancels the read.
+ * @returns the skill's fields and instructions, or `null` when no such skill is listed.
+ */
+@Remote async read(name: string, signal: AbortSignal): Promise<ManagedSkillDocument | null>
+
+/**
+ * Create a skill as `<name>/SKILL.md` in the Harness home's skill folder.
+ * @param draft - the new skill's name, description, optional guidance, and instructions.
+ * @param signal - cancels the name check; a started write completes.
+ * @returns whether the skill was written, or why it was refused.
+ */
+@Remote create(draft: ManagedSkillDocument, signal: AbortSignal): Promise<SkillWriteResult>
+
+/**
+ * Replace the description, guidance, and instructions of a skill in the user's skill folders.
+ * @param draft - the skill's name and its edited text.
+ * @param signal - cancels the lookup; a started write completes.
+ * @returns whether the skill was written, or why it was refused.
+ */
+@Remote update(draft: ManagedSkillDocument, signal: AbortSignal): Promise<SkillWriteResult>
+
+/**
+ * Delete a skill in the user's skill folders: its whole folder, or the single file of a flat skill.
+ * @param name - skill name.
+ * @param signal - cancels the lookup; a started deletion completes.
+ * @returns whether the skill was deleted, or why it was refused.
+ */
+@Remote delete(name: string, signal: AbortSignal): Promise<SkillWriteResult>
+
+/**
+ * Pack one skill's bundle as a ZIP archive: the whole folder of a folder skill, symbolic links left out, or
+ * the single file of a flat skill as `SKILL.md`. The archive's top folder is the skill's name.
+ * @param name - skill name.
+ * @param signal - cancels the lookup.
+ * @returns the archive, or why the skill was not exported.
+ */
+@Remote async exportArchive(name: string, signal: AbortSignal): Promise<SkillExportResult>
+
+/**
+ * Unpack the skills of a ZIP archive into the Harness home's skill folder. Every `SKILL.md` in the archive
+ * marks one skill, whose folder is copied whole as `<name>/`, named by the skill's frontmatter. A skill
+ * whose name the folder already holds is written only with `replace`.
+ * @param request - the archive and whether it may replace skills of the same name.
+ * @param signal - cancels the name checks; a started write completes.
+ * @returns what became of each skill found, or why the archive was refused as a whole.
+ */
+@Remote importArchive(request: SkillImportRequest, signal: AbortSignal): Promise<SkillImportResult>
+```
+
+Source: [`packages/skill/skill-manager/src/index.ts`](../../packages/skill/skill-manager/src/index.ts)
 
 <a id="ctxskills--skillregistry"></a>
 
@@ -335,14 +417,14 @@ Source: [`packages/skill/skill/src/index.ts`](../../packages/skill/skill/src/ind
 
 #### `skills/change` — emit
 
-A skill provider, runtime contribution, or provider-backed catalog may have changed. This is an unfiltered invalidation notification; consumers refetch the catalog for their own lookup options. Listener failures are contained and cannot veto the registry mutation.
+A skill provider, runtime contribution, provider-backed catalog, or the `disabled` setting may have changed. This is an unfiltered invalidation notification; consumers refetch the catalog for their own lookup options. Listener failures are contained and cannot veto the registry mutation.
 
 ```ts cordis-catalog
 /**
- * A skill provider, runtime contribution, or provider-backed catalog may
- * have changed. This is an unfiltered invalidation notification; consumers
- * refetch the catalog for their own lookup options. Listener failures are
- * contained and cannot veto the registry mutation.
+ * A skill provider, runtime contribution, provider-backed catalog, or the
+ * `disabled` setting may have changed. This is an unfiltered invalidation
+ * notification; consumers refetch the catalog for their own lookup options.
+ * Listener failures are contained and cannot veto the registry mutation.
  * @mode emit
  */
 'skills/change'(): void
