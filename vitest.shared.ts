@@ -9,6 +9,12 @@ const decoratorSyntax = /^\s*@[A-Za-z_$][\w$]*/m
 export const vitestExecArgv = process.allowedNodeEnvironmentFlags.has('--webstorage') ? ['--no-webstorage'] : []
 
 /**
+ * Linked-package resolution differential matrix. Its thousands of sequential filesystem fixtures run only
+ * through `vitest.resolution-matrix.config.ts`, after a change to app-boot module resolution or to Node.
+ */
+export const RESOLUTION_MATRIX_SPEC = 'packages/boot/app-boot/tests/linked-resolution-matrix.spec.ts'
+
+/**
  * Transform standard TypeScript decorators before Vite's default parser sees source files.
  * @returns a pre-transform Vite plugin shared by source-mode test configurations.
  */

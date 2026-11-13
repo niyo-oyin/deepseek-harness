@@ -88,6 +88,7 @@ pnpm run test           # unit tests
 pnpm run test:coverage  # CI coverage gate: per-file 100% on packages/*/*/src
 pnpm run test:e2e       # real-API tests; self-skip without DEEPSEEK_API_KEY
 pnpm run test:expected  # owner-local process expectations
+pnpm run test:resolution-matrix  # see packages/boot/app-boot/README.md
 pnpm run test:snapshot  # keyless recorded-session replay through shipped profiles; filter: -t <name>
 pnpm run test:snapshot:record  # re-record expected outputs (needs key)
 pnpm run typecheck
@@ -178,7 +179,7 @@ Everything compiles under `strict: true` with `noImplicitAny`; every remaining `
 
 Comments and docs state complete contracts and context, not reasoning transcripts. Use direct, concrete terms. Do not use metaphors. Before writing `contract`, `boundary`, or `shape`, ask whether a more exact term names the subject: write `response fields`, `JSON validation`, or `ESM exports` instead of `response shape`, `validation boundary`, or `module shape`. Keep `contract` for preconditions, postconditions, invariants, compatibility promises, and other obligations that callers, callees, implementers, providers, producers, or consumers rely on. Keep a literal process, wire, security, transaction, or lifecycle boundary. Do not narrate control flow or tests, preserve review history, or restate code. Keep behavior, failure, timing, ownership, and safe-use facts; link the rationale. Use [dsh-prose-standard](.agents/skills/dsh-prose-standard/SKILL.md) for decisions. Wire mechanically checkable invariants into an executed top-level gate and prove each changed acceptance path rejects an invalid case. Use narrow, justified exceptions instead of disabling a rule globally.
 
-Docs accompany every code change: update affected README and JSDoc contracts together. Documentation is written in English only; [docs/AGENTS.md](docs/AGENTS.md) owns the standard. Current-state prose, one physical line per paragraph, one home per fact, and word budgets live there.
+Docs accompany every code change: update affected README and JSDoc contracts together. Documentation is English-only; [docs/AGENTS.md](docs/AGENTS.md) owns the standard. Current-state prose, one physical line per paragraph, one home per fact, and word budgets live there.
 
 ## Editing these instructions
 

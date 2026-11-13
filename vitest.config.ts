@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import tsconfigPaths from 'vite-tsconfig-paths'
 import { resolvePwshPath } from './packages/shell/pwsh-local/src/resolve.ts'
 import { defineConfig } from 'vitest/config'
-import { standardDecoratorPlugin, vitestExecArgv } from './vitest.shared.ts'
+import { RESOLUTION_MATRIX_SPEC, standardDecoratorPlugin, vitestExecArgv } from './vitest.shared.ts'
 import { COVERAGE_EXEMPT_ENV, coverageExemptHeavySuites } from './scripts/coverage-exempt.ts'
 import { COVERAGE_PARTITION_MODE_ENV, COVERAGE_TEST_TIMEOUT_ENV, coverageTestTimeoutOptions } from './scripts/coverage-partitions.ts'
 import { LOCAL_TEST_PARALLELISM_CAP, defaultParallelism } from './scripts/parallelism.ts'
@@ -74,6 +74,9 @@ const nonLinuxWebWorkerTests = process.platform === 'linux'
     ]
 
 const platformUnsupportedTests = [...windowsUnsupportedTests, ...nonLinuxWebWorkerTests]
+
+// The resolution matrix runs only through vitest.resolution-matrix.config.ts.
+const excludedTests = [...platformUnsupportedTests, RESOLUTION_MATRIX_SPEC]
 
 const windowsUnsupportedCoveragePackages = process.platform === 'win32'
   ? [...windowsUnsupportedPackages, 'packages/subprocess/*']
@@ -206,7 +209,7 @@ export default defineConfig({
     ],
     // .tsx: client component specs (jsdom via per-file @vitest-environment pragma).
     include: testIncludes,
-    exclude: platformUnsupportedTests,
+    exclude: excludedTests,
     // One coverage invocation aggregates both projects. Every suite forks for
     // Node stability; process-bound suites stay separate for inventory control.
     projects: [
@@ -226,7 +229,7 @@ export default defineConfig({
           ],
           include: testIncludes,
           exclude: [
-            ...platformUnsupportedTests,
+            ...excludedTests,
             ...processBoundTests,
             ...coverageExemptExcludes,
           ],
