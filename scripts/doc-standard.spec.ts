@@ -3,8 +3,8 @@
  * stays valid, the consolidated `dsh-doc-writing` skill carries no stale copied
  * website values or prototype-era language, and the kind system maps each
  * label to exactly one skill template. Session release records match the
- * writer bound, bilingual counterpart, and evidence links. These run in `pnpm run test` and
- * `pnpm run test:docs` to guard the standard between heavier corpus gates.
+ * writer bound and evidence links, and documentation stays English-only. These run in
+ * `pnpm run test` and `pnpm run test:docs` to guard the standard between heavier corpus gates.
  * @module scripts/doc-standard.spec
  */
 
@@ -17,11 +17,8 @@ import { readCurrentSessionFormatVersion } from './gen-session-format-catalog.ts
 const root = resolve(import.meta.dirname, '..')
 const PACKAGE_README_GLOBS = [
   'packages/README.md',
-  'packages/README.zh.md',
   'packages/*/README.md',
-  'packages/*/README.zh.md',
   'packages/*/*/README.md',
-  'packages/*/*/README.zh.md',
 ] as const
 
 function packageReadmes(): string[] {
@@ -79,7 +76,6 @@ const PACKAGE_LIBRARIES: Readonly<Record<string, string>> = {
   'packages/session/session-format-v0-to-v1': 'Pure released-v0 codec and adjacent migration library.',
   'packages/session/session-format-v2-to-v3': 'Pure released-v2 codec and adjacent migration library.',
   'packages/session/session-format-v3-to-v4': 'Released V3 codec reuse and adjacent migration library.',
-  'packages/session/session-telemetry': 'Telemetry Service Definition and capture library; providers mount the backend.',
   'packages/session/session-title-llm': 'Shared LLM title-provider registration and request policy.',
   'packages/subprocess/win32-process': 'Low-level Win32 process and Job Object primitives.',
   'packages/test-support/session-snapshot': 'Test infrastructure; mounts nothing into a product composition.',
@@ -125,7 +121,7 @@ function readFrontmatter(file: string): Record<string, unknown> {
 }
 
 function packageDir(file: string): string {
-  return file.replaceAll('\\', '/').replace(/\/README\.zh\.md$/, '').replace(/\/README\.md$/, '')
+  return file.replaceAll('\\', '/').replace(/\/README\.md$/, '')
 }
 
 /** Whether the package manifest declares `dsh.bundle.patch`. */
@@ -158,11 +154,8 @@ function packageReadmeMetadataErrors(file: string, metadata: Record<string, unkn
   return errors
 }
 
-function packageReadmeStructureErrors(file: string, source: string): string[] {
-  const chinese = file.endsWith('.zh.md')
-  const required = chinese
-    ? [[/^## 概述$/m, '概述'], [/^## 目录$/m, '目录'], [/^#{2,3} 开发备注$/m, '开发备注']] as const
-    : [[/^## Summary$/m, 'Summary'], [/^## Table of Contents$/m, 'Table of Contents'], [/^#{2,3} Dev Note$/m, 'Dev Note']] as const
+function packageReadmeStructureErrors(source: string): string[] {
+  const required = [[/^## Summary$/m, 'Summary'], [/^## Table of Contents$/m, 'Table of Contents'], [/^#{2,3} Dev Note$/m, 'Dev Note']] as const
   return required.flatMap(([pattern, label]) => pattern.test(source) ? [] : [`missing ${label}`])
 }
 
@@ -219,11 +212,11 @@ function releaseDocument(body: string, evidence: string): string {
 }
 
 describe('Session format release authority', () => {
-  it('keeps bilingual release metadata consistent with the writer and tagged evidence', () => {
-    const records = ['docs/session-format-status.md', 'docs/session-format-status.zh.md'].map(file =>
-      validateSessionFormatRelease(readFileSync(resolve(root, file), 'utf8'), readCurrentSessionFormatVersion(root)),
-    )
-    expect(records[0]).toEqual(records[1])
+  it('keeps release metadata consistent with the writer and tagged evidence', () => {
+    expect(() => validateSessionFormatRelease(
+      readFileSync(resolve(root, 'docs/session-format-status.md'), 'utf8'),
+      readCurrentSessionFormatVersion(root),
+    )).not.toThrow()
   })
 
   it('accepts a released writer and a newer development writer, including format zero', () => {
@@ -310,7 +303,7 @@ describe('dsh-doc-writing skill consolidation', () => {
   it('carries no prototype-era language', () => {
     const files = [
       '.agents/skills/dsh-doc-writing/SKILL.md',
-      '.agents/skills/dsh-doc-writing/references/metadata-links-i18n.md',
+      '.agents/skills/dsh-doc-writing/references/metadata-links.md',
       '.agents/skills/dsh-doc-writing/references/structure-hierarchy.md',
       '.agents/skills/dsh-doc-writing/references/style.md',
       '.agents/skills/dsh-doc-writing/references/review.md',
@@ -331,7 +324,6 @@ describe('dsh-doc-writing skill consolidation', () => {
   it('keeps the reference example linked from the skill', () => {
     const skill = readFileSync(resolve(root, '.agents/skills/dsh-doc-writing/SKILL.md'), 'utf8')
     expect(skill).toContain('session-persistence-jsonl/README.md')
-    expect(skill).toContain('session-persistence-jsonl/README.zh.md')
   })
 
   it('defines controlled English as a precision-preserving review discipline', () => {
@@ -364,7 +356,7 @@ describe('dsh-doc-writing skill consolidation', () => {
 
   it('maps persistence transition records to their dedicated document kind', () => {
     const files = globSync('docs/persistence-changes/*.md', { cwd: root })
-      .filter(file => !/\/README(?:\.zh)?\.md$/u.test(file.replaceAll('\\', '/')))
+      .filter(file => !/\/README\.md$/u.test(file.replaceAll('\\', '/')))
     expect(files.length).toBeGreaterThan(0)
     for (const file of files) {
       const metadata = readFrontmatter(file)
@@ -385,7 +377,7 @@ describe('dsh-doc-writing skill consolidation', () => {
 
   it('maps historical Session format references to their dedicated document kind', () => {
     const files = globSync('docs/persistence-changes/historical-formats/v*.md', { cwd: root })
-    expect(files.length).toBe(readCurrentSessionFormatVersion(root) * 2)
+    expect(files.length).toBe(readCurrentSessionFormatVersion(root))
     for (const file of files) {
       const metadata = readFrontmatter(file)
       expect(metadata.kind, file).toBe('persistence-format')
@@ -408,7 +400,7 @@ describe('dsh-doc-writing skill consolidation', () => {
   it('keeps every package README on the summary, contents, and Dev Note skeleton', () => {
     for (const file of packageReadmes().filter(file => file.split('/').length === 4)) {
       const source = readFileSync(resolve(root, file), 'utf8')
-      expect(packageReadmeStructureErrors(file, source), file).toEqual([])
+      expect(packageReadmeStructureErrors(source), file).toEqual([])
     }
   })
 
@@ -447,17 +439,12 @@ describe('dsh-doc-writing skill consolidation', () => {
   })
 })
 
-describe('reference-example README pair', () => {
-  const dir = 'packages/session/session-persistence-jsonl'
-
-  it('keeps exact English/Chinese physical line alignment', () => {
-    const sourceLines = readFileSync(resolve(root, dir, 'README.md'), 'utf8').split('\n').length
-    const zhLines = readFileSync(resolve(root, dir, 'README.zh.md'), 'utf8').split('\n').length
-    expect(sourceLines).toBe(zhLines)
-  })
-
-  it('keeps the sidecar consistency record present', () => {
-    const sidecar = readFileSync(resolve(root, dir, 'README.i18n.yaml'), 'utf8')
-    expect(sidecar).toMatch(/^\/[^\s:]*:\n {2}en: [0-9a-f]{16}\n {2}zh: [0-9a-f]{16}$/m)
+describe('English-only documentation', () => {
+  it('keeps Chinese Markdown to the plugin detail pages the product displays', () => {
+    const localized = globSync(['**/*.zh.md', '**/*.i18n.yaml'], {
+      cwd: root,
+      exclude: path => path.endsWith('node_modules') || path === '.git',
+    }).map(file => file.replaceAll('\\', '/'))
+    expect(localized.filter(file => !/^packages\/experimental\/[^/]+\/docs\/DETAIL\.zh\.md$/u.test(file))).toEqual([])
   })
 })

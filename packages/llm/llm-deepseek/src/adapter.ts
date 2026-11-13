@@ -2,14 +2,12 @@
 
 import { attributionHeaders, LlmAdapter, LlmError } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, ImageAttachmentAccessResolver, PreparedAdapterCall, StreamChunk } from '@deepseek-ai/dsh-llm'
-import type { DeepSeekLlmApiExtensionRequest, DeepSeekLlmApiJson } from '@deepseek-ai/dsh-deepseek-llm-api-extensions'
 import { idleWatchdog, timeoutOf } from '@deepseek-ai/dsh-timeout'
 import { modelInfo } from './model-info.ts'
 import type { DeepSeekAdapterOptions, DeepSeekConnectionOptions as Connection } from './types.ts'
 import { DeepSeekFileStore } from './file-store.ts'
 import { MESSAGES_FILES_BETA, MESSAGES_TOOL_CHANGES_BETA, messagesApiRoot } from './messages-api.ts'
 import { FileResolutionFailure, RequestFiles } from './request-files.ts'
-import { prepareRequestExtensions } from './request-extensions.ts'
 import { imagePricing, inlineImages, prepareFileIds, prepareImages } from './images.ts'
 import { serialize } from './serialize.ts'
 import { parseSse } from './sse.ts'
@@ -119,20 +117,6 @@ export class DeepSeekAdapter<C extends Connection = Connection> extends LlmAdapt
         const body = serialize(options, connection, history, versions, this.imageAccess, (reason) => {
           this.dependencies.onReplayDegrade?.({ provider: options.provider, model: options.model, reason })
         }, fileIds)
-        const requestIdentity: Omit<DeepSeekLlmApiExtensionRequest, 'body'> = {
-          signal,
-          ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },
-          ...options.purpose === undefined ? {} : { purpose: options.purpose },
-        }
-        const extensions = await prepareRequestExtensions(
-          body as Readonly<Record<string, DeepSeekLlmApiJson>>, requestIdentity,
-          this.dependencies.prepareExtensions, (fields, error) => {
-            this.dependencies.onExtensionsOmitted?.({ provider: options.provider, model: options.model, fields, error })
-          }, (error) => {
-            this.dependencies.onExtensionsUnaccepted?.({ provider: options.provider, model: options.model, error })
-          },
-        )
-        signal.throwIfAborted()
         const betas = [
           ...fileIds !== undefined && fileIds.size > 0 ? [MESSAGES_FILES_BETA] : [],
           ...body.messages.some(message => message.content.some(block => block.type === 'tool_addition' || block.type === 'tool_removal'))
@@ -140,7 +124,7 @@ export class DeepSeekAdapter<C extends Connection = Connection> extends LlmAdapt
             : [],
         ]
         const response = await fetch(`${messagesApiRoot(connection.baseURL)}/messages`, {
-          method: 'POST', signal, body: extensions.payload, redirect: 'error',
+          method: 'POST', signal, body: JSON.stringify(body), redirect: 'error',
           headers: {
             ...attributionHeaders(),
             'content-type': 'application/json', 'accept': 'text/event-stream',
@@ -149,7 +133,7 @@ export class DeepSeekAdapter<C extends Connection = Connection> extends LlmAdapt
             ...betas.length === 0 ? {} : { 'anthropic-beta': betas.join(',') },
             'x-deepseek-harness-user-id': this.dependencies.resolveUserId(),
             ...options.sessionId === undefined ? {} : { 'x-deepseek-harness-session-id': String(options.sessionId) },
-            ...requestIdentity.purpose === 'compaction' ? { 'x-deepseek-harness-compact': '1' } : {},
+            ...options.purpose === 'compaction' ? { 'x-deepseek-harness-compact': '1' } : {},
           },
         })
         if (!response.ok) {
@@ -164,7 +148,6 @@ export class DeepSeekAdapter<C extends Connection = Connection> extends LlmAdapt
           const message = files.errorMessage(response.status, failure.message, detail)
           throw LlmError.fromFailure({ ...failure.failure, message }, { cause: new Error(text) })
         }
-        await extensions.accept()
         if (response.body === null) throw new LlmError('DeepSeek Messages returned no response body', 'EMPTY_RESPONSE')
         yield* translate(parseSse(response.body, activity), options.model)
         return

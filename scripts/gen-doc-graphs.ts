@@ -17,14 +17,7 @@ import {
   graphNodeId as nodeId,
   type PackageGraphNode,
 } from './package-graph.ts'
-import { rewriteTranslationLinkLocales } from './translation-links.ts'
-import {
-  generatedRegions,
-  parseTranslationPairingManifest,
-  renderGeneratedRegion,
-  spliceGeneratedRegion,
-  translationPairSourcePredicate,
-} from './translation-pairing.ts'
+import { renderGeneratedRegion } from './generated-regions.ts'
 import { TypeScriptProject } from './ts-project.ts'
 
 const root = resolve(import.meta.dirname, '..')
@@ -98,7 +91,6 @@ const GROUP_ORDER = [
   'session-persistence',
   'session-query',
   'session-title',
-  'telemetry',
   'storage',
   'workspace',
   'support',
@@ -299,23 +291,7 @@ const SERVICE_ROLES: ServiceRole[] = [
     consumers: ['agent-loop', 'compaction-basic'],
     note: 'Adapters register provider implementations; the loop and compaction call the provider-neutral stream service.',
   },
-  {
-    key: 'sessionLogDeepSeek',
-    pkg: 'session-log-deepseek',
-    title: 'Session-log upload policy',
-    mode: 'core',
-    implementations: [],
-    note: 'Plugins register caller-owned exclusions before the canonical Session-log request contribution is prepared; unmatched requests use normal upload eligibility.',
-  },
-  {
-    key: 'deepseekLlmApiExtensions',
-    pkg: 'deepseek-llm-api-extensions',
-    title: 'Official DeepSeek request extensions',
-    mode: 'seam',
-    implementations: ['session-log-deepseek', 'plugin-package-inventory-deepseek'],
-    consumers: ['llm-deepseek'],
-    note: 'Plugins prepare independent top-level fields; the official adapter merges them and commits their delivery state after HTTP acceptance.',
-  },
+
   {
     key: 'tokenMeter',
     pkg: 'token-meter',
@@ -507,38 +483,7 @@ const SERVICE_ROLES: ServiceRole[] = [
     consumers: ['llm-pi-ai'],
     note: 'Flows are registered by the plugin that knows how to obtain one credential and keyed by the record they write; the seam owns the conversation and the one-attempt-per-key lifecycle, never the protocol.',
   },
-  {
-    key: 'productAnalytics',
-    pkg: 'client-product-analytics',
-    title: 'Desktop interaction collection',
-    mode: 'service',
-    note: 'Accepts selected Desktop events, enriches available login identity, and observes live compaction under the live Host collection policy.',
-  },
-  {
-    key: 'otel',
-    pkg: 'otel',
-    title: 'Shared OTel reporting channels',
-    mode: 'service',
-    consumers: ['host-product-telemetry-otel', 'session-telemetry-otel'],
-    note: 'Product analytics and Session feedback adapters create independent reporting channels through one injected service.',
-  },
-  {
-    key: 'productTelemetry',
-    pkg: 'host-product-telemetry-otel',
-    title: 'Product usage event sender',
-    mode: 'service',
-    note: 'Exports explicitly submitted analytics events through OTLP/HTTP; mounting alone collects nothing.',
-  },
 
-  {
-    key: 'sessionTelemetry',
-    pkg: 'session-telemetry',
-    title: 'Session telemetry seam',
-    mode: 'seam',
-    implementations: ['session-telemetry-otel'],
-    consumers: [],
-    note: 'The seam captures, redacts, and hands session records to one backend; nothing else consumes the service — its output leaves the process.',
-  },
   {
     key: 'storage',
     pkg: 'storage',
@@ -1796,29 +1741,7 @@ function renderDocs(): GraphDoc[] {
     { rel: 'docs/tool-execution-pipeline.md', content: renderToolPipeline() },
   ]
   docs.unshift({ rel: 'docs/graph-atlas.md', content: renderIndex(docs) })
-  const events = docs.find(doc => doc.rel === 'docs/event-producer-consumer.md')
-  if (events !== undefined) docs.push(spliceChineseRegions(events))
   return docs
-}
-
-/**
- * Splice a generated page's regions into its authored Chinese counterpart,
- * localizing paired-document links; the surrounding Chinese prose stays authored.
- */
-function spliceChineseRegions(doc: GraphDoc): GraphDoc {
-  const rel = doc.rel.replace(/\.md$/, '.zh.md')
-  const context = {
-    repoRoot: root,
-    sourcePath: rel,
-    isTranslationPairSource: translationPairSourcePredicate(parseTranslationPairingManifest(
-      readFileSync(resolve(root, 'scripts/translation-pairing.manifest.json'), 'utf8'),
-    )),
-  }
-  let content = readFileSync(resolve(root, rel), 'utf8')
-  for (const region of generatedRegions(doc.content)) {
-    content = spliceGeneratedRegion(content, rewriteTranslationLinkLocales(region.text, context).content)
-  }
-  return { rel, content }
 }
 
 function renderIndex(docs: GraphDoc[]): string {

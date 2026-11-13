@@ -1,7 +1,5 @@
 # `@deepseek-ai/dsh`
 
-English | [中文](README.zh.md)
-
 The `dsh` command is the sole supported Node application launcher: profiles are ordered stacks of plugin-bundle patch layers under the user's own overrides. SDK and ACP are profiles, not separate public bins. The Python runtime wheel packages this same command; the SDK defaults to `sdk`, and the minimal example selects `sdk-minimal`. [`src/args.ts`](src/args.ts) owns the command grammar, and [`src/bin.ts`](src/bin.ts) loads only the selected runner. Invalid commands, options from another mode, and fatal configuration or boot failures exit nonzero.
 
 ## Entry modes
@@ -57,13 +55,13 @@ The [CLI behavior reference](reference/README.md) owns exact layer precedence, f
 
 The published tarball carries the bundled runtime under `lib/`, the TypeScript under `src/`, the declaration and JavaScript maps beside the files they describe, and the documentation under `docs/`. Only `prepack` stages `docs/`, and `postpack` removes that copy again, so a reader of the working tree sees whatever the checkout holds.
 
-`docs/` holds the documentation website's pages plus every upgrade guide, with the assets those pages reference. `docs/upgrade-guide/README.md` is generated during staging: it groups the guides by the release each `v<T>` directory upgrades from and lists each guide's title, English and Chinese descriptions, and relative paths. The Desktop application carries the same `docs/` and `src/` inside its `app.asar`. The generated `persistence-changes/` records, the `i18n/` guidelines, and the `*.i18n.yaml` consistency records are not published. Its pages keep the repository's relative links, so a link into `../packages/**` or into the omitted `persistence-changes/` records resolves only in a checkout.
+`docs/` holds the documentation website's pages plus every upgrade guide, with the assets those pages reference. `docs/upgrade-guide/README.md` is generated during staging: it groups the guides by the release each `v<T>` directory upgrades from and lists each guide's title, description, and relative path. The Desktop application carries the same `docs/` and `src/` inside its `app.asar`. The generated `persistence-changes/` records are not published. Its pages keep the repository's relative links, so a link into `../packages/**` or into the omitted `persistence-changes/` records resolves only in a checkout.
 
 ## Development
 
 Production runs require built package and frontend artifacts. From the repository root, run `pnpm run build` separately, then use `pnpm dsh <args...>` to run the TypeScript entry and forward every argument; the [source-execution reference](reference/README.md#source-execution) owns the module-resolution contract.
 
-The `@deepseek-ai/dsh/profile-boot` export provides the shared profile lifecycle to the Desktop host. A resolved application profile supplies its own installation anchor for runtime package resolution while retaining the Harness home patch, proxy environment, telemetry switch, patch reload, and bounded shutdown.
+The `@deepseek-ai/dsh/profile-boot` export provides the shared profile lifecycle to the Desktop host. A resolved application profile supplies its own installation anchor for runtime package resolution while retaining the Harness home patch, proxy environment, patch reload, and bounded shutdown.
 
 Packaged installations call the same `runCli()` entry with their package-manager executable. The Desktop carrier also enables plugin operations for its initialized profile; npm launches omit these options. Installation-owned package environments apply only to plugin package operations; the invoking directory, ordinary profile selection, and agent-shell PATH retain their CLI meanings.
 

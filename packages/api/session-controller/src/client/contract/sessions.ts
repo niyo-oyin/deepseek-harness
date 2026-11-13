@@ -132,7 +132,7 @@ export interface ISessions {
    *   latest completed-turn prefix before it, with the input pending there
    *   canceled), and whether to increment an
    *   inherited durable title, skipping numbers Host-listed titles already use,
-   *   before resolving. `onCreated` observes the catalogued child before that optional rename.
+   *   before resolving.
    * @returns the child session id.
    * @throws when the fork fails, or when a requested child-title rename fails after creation.
    */
@@ -141,7 +141,6 @@ export interface ISessions {
     atSeq?: number
     beforeSeq?: number
     increaseTitle?: boolean
-    onCreated?: (childId: SessionId) => void
     /** False refuses source migration; omission preserves the Host default. */
     allowMigration?: boolean
   }): Promise<SessionId>

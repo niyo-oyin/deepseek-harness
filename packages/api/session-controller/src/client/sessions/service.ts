@@ -479,7 +479,6 @@ export class ClientSessions implements ISessions {
     atSeq?: number
     beforeSeq?: number
     increaseTitle?: boolean
-    onCreated?: (childId: SessionId) => void
     allowMigration?: boolean
   }): Promise<SessionId> {
     const sourceTitle = opts.increaseTitle
@@ -494,7 +493,6 @@ export class ClientSessions implements ISessions {
     if (!result.ok) throw new SessionForkError(result.error, opts.sessionId)
     this.projectList()
     const childId = result.value.sessionId
-    opts.onCreated?.(childId)
     if (sourceTitle !== undefined) {
       const list = this.list.getSnapshot()
       const taken = new Set(list.ids.flatMap(id => list.byId[id]?.title ?? []))

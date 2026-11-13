@@ -8,6 +8,7 @@ import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import { DSH_HOME_DIR_NAME } from '@deepseek-ai/dsh-home-paths'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
@@ -71,7 +72,7 @@ describe('ShellEnvRegistry', () => {
     const ctx = new Context()
     ctx.provide('profileContext', {
       name: 'web', dir: '/profiles/web', patchPath: '/profiles/web/cordis.patch.yml', installAnchor: '/dsh/package.json',
-      cwd: '/work', home: '/home', startedBundles: [], overlays: [], telemetryDisabledEnv: undefined,
+      cwd: '/work', home: '/home', startedBundles: [], overlays: [],
     })
     const registry = new ShellEnvRegistry(ctx, { dshHome: './test-dsh-home' })
     expect(registry.collect(execution())).toMatchObject({
@@ -93,7 +94,7 @@ describe('ShellEnvRegistry', () => {
 
     vi.stubEnv('DSH_HOME', undefined)
     const fromDefault = new ShellEnvRegistry(new Context())
-    expect(fromDefault.collect(execution()).DSH_HOME).toBe(join(homedir(), '.dsh'))
+    expect(fromDefault.collect(execution()).DSH_HOME).toBe(join(homedir(), DSH_HOME_DIR_NAME))
   })
 
   it('collects declared contributor variables and omits unavailable values', () => {

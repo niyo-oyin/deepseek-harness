@@ -5,9 +5,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { lastAssistantStreamChunk, type RetryPolicyConfig, type TokenUsage } from '@deepseek-ai/dsh-llm'
+import { PUBLIC_BASE_URL } from '@deepseek-ai/dsh-llm-deepseek'
 import { DeepSeekHarness } from '@deepseek-ai/dsh-sdk-client'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { describe, expect, it, onTestFinished } from 'vitest'
+import { startRecordingProxy } from './fixtures/recording-proxy.ts'
 
 const fixturePath = fileURLToPath(new URL('./fixtures/dynamic-tool-cache.mjs', import.meta.url))
 const dshBin = fileURLToPath(new URL('../../../lib/bin.js', import.meta.url))
@@ -78,21 +80,23 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)('SDK native tool updates with rea
     const sampleLabel = `CACHE_SAMPLE_${randomUUID()}`
     const evidencePath = join(root, 'requests.jsonl')
     const callsPath = join(root, 'calls.txt')
+    // Conversation requests carry the fixture's control tool; title and compaction requests do not count.
+    const proxy = await startRecordingProxy(PUBLIC_BASE_URL, (body, headers) => headers['x-deepseek-harness-compact'] === undefined
+      && (body as ObservedRequest['body']).tools?.some(tool => tool.name === 'cache_tool_control') === true)
+    onTestFinished(() => proxy.close())
     const patch = join(root, 'dynamic-tool-cache.patch.yml')
     await writeFile(patch, JSON.stringify([
       { id: 'llm-deepseek', config: {
-        apiKeyEnv: 'DEEPSEEK_API_KEY', thinking: 'disabled', maxTokens: 1024,
+        baseURL: proxy.baseURL, apiKeyEnv: 'DEEPSEEK_API_KEY', thinking: 'disabled', maxTokens: 1024,
         retryPolicy: { mode: 'normal', maxRetries: 0 } satisfies RetryPolicyConfig,
         models: [{ id: 'deepseek-flash', systemPromptUpdate: 'in-history', toolUpdate: 'addition-only' }],
       } },
-      { id: 'session-log-deepseek', disabled: true },
-      { id: 'plugin-package-inventory-deepseek', disabled: true },
       { insert: [{ id: 'sdk-dynamic-tool-cache-fixture', name: fixturePath, config: { evidencePath, callsPath, sampleLabel, updatePrompt } }] },
     ]))
     const harness = new DeepSeekHarness({
       dshBin, profile: 'sdk', patches: [patch], dshHome: join(root, 'home'),
       cwd: root, processCwd: root, provider: 'deepseek-official', model: 'deepseek-flash',
-      env: { ...process.env, DSH_TELEMETRY_DISABLED: '1', DSH_PERMISSION_MODE: 'danger-full-access' },
+      env: { ...process.env, DSH_PERMISSION_MODE: 'danger-full-access' },
       initializeTimeoutMs: 30_000,
     })
     onTestFinished(async () => { await harness.close() })
@@ -121,7 +125,9 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)('SDK native tool updates with rea
     const calls = await recordedCalls(callsPath)
     expectCalledBefore(calls, 'sample', 'remove')
 
-    const requests = (await readFile(evidencePath, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as ObservedRequest)
+    const steps = (await readFile(evidencePath, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as Omit<ObservedRequest, 'body'>)
+    expect(proxy.bodies).toHaveLength(steps.length)
+    const requests = steps.map((step, index) => ({ ...step, body: proxy.bodies[index] as ObservedRequest['body'] }))
     expect(requests).toHaveLength(events.filter(event => event.type === 'assistant/message').length)
     const [initial, history, warm] = requests
     const addedIndex = requests.findIndex(request => request.stage === 'added')
