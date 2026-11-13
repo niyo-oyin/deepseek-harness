@@ -8,7 +8,7 @@ This repository is a personal fork of DeepSeek Harness. Upstream keeps every in-
 
 ## Decision
 
-- Documentation in the fork is written in English only. Each document is one English file; no translated copy, consistency sidecar, or language-switcher line exists.
+- Documentation in the fork is written in English only. Each document is one English file; no translated copy, consistency sidecar, or language-switcher line exists. The root `README.md` is the one exception: it introduces the fork to its users in Japanese, also as a single file.
 - Chinese document counterparts (`*.zh.md`), pairing sidecars (`*.i18n.yaml`), the pairing and translation-prompt checks and their Git hooks, the translation briefing tools, the `docs/i18n/` translation guidelines and terminology list, and the `dsh-translate-docs` skill are deleted. Generators emit English output only, and the documentation website has one English locale at the root route.
 - Product localization is out of scope of this decision and stays: the eight runtime UI languages and their locale dictionaries, and a plugin bundle's localized detail document and preview image (`docs/DETAIL.zh.md`, `docs/preview.zh.svg`, `meta.detail` in `locale/zh.json`).
 - Archived Agent Notes keep their sealed content; the archive seals only the English note files.

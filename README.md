@@ -1,77 +1,39 @@
 # DeepSeek Harness
 
-English | [中文](README.zh.md)
+DeepSeek Harness（`dsh`）は、すべてをプラグインとして組み立てるエージェントハーネスです。[DeepSeek AI](https://deepseek.com) が開発する [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) をもとに、手元で使うための変更を加えています。基盤には [Cordis](https://github.com/cordiverse/cordis) を使っていて、その設計は論文 [_A Programming Paradigm for Spatiotemporal Composability_](https://arxiv.org/abs/2608.25512) で説明されています。
 
-DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
+まだ開発者プレビューの段階で、互換性を壊す変更が入ることがあります。実行する前に[安全に関する注意](SAFETY.md)を読んでください。
 
-It is built on an **everything-is-a-plugin** architecture and powered by [Cordis](https://github.com/cordiverse/cordis), whose design is described in [_A Programming Paradigm for Spatiotemporal Composability_](https://arxiv.org/abs/2608.25512).
+## 本家との違い
 
-Documentation: [https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/)
+- **ベンダーのサービスに送らない**：DeepSeek アカウントでのログイン、セッションログのアップロード、テレメトリ、プロダクト分析を取り除いています。モデルの利用には API キーを使います。
+- **データの置き場所が別**：設定やセッションは `~/.dsh-fork` に保存し、本家アプリの `~/.dsh` には触れません。デスクトップアプリは「DSH Fork」という名前でビルドされます。
+- **設定画面の追加**：プラグイン画面から、MCP サーバーとスキルを管理できます。スキルは ZIP でのインポートとエクスポートにも対応しています。
+- **安全のための確認**：シェルコマンドが `git push` を実行する前に、ユーザーに確認します。
+- **日本語環境向けの調整**：中国語以外のロケールでは、日本語を表示できるフォントを使います。
 
-## Developer preview
+<a id="run"></a><a id="run-from-source"></a>
 
-DeepSeek Harness is in _developer preview_ and iterating rapidly. **THERE WILL BE COMPATIBILITY-BREAKING CHANGES.**
+## ソースから起動する
 
-Review the [safety notice](SAFETY.md) before running the project.
-
-## Run
-
-### Run from `npm`
-
-Install `Node.js`, then run:
+[Node.js](https://nodejs.org/) 24.9 以降と [pnpm](https://pnpm.io/) を用意してから、リポジトリで次を実行します。
 
 ```sh
-npx @deepseek-ai/dsh web
-```
-
-The command starts the Web UI at `http://127.0.0.1:3080` by default and opens it in the default browser for a local launch. An SSH launch only prints the host URL because the SSH client or editor owns the local forwarded address. Pass `--no-open` to run the server without opening a browser. See [Web UI guide](docs/user/guide/index.md).
-
-### Run from source
-
-To run from a repository checkout:
-
-```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
-cd deepseek-harness
 pnpm install
 pnpm run build
 pnpm dsh web
 ```
 
-`pnpm run build` prepares the repository artifacts. `pnpm dsh web` uses those built artifacts without rebuilding.
+`pnpm run build` でビルド成果物を用意し、`pnpm dsh web` はそれを使って Web UI を起動します（既定では `http://127.0.0.1:3080`）。使い方は [Web UI ガイド](docs/user/guide/index.md)を見てください。
 
-## Community and support
+デスクトップアプリは `pnpm run dev:desktop` で開発用に起動できます。インストーラーの作り方は[パッケージングの説明](apps/desktop/packaging/README.md)にあります。
 
-- Submit feedback or bug reports through [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions).
-- Add the [`dsh-plugin`](https://github.com/topics/dsh-plugin) topic to your plugin repository for discoverability.
-- Join <a href="https://discord.gg/4MrtZUhpxg">DeepSeek Harness Discord community</a>.
+## 開発
 
-## Contributing
+[開発ガイド](docs/development.md)と[アーキテクチャの説明](docs/architecture.md)から読み始めてください。エージェントには [AGENTS.md](AGENTS.md) に従ってもらいます。README 以外のドキュメントは英語で書いています。
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Development
-
-Start with the [development guide](docs/development.md) and [architecture documentation](docs/architecture.md).
-
-`pnpm run dev:web` builds, serves, and rebuilds client bundles on source edits in one terminal, and `make help` lists the matching Make targets for Web and Desktop; the guide's application commands section owns the full table.
-
-For agents, follow [AGENTS.md](AGENTS.md).
-
-## Citation
-
-```bibtex
-@misc{deepseek-harness2026,
-  title={DeepSeek Harness: Everything is a Plugin},
-  author={DeepSeek-AI},
-  year={2026},
-  publisher={GitHub},
-  howpublished={\url{https://github.com/deepseek-ai/deepseek-harness}},
-}
-```
-
-## License
+## ライセンス
 
 [MIT](LICENSE)
 
-Third-party dependencies and their licenses are disclosed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+依存しているサードパーティのパッケージとそのライセンスは、[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) にまとめています。
