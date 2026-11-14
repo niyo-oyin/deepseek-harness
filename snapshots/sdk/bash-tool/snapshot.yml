@@ -5,9 +5,6 @@ composition: sdk-default
 recording: live
 header:
   class: sdk-default
-  pin: true
-  systemPromptSource: text-turn
-  toolSchemasSource: session/text-turn
 
 # The bash tool itself is under test; a Windows build composes pwsh instead (see pwsh-tool-turn).
 platforms: [posix]

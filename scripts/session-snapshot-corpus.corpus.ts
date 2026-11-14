@@ -115,6 +115,31 @@ it('keeps every scenario directory in the per-platform layout', async () => {
   for (const { key, dir } of await scenarios()) expect(scenarioLayoutProblems(dir), `${key}: per-platform layout`).toEqual([])
 })
 
+it('owns every borrowed header expectation by a scenario that runs wherever its borrowers run', async () => {
+  const all = await scenarios()
+  const byKey = new Map(all.map(scenario => [scenario.key, scenario]))
+  const pinByClass = new Map(all.filter(scenario => scenario.manifest.header.pin === true)
+    .map(scenario => [`${scenario.manifest.composition}/${scenario.manifest.header.class}`, scenario]))
+  // An owner that skips a platform its borrowers run on could never produce their expectation there.
+  const covers = (owner: Scenario, borrower: Scenario): boolean => {
+    const ownerPlatforms = owner.manifest.platforms ?? SNAPSHOT_PLATFORMS
+    return (borrower.manifest.platforms ?? SNAPSHOT_PLATFORMS).every(platform => ownerPlatforms.includes(platform))
+  }
+  for (const scenario of all) {
+    const pin = pinByClass.get(`${scenario.manifest.composition}/${scenario.manifest.header.class}`)
+    if (pin === undefined) continue
+    const owners = [
+      ['header pin', pin],
+      ['system-prompt owner', byKey.get(referencedScenario(pin, pin.manifest.header.systemPromptSource ?? pin.name))],
+      ['tool-schema owner', byKey.get(referencedScenario(pin, pin.manifest.header.toolSchemasSource ?? pin.name))],
+    ] as const
+    for (const [role, owner] of owners) {
+      if (owner === undefined) continue
+      expect(covers(owner, scenario), `${scenario.key}: ${role} ${owner.key} must run on every platform ${scenario.key} runs on`).toBe(true)
+    }
+  }
+})
+
 it.each(SNAPSHOT_PLATFORMS)('keeps every recorded session owned, pinned, redacted, and header-scrubbed on %s', async (platform) => {
   const has = (dir: string, name: string): boolean => existsSync(resolveScenarioFile(dir, name, platform))
   const all = await scenarios()
