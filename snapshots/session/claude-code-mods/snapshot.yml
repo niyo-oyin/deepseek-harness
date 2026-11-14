@@ -10,3 +10,6 @@ header:
   toolSchemasSource: text-turn
 workspace:
   final: true
+
+# Hooks match the bash tool and run POSIX shell commands; Windows coverage is the pwsh hook scenarios.
+platforms: [posix]

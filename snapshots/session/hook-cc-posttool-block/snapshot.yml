@@ -7,3 +7,6 @@ header:
   class: default
 workspace:
   final: true
+
+# Hooks match the bash tool and run POSIX shell commands; Windows coverage is the pwsh hook scenarios.
+platforms: [posix]

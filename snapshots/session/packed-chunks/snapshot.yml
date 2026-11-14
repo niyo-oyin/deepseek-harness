@@ -8,3 +8,6 @@ sessionFormat:
   coverage: [packed-row]
 header:
   class: default
+
+# The retained V0 input is immutable history recorded with the bash tool, which Windows does not compose.
+platforms: [posix]

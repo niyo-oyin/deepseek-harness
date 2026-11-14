@@ -7,3 +7,6 @@ header:
   class: default
 workspace:
   final: true
+
+# The Stop hook runs a POSIX shell command; Windows coverage is the pwsh hook scenarios.
+platforms: [posix]
