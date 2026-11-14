@@ -30,15 +30,19 @@ export interface RendererConsoleEntry {
 export function recordRendererConsole(directory: string, entry: RendererConsoleEntry, now = new Date()): void {
   const message = entry.message.length > RENDERER_LOG_MAX_MESSAGE_CHARS
     ? `${entry.message.slice(0, RENDERER_LOG_MAX_MESSAGE_CHARS)}… [truncated]` : entry.message
-  const path = join(directory, RENDERER_LOG_FILE)
+  const line = `${now.toISOString()} ${entry.level} ${entry.source}:${String(entry.line)} ${message.replaceAll('\n', '\n  ')}\n`
   try {
-    mkdirSync(directory, { recursive: true })
-    if (currentSize(path) >= RENDERER_LOG_MAX_BYTES) renameSync(path, `${path}.1`)
-    appendFileSync(path, `${now.toISOString()} ${entry.level} ${entry.source}:${String(entry.line)} ${message.replaceAll('\n', '\n  ')}\n`,
-      { mode: 0o600 })
+    appendRotated(directory, line)
   } catch (_writeFailure) {
     // The logs directory is unwritable; the message remains visible in the renderer console.
   }
+}
+
+function appendRotated(directory: string, line: string): void {
+  const path = join(directory, RENDERER_LOG_FILE)
+  mkdirSync(directory, { recursive: true })
+  if (currentSize(path) >= RENDERER_LOG_MAX_BYTES) renameSync(path, `${path}.1`)
+  appendFileSync(path, line, { mode: 0o600 })
 }
 
 function currentSize(path: string): number {

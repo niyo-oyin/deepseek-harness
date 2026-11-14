@@ -502,7 +502,7 @@ describe('windows-acl workspace release (LocalSandboxProvider)', () => {
   it('releases through the runner, forgets the cached grant, and materializes it again on the next call', async () => {
     const { sandbox, fiber, runner, ws } = await releasing('released')
     try {
-      const policy: SandboxPolicy = { mode: 'workspace-write', workspaceRoot: ws, sessionId: SessionId('sess-release') }
+      const policy: SandboxPolicy = { mode: 'workspace-write', workspaceRoot: ws, sessionId: brandString<SessionId>('sess-release') }
       await sandbox.confine(['true'], policy)
       expect(mockState.grants.filter(grant => grant.writeSid === WORKSPACE_SID)).toHaveLength(1)
 
@@ -554,7 +554,7 @@ describe('windows-acl workspace release (LocalSandboxProvider)', () => {
   it('shares one run between concurrent releases and holds a workspace-write call until it ends', async () => {
     const { sandbox, fiber, runner, ws } = await releasing('released')
     try {
-      const policy: SandboxPolicy = { mode: 'workspace-write', workspaceRoot: ws, sessionId: SessionId('sess-wait') }
+      const policy: SandboxPolicy = { mode: 'workspace-write', workspaceRoot: ws, sessionId: brandString<SessionId>('sess-wait') }
       await sandbox.confine(['true'], policy)
       writeFileSync(join(runner.dir, 'hold'), '')
       const first = sandbox.releaseWorkspace(ws)
@@ -579,7 +579,7 @@ describe('windows-acl workspace release (LocalSandboxProvider)', () => {
   it('still runs the release when freeing the cached grant fails, and stops a held call that was cancelled', async () => {
     const { sandbox, fiber, runner, ws } = await releasing('released')
     try {
-      const policy: SandboxPolicy = { mode: 'workspace-write', workspaceRoot: ws, sessionId: SessionId('sess-cancel') }
+      const policy: SandboxPolicy = { mode: 'workspace-write', workspaceRoot: ws, sessionId: brandString<SessionId>('sess-cancel') }
       await sandbox.confine(['true'], policy)
       mockState.disposeFailure = new Error('LocalFree failed')
       writeFileSync(join(runner.dir, 'hold'), '')
