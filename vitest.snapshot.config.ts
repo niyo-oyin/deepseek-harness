@@ -31,6 +31,8 @@ const snapshotMaxWorkers = process.env.DSH_SNAPSHOT_MAX_WORKERS
 // and updates current expected outputs. Replay/refresh never load `.env`; only record reads a key from the
 // environment or root `.env`.
 if (process.env.DSH_SNAPSHOT === 'record') {
+  // Recording calls the real API, so the test network guard stands aside for its workers and children.
+  process.env.DSH_TEST_LIVE_NETWORK = '1'
   try {
     process.loadEnvFile(new URL('.env', import.meta.url).pathname)
   } catch (error) {
@@ -47,7 +49,7 @@ export default defineConfig({
   plugins: [tsconfigPaths({ projects: ['./tsconfig.base.json'] }), standardDecoratorPlugin()],
   test: {
     execArgv: vitestExecArgv,
-    setupFiles: ['./scripts/test-proxy-environment.ts'],
+    setupFiles: ['./scripts/test-proxy-environment.ts', './scripts/test-network-guard.mjs'],
     include: [
       'scripts/session-snapshot-corpus.corpus.ts',
       // The assembled Web snapshot executes generated client bundles; source

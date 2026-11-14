@@ -13,6 +13,9 @@ try {
   // No .env — fine, the environment may already carry the variables.
 }
 
+// This lane is the opt-in live one: the test network guard stands aside for its workers and children.
+process.env.DSH_TEST_LIVE_NETWORK = '1'
+
 const DEFAULT_E2E_MAX_WORKERS = 4
 
 function positiveIntFromEnv(name: string, fallback: number): number {
@@ -39,7 +42,7 @@ export default defineConfig({
   plugins: [tsconfigPaths({ projects: ['./tsconfig.base.json'] }), standardDecoratorPlugin()],
   test: {
     execArgv: vitestExecArgv,
-    setupFiles: ['./scripts/test-proxy-environment.ts'],
+    setupFiles: ['./scripts/test-proxy-environment.ts', './scripts/test-network-guard.mjs'],
     // Explicit Node app owners only: apps/web/tests/*.e2e.ts needs the built
     // frontend dist and runs under vitest.web.config.ts (the test:web job).
     include: ['packages/*/*/tests/**/*.e2e.ts', 'apps/cli/tests/**/*.e2e.ts', 'apps/desktop/tests/**/*.e2e.ts'],

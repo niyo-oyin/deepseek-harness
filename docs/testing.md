@@ -42,6 +42,10 @@ An e2e assertion re-runs the command or re-reads the file externally; a keyword 
 
 - Every vitest config points vite-tsconfig-paths at `tsconfig.base.json`; bare workspace imports resolve to `src` ([layout](development.md#typescript-project-layout)), never through package `exports` to built `lib/` — stale artifacts there load a second copy of module singletons. Built artifacts are consumed only explicitly: `lib`-mode subprocesses and the built smokes below.
 
+## No real network outside the live lanes
+
+[`scripts/test-network-guard.mjs`](../scripts/test-network-guard.mjs) runs in every Vitest setup. It installs undici's `MockAgent` as the global dispatcher, which refuses any host other than loopback or this machine's own addresses before a socket opens. It also appends itself to `NODE_OPTIONS` as `--import=<file URL>`, so Node children that inherit the environment are guarded too. A spawner that builds a child environment from scratch must pass `NODE_OPTIONS` on. Only the real-API e2e lane and `DSH_SNAPSHOT=record` set `DSH_TEST_LIVE_NETWORK=1`, which turns the guard off. The guard does not cover `node:http`/`net`/`ws` clients, a request with its own dispatcher (LiveShare's relay), code that replaces the global dispatcher until it restores it, non-Node children, or the Web lanes, which have no setup.
+
 ## Test subprocess launch modes
 
 - CI and build-having test lanes run every profile or Cordis-config subprocess from built `lib/` through the shared dual-mode launcher. Do not hand-write `--import tsx` for these subprocesses.
