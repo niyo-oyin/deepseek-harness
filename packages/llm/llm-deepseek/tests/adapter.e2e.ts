@@ -1,4 +1,5 @@
 import * as Protocol from '@deepseek-ai/dsh-llm-deepseek'
+import { brandString } from '@deepseek-ai/dsh-brand'
 /**
  * Real Messages round trips require credentials; tool replacement also accepts DEEPSEEK_BASE_URL.
  * System-update checks additionally require DEEPSEEK_IN_HISTORY_MODEL.
@@ -9,7 +10,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context, LoggerLevel } from '@deepseek-ai/cordis'
 import LocalAttachments from '@deepseek-ai/dsh-attachment-local'
-import LlmRuntime, { createAssistantMessage, createDeveloperMessage, createSystemMessage, createToolResultMessage, ReasoningEffortId, ToolCallId } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { createAssistantMessage, createDeveloperMessage, createSystemMessage, createToolResultMessage, type ReasoningEffortId, type ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { Message } from '@deepseek-ai/dsh-llm'
 import * as Messages from '@deepseek-ai/dsh-llm-deepseek-api-key'
 import { DeepSeekFilesClient } from '../src/files-api.ts'
@@ -51,7 +52,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)('DeepSeek Messages real API', () 
       { type: 'tool-addition', toolName: tool.name },
     ] }))
     const response = await assemble(ctx.llm.stream(options({
-      model, reasoningEffort: ReasoningEffortId('high'),
+      model, reasoningEffort: brandString<ReasoningEffortId>('high'),
       messages: [user('Call lookup_value with key "answer" to obtain the value. Do not guess.'), ...updates],
       tools: [tool],
       toolHistory: { tools: mode === 'initially empty' ? [] : [{ ...tool, name: 'old_lookup' }], updates: updates.map(update => ({
@@ -69,7 +70,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)('DeepSeek Messages real API', () 
     const history: Message[] = [createSystemMessage('Reply to every user message with exactly PROMPT_FIRST.'), user('Answer now.')]
     const reply = async (expected: string) => {
       const saved = JSON.stringify(history)
-      const response = await assemble(ctx.llm.stream(options({ model, messages: history, reasoningEffort: ReasoningEffortId('high') })), model)
+      const response = await assemble(ctx.llm.stream(options({ model, messages: history, reasoningEffort: brandString<ReasoningEffortId>('high') })), model)
       expect(response.assembler.finish.kind).toBe('stop')
       expect(response.message.content.filter(block => block.type === 'text').map(block => block.text).join('')).toContain(expected)
       expect(JSON.stringify(history)).toBe(saved)
@@ -92,7 +93,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)('DeepSeek Messages real API', () 
     const files = new DeepSeekFilesClient({
       baseURL: Protocol.PUBLIC_BASE_URL, headers: { 'x-api-key': process.env.DEEPSEEK_API_KEY as string }, fetch: fetchImpl,
     })
-    const ownedFiles = new Set<ReturnType<typeof Protocol.DeepSeekFileId>>()
+    const ownedFiles = new Set<Protocol.DeepSeekFileId>()
     cleanups.push(async () => {
       for (const id of ownedFiles) await files.delete(id)
     })
@@ -102,7 +103,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)('DeepSeek Messages real API', () 
       if (url === `${Protocol.PUBLIC_BASE_URL}/v1/files` && init?.method === 'POST' && response.ok) {
         const file = await response.clone().json() as { id: string }
         uploads.push(file.id)
-        ownedFiles.add(Protocol.DeepSeekFileId(file.id))
+        ownedFiles.add(brandString<Protocol.DeepSeekFileId>(file.id))
       }
       if (url === `${Protocol.PUBLIC_BASE_URL}/v1/messages`) {
         expect(new Headers(init?.headers).get('anthropic-beta')).toBe(MESSAGES_FILES_BETA)
@@ -114,7 +115,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)('DeepSeek Messages real API', () 
     const attachment = await ctx.attachments.saveImage({ data: await readFile(new URL('fixtures/red.png', import.meta.url)), mediaType: 'image/png' })
     const message = user('What is the dominant color of this image? Reply with one English color word.')
     const request = options({
-      model: 'deepseek-flash', reasoningEffort: ReasoningEffortId('off'),
+      model: 'deepseek-flash', reasoningEffort: brandString<ReasoningEffortId>('off'),
       messages: [{ ...message, content: [...message.content, { type: 'image', attachment }] }],
     })
     for (let run = 0; run < 2; run++) {
@@ -125,7 +126,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)('DeepSeek Messages real API', () 
     expect(uploads).toHaveLength(1)
     expect(bodies).toHaveLength(2)
     expect(bodies.every(body => body.includes(`"file_id":"${uploads[0]}"`) && !body.includes('"type":"base64"'))).toBe(true)
-    const fileId = Protocol.DeepSeekFileId(uploads[0]!)
+    const fileId = brandString<Protocol.DeepSeekFileId>(uploads[0]!)
     const retrieved = await files.retrieve(fileId)
     expect(retrieved).toMatchObject({ id: fileId, bytes: attachment.bytes })
     expect(retrieved.expiresAt).toBeUndefined()
@@ -154,7 +155,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)('DeepSeek Messages real API', () 
 
   it.each(['off', 'low', 'high', 'max'])('streams text with %s effort', async (effort) => {
     const ctx = await boot()
-    const result = await assemble(ctx.llm.stream(options({ reasoningEffort: ReasoningEffortId(effort), temperature: 0, messages: [user('Reply with exactly PONG.')] })))
+    const result = await assemble(ctx.llm.stream(options({ reasoningEffort: brandString<ReasoningEffortId>(effort), temperature: 0, messages: [user('Reply with exactly PONG.')] })))
     expect(result.assembler.finish).toEqual({ kind: 'stop' })
     expect(result.message.content.filter(block => block.type === 'text').map(block => block.text).join('')).toContain('PONG')
     expect(result.assembler.usage?.outputTokens).toBeGreaterThan(0)
@@ -164,7 +165,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)('DeepSeek Messages real API', () 
   it('replays a JSON-persisted thinking/tool turn and an error result before continuing', async () => {
     const ctx = await boot()
     const history: Message[] = [user('Use lookup_value with key secret. If the tool returns an error, report its exact error text and stop.')]
-    const request = options({ messages: history, tools: [tool], reasoningEffort: ReasoningEffortId('high') })
+    const request = options({ messages: history, tools: [tool], reasoningEffort: brandString<ReasoningEffortId>('high') })
     const first = await assemble(ctx.llm.stream(request))
     expect(first.assembler.finish.kind).toBe('tool-calls')
     const calls = first.message.content.filter(block => block.type === 'tool-call')
@@ -183,7 +184,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)('DeepSeek Messages real API', () 
   it('continues saved Responses tool history with an empty trailing text item', async () => {
     const ctx = await boot()
     const calls = [0, 1, 2].map(index => ({
-      type: 'tool-call' as const, id: ToolCallId(`call_${index}|item_${index}`), name: 'lookup_value', arguments: '{"key":"secret"}',
+      type: 'tool-call' as const, id: brandString<ToolCallId>(`call_${index}|item_${index}`), name: 'lookup_value', arguments: '{"key":"secret"}',
     }))
     const history = [
       user('Look up the secret value.'),
@@ -192,7 +193,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)('DeepSeek Messages real API', () 
       user('Do not call tools. Reply with exactly EMPTY_TEXT_RECOVERED_731.'),
     ]
     const saved = JSON.stringify(history)
-    const response = await assemble(ctx.llm.stream(options({ model: 'deepseek-flash', messages: history, tools: [tool], reasoningEffort: ReasoningEffortId('off') })))
+    const response = await assemble(ctx.llm.stream(options({ model: 'deepseek-flash', messages: history, tools: [tool], reasoningEffort: brandString<ReasoningEffortId>('off') })))
     expect(response.assembler.finish.kind).toBe('stop')
     expect(response.message.content.filter(block => block.type === 'text').map(block => block.text).join('')).toContain('EMPTY_TEXT_RECOVERED_731')
     expect(JSON.stringify(history)).toBe(saved)
@@ -200,7 +201,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)('DeepSeek Messages real API', () 
 
   it('continues persisted foreign history containing malformed tool arguments', async () => {
     const ctx = await boot()
-    const callId = ToolCallId('historical_lookup')
+    const callId = brandString<ToolCallId>('historical_lookup')
     const history = [
       user('Look up the secret value.'),
       createAssistantMessage({ source: { provider: 'deepseek-official', model: 'deepseek-v4-flash' }, content: [
@@ -211,7 +212,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)('DeepSeek Messages real API', () 
     ]
     const saved = JSON.stringify(history)
     const restored = JSON.parse(saved) as Message[]
-    const response = await assemble(ctx.llm.stream(options({ messages: restored, tools: [tool], reasoningEffort: ReasoningEffortId('off') })))
+    const response = await assemble(ctx.llm.stream(options({ messages: restored, tools: [tool], reasoningEffort: brandString<ReasoningEffortId>('off') })))
     expect(response.assembler.finish.kind).toBe('stop')
     expect(response.message.content.filter(block => block.type === 'text').map(block => block.text).join('')).toContain('HISTORY_RECOVERED_731')
     expect(JSON.stringify(restored)).toBe(saved)
@@ -236,7 +237,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)('DeepSeek Messages real API', () 
     const warnings: unknown[][] = []
     ctx.logger.exporter({ levels: { default: LoggerLevel.WARN }, export: (message) => { if (message.type === 'warn') warnings.push(message.args) } })
     const history: Message[] = [user('Use lookup_value with key secret. Then reply with the exact tool result and stop.')]
-    const request = options({ messages: history, tools: [tool], reasoningEffort: ReasoningEffortId('high') })
+    const request = options({ messages: history, tools: [tool], reasoningEffort: brandString<ReasoningEffortId>('high') })
     const first = await assemble(ctx.llm.stream(request))
     expect(first.assembler.finish.kind).toBe('tool-calls')
     const calls = first.message.content.filter(block => block.type === 'tool-call')

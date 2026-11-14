@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-git-push-guard",
   "description": "Git push guard plugin: asks the user to confirm a shell command that runs git push before it starts",
-  "version": "0.2.2-rc.2",
+  "version": "0.2.2-rc.3",
   "publishConfig": {
     "access": "public"
   },

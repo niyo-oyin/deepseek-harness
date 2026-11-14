@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-secret-protection",
   "description": "Operating-system protection for secrets the DeepSeek Harness stores on disk",
-  "version": "0.2.2-rc.2",
+  "version": "0.2.2-rc.3",
   "publishConfig": {
     "access": "public"
   },

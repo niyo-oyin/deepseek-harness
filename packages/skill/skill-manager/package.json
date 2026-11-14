@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-skill-manager",
   "description": "Skill manager: the skill catalog for a management surface, and creating, changing, and removing skills in the user skill folders",
-  "version": "0.2.2-rc.2",
+  "version": "0.2.2-rc.3",
   "publishConfig": {
     "access": "public"
   },

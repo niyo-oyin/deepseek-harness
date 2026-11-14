@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-anonymous-user-id",
   "description": "Shared anonymous user identity for DeepSeek Harness feedback and provider request correlation",
-  "version": "0.2.2-rc.2",
+  "version": "0.2.2-rc.3",
   "publishConfig": {
     "access": "public"
   },

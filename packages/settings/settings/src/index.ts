@@ -238,7 +238,7 @@ export class SettingsForms extends Service {
     const ctx = ownerContext
     ctx.effect(() => () => { this.closed = true })
     ctx.on('app-boot/config-reload', () => { this.invalidate() })
-    void ctx.root.loader.await()
+    void ctx[Context.root].loader.await()
       .then(() => this.importLegacyDocument())
       .then(() => this.protectStoredSecrets())
       .catch((error: unknown) => { ctx.logger.error(error) })

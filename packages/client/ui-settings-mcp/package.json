@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-settings-mcp",
   "description": "MCP servers page on the dsh web client's Plugins page: add, edit, enable, test, restart, and remove the servers of the MCP manager",
-  "version": "0.2.2-rc.2",
+  "version": "0.2.2-rc.3",
   "publishConfig": {
     "access": "public"
   },

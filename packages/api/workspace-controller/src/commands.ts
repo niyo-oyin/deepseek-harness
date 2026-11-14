@@ -2,11 +2,12 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-sandbox'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type { Workspace } from '@deepseek-ai/dsh-workspace'
 import {
   WorkspaceActiveSessionError,
   WorkspaceArchivedSessionPinError,
-  WorkspaceId,
   WorkspaceMoveInvalidError,
   WorkspaceOrderInvalidError,
   WorkspaceUnknownSessionError,
@@ -105,8 +106,9 @@ export class WorkspaceCommands {
    */
   delete(request: WorkspaceDeleteRequest): Promise<WorkspaceDeleteValue> {
     return this.enqueue(async () => {
-      const path = this.ctx.workspaceRegistry.get(WorkspaceId(request.workspaceId))?.path
-      if (!await this.ctx.workspaceRegistry.delete(WorkspaceId(request.workspaceId))) {
+      const workspaceId = brandString<WorkspaceId>(request.workspaceId)
+      const path = this.ctx.workspaceRegistry.get(workspaceId)?.path
+      if (!await this.ctx.workspaceRegistry.delete(workspaceId)) {
         throw workspaceNotFound(request.workspaceId)
       }
       const sandbox = this.ctx.get('sandbox')
@@ -161,10 +163,10 @@ export class WorkspaceCommands {
   async insertBefore(request: WorkspaceInsertBeforeRequest): Promise<WorkspaceOrderValue> {
     try {
       const workspaceIds = await this.ctx.workspaceRegistry.insertBefore(
-        WorkspaceId(request.workspaceId),
+        brandString<WorkspaceId>(request.workspaceId),
         request.beforeWorkspaceId === undefined
           ? undefined
-          : WorkspaceId(request.beforeWorkspaceId),
+          : brandString<WorkspaceId>(request.beforeWorkspaceId),
       )
       return { workspaceIds: [...workspaceIds] }
     } catch (error) {
@@ -276,7 +278,7 @@ export class WorkspaceCommands {
   }
 
   private requireWorkspace(workspaceId: WorkspaceId): Workspace {
-    const workspace = this.ctx.workspaceRegistry.get(WorkspaceId(workspaceId))
+    const workspace = this.ctx.workspaceRegistry.get(brandString<WorkspaceId>(workspaceId))
     if (workspace === undefined) throw workspaceNotFound(workspaceId)
     return workspace
   }
