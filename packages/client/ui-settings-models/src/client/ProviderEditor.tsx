@@ -80,6 +80,8 @@ export interface ProviderEditorProps {
   baseURLEnv?: readonly string[]
   /** Authentication the route performs when its profile names no credential reference; absent when the adapter reports none. */
   nativeAuth?: LlmNativeAuth
+  /** Service tiers the profile's `serviceTier` may select, in offer order; absent when the route takes none. */
+  serviceTiers?: readonly string[]
   /** Redacted state of the profile's named credential reference, from the page snapshot. */
   credential?: CredentialInfo
   /** Redacted checks for the profile's named reference or the provider's native variables. */
@@ -108,6 +110,11 @@ export interface ProviderEditorProps {
    * still.
    */
   onBusyChange?: (busy: boolean) => void
+}
+
+/** Name a service tier in the section's language; a tier the page has no copy for shows its id. */
+function serviceTierLabel(t: ProviderEditorProps['t'], tier: string): string {
+  return tier === 'flex' ? t('serviceTierFlex') : tier === 'priority' ? t('serviceTierPriority') : tier
 }
 
 /** A user-section subtree as a plain draft object (absent → empty). */
@@ -591,6 +598,25 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
                 </div>
               )
               : null}
+            {props.serviceTiers === undefined
+              ? null
+              : (
+                <div className={styles['field']}>
+                  <span className={styles['fieldLabel']}>{t('serviceTier')}</span>
+                  <select
+                    className={`${styles['input']} ${styles['selectInput']}`}
+                    value={stringAt(draft, 'serviceTier') ?? ''}
+                    aria-label={t('serviceTier')}
+                    aria-describedby={`${props.provider}-service-tier-hint`}
+                    disabled={disabled}
+                    onChange={(event) => { setField('serviceTier', event.target.value) }}
+                  >
+                    <option value="">{t('serviceTierStandard')}</option>
+                    {props.serviceTiers.map(tier => <option key={tier} value={tier}>{serviceTierLabel(t, tier)}</option>)}
+                  </select>
+                  <span id={`${props.provider}-service-tier-hint`} className={styles['advancedHint']}>{t('serviceTierHint')}</span>
+                </div>
+              )}
             {retryDefaults === undefined
               ? null
               : (

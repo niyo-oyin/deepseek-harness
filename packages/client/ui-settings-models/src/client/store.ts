@@ -33,6 +33,7 @@ export interface ProviderDirectoryEntry {
   readonly defaultBaseURL?: string
   readonly baseURLEnv?: readonly string[]
   readonly nativeAuth?: LlmNativeAuth
+  readonly serviceTiers?: readonly string[]
   readonly error?: string
 }
 
@@ -58,6 +59,7 @@ export function joinProviderDirectory(
     ...entry.defaultBaseURL === undefined ? {} : { defaultBaseURL: entry.defaultBaseURL },
     ...entry.baseURLEnv === undefined ? {} : { baseURLEnv: entry.baseURLEnv },
     ...entry.nativeAuth === undefined ? {} : { nativeAuth: entry.nativeAuth },
+    ...entry.serviceTiers === undefined ? {} : { serviceTiers: entry.serviceTiers },
     ...entry.error === undefined ? {} : { error: entry.error },
   }))
   for (const provider of registered) {

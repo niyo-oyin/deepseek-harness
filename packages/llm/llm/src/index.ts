@@ -1217,6 +1217,7 @@ function detachDirectoryEntry(entry: LlmConfigurableProvider): LlmConfigurablePr
     ...entry,
     settingsPath: [...entry.settingsPath],
     ...entry.baseURLEnv === undefined ? {} : { baseURLEnv: [...entry.baseURLEnv] },
+    ...entry.serviceTiers === undefined ? {} : { serviceTiers: [...entry.serviceTiers] },
     ...(nativeAuth === undefined ? {} : { nativeAuth: { ...nativeAuth, env: [...nativeAuth.env] } }),
   }
 }

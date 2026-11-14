@@ -508,6 +508,12 @@ interface LlmConfigurableProvider {
   baseURLEnv?: readonly string[]
   /** Authentication the adapter performs when the profile names no credential reference; absent when it reports none. */
   nativeAuth?: LlmNativeAuth
+  /**
+   * Provider service tiers the profile's `serviceTier` field may select, in
+   * the order to offer them; absent when the route takes none. Omitting the
+   * field keeps the provider's standard tier.
+   */
+  serviceTiers?: readonly string[]
   /** Configuration diagnostic for repair; unaffected models may remain serviceable. */
   error?: string
 }

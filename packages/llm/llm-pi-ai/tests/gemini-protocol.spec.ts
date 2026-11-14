@@ -4,6 +4,7 @@ import { afterEach, expect, it, onTestFinished, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import LlmRuntime, { createMessage } from '@deepseek-ai/dsh-llm'
 import * as PiAi from '../src/index.ts'
+import { resolveProfiles } from '../src/config.ts'
 import { assemble } from './assemble.ts'
 import { closeMockServers, mockServer } from './mock-server.ts'
 
@@ -20,7 +21,7 @@ function reply(parts: Record<string, unknown>[]): { events: string[] } {
   })] }
 }
 
-async function gateway(url: string): Promise<Context> {
+async function gateway(url: string, profile: Partial<PiAi.PiAiProviderProfile> = {}): Promise<Context> {
   vi.stubEnv('GEMINI_GATEWAY_KEY', 'gemini-key')
   const ctx = new Context()
   onTestFinished(() => ctx.fiber.dispose())
@@ -30,6 +31,7 @@ async function gateway(url: string): Promise<Context> {
     api: 'google-generative-ai',
     baseURL: `${url}/v1beta`,
     models: [{ id: 'gemini-test' }],
+    ...profile,
   } } })
   return ctx
 }
@@ -80,4 +82,42 @@ it('returns a Gemini function call and replays it with its result', async () => 
     { role: 'model', parts: [{ functionCall: { name: 'count', args: { value: 2 } }, thoughtSignature: 'c2ln' }] },
     { role: 'user', parts: [{ functionResponse: { name: 'count' } }] },
   ] })
+})
+
+it('sends the service tier a route selects with a Gemini request and none without it', async () => {
+  const server = await mockServer([reply([{ text: 'later' }]), reply([{ text: 'now' }])])
+  const messages = [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'hi' }] }]
+
+  const flex = await gateway(server.url, { serviceTier: 'flex' })
+  const result = await assemble(flex, { provider: 'gemini-gateway', model: 'gemini-test', messages })
+  expect(result.message.content).toEqual([{ type: 'text', text: 'later' }])
+  expect(server.requests[0]).toMatchObject({ serviceTier: 'flex', contents: [{ role: 'user' }] })
+
+  const standard = await gateway(server.url)
+  await assemble(standard, { provider: 'gemini-gateway', model: 'gemini-test', messages })
+  expect(server.requests[1]).not.toHaveProperty('serviceTier')
+})
+
+it('offers service tiers only on a route with a Gemini model', async () => {
+  const ctx = await gateway('http://127.0.0.1:9')
+  const directory = ctx.llm.listConfigurableProviders()
+  expect(directory.find(entry => entry.provider === 'gemini-gateway')?.serviceTiers).toEqual(['flex', 'priority'])
+  expect(directory.find(entry => entry.provider === 'google')?.serviceTiers).toEqual(['flex', 'priority'])
+  expect(directory.find(entry => entry.provider === 'openai')).not.toHaveProperty('serviceTiers')
+})
+
+it('refuses a service tier on a route no Gemini model serves', () => {
+  expect(() => resolveProfiles({ gateway: {
+    api: 'openai-completions', baseURL: 'http://127.0.0.1:9/v1', models: [{ id: 'chat' }], serviceTier: 'flex',
+  } })).toThrow(/provider "gateway" sets serviceTier, which only a Gemini API route takes/)
+})
+
+it('waits at least fifteen minutes for a Flex response to start', () => {
+  const route = { api: 'google-generative-ai', baseURL: 'http://127.0.0.1:9/v1beta', models: [{ id: 'gemini-test' }] }
+  const idle = (profile: Partial<PiAi.PiAiProviderProfile>): number | undefined =>
+    resolveProfiles({ gemini: { ...route, ...profile } }).get('gemini')?.streamIdleTimeoutMs
+  expect(idle({})).toBe(300_000)
+  expect(idle({ serviceTier: 'flex' })).toBe(900_000)
+  expect(idle({ serviceTier: 'flex', streamIdleTimeoutMs: 1_200_000 })).toBe(1_200_000)
+  expect(idle({ serviceTier: 'priority' })).toBe(300_000)
 })

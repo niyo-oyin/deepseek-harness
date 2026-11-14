@@ -98,6 +98,8 @@ interface EditorTarget extends ProviderIdentity {
   baseURLEnv?: readonly string[]
   /** The route's native authentication (see {@link ProviderEditorProps.nativeAuth}). */
   nativeAuth?: LlmNativeAuth
+  /** Service tiers the route offers (see {@link ProviderEditorProps.serviceTiers}). */
+  serviceTiers?: readonly string[]
 }
 
 /** A dormant directory row the add card can adopt, with its registered namespace. */
@@ -132,6 +134,7 @@ function renderProviderEditor({ target, row, ...props }: ProviderEditorRenderPro
       {...target.defaultBaseURL === undefined ? {} : { defaultBaseURL: target.defaultBaseURL }}
       {...target.baseURLEnv === undefined ? {} : { baseURLEnv: target.baseURLEnv }}
       {...target.nativeAuth === undefined ? {} : { nativeAuth: target.nativeAuth }}
+      {...target.serviceTiers === undefined ? {} : { serviceTiers: target.serviceTiers }}
       {...row.credential === undefined ? {} : { credential: row.credential }}
       {...row.credentialChecks === undefined ? {} : { credentialChecks: row.credentialChecks }}
       {...props}
@@ -215,6 +218,7 @@ function targetOf(row: ProviderRow): EditorTarget {
     ...row.entry.defaultBaseURL === undefined ? {} : { defaultBaseURL: row.entry.defaultBaseURL },
     ...row.entry.baseURLEnv === undefined ? {} : { baseURLEnv: row.entry.baseURLEnv },
     ...row.entry.nativeAuth === undefined ? {} : { nativeAuth: row.entry.nativeAuth },
+    ...row.entry.serviceTiers === undefined ? {} : { serviceTiers: row.entry.serviceTiers },
   }
 }
 
@@ -647,6 +651,7 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                       {...draft.target.defaultBaseURL === undefined ? {} : { defaultBaseURL: draft.target.defaultBaseURL }}
                       {...draft.target.baseURLEnv === undefined ? {} : { baseURLEnv: draft.target.baseURLEnv }}
                       {...draft.target.nativeAuth === undefined ? {} : { nativeAuth: draft.target.nativeAuth }}
+                      {...draft.target.serviceTiers === undefined ? {} : { serviceTiers: draft.target.serviceTiers }}
                       {...addRow?.credentialChecks === undefined ? {} : { credentialChecks: addRow.credentialChecks }}
                       t={t}
                       readOnly={!state.writable}

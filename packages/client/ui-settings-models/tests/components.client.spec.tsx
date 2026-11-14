@@ -2667,3 +2667,29 @@ it.each([es, fr, de, ru, pt])('keeps capacity examples in translated validation 
     }
   }
 })
+
+it('offers the service tiers a route reports and stores the chosen one', async () => {
+  const namespace = piAiNamespaceWith('google', { apiKeyEnv: 'GEMINI_API_KEY' })
+  const { face, mutate } = scriptedFace({ mutate: vi.fn(() => Promise.resolve(remoteOk(namespace))) })
+  render(<ProviderEditor provider="google" displayName="google" namespace={namespace}
+    settingsPath={['providers', 'google']} schema={settingsSchema} operations={operationsWith(face)}
+    t={t} readOnly={false} onClose={vi.fn()} serviceTiers={['flex', 'priority']} />)
+  fireEvent.click(screen.getByText(en.customized))
+  const tier = screen.getByLabelText<HTMLSelectElement>(en.serviceTier)
+  expect([...tier.options].map(option => option.textContent))
+    .toEqual([en.serviceTierStandard, en.serviceTierFlex, en.serviceTierPriority])
+  expect(tier.value).toBe('')
+  expect(document.getElementById(tier.getAttribute('aria-describedby')!)?.textContent).toBe(en.serviceTierHint)
+  fireEvent.change(tier, { target: { value: 'flex' } })
+  fireEvent.click(screen.getByText(en.apply))
+  await waitFor(() => { expect(mutate).toHaveBeenCalled() })
+  expect(mutate.mock.calls).toEqual([[
+    'llm-pi-ai', [{ op: 'set', path: ['providers', 'google', 'serviceTier'], value: 'flex' }], 0,
+  ]])
+})
+
+it('shows no service tier on a route that reports none', () => {
+  renderPiAiEditor('openai', piAiNamespaceWith('openai', { apiKeyEnv: 'OPENAI_API_KEY' }))
+  fireEvent.click(screen.getByText(en.customized))
+  expect(screen.queryByLabelText(en.serviceTier)).toBeNull()
+})

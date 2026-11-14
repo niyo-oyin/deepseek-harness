@@ -66,7 +66,8 @@ import type {} from '@deepseek-ai/dsh-fs'
 import { deepEqualJson } from '@deepseek-ai/dsh-util-values'
 import { PiAiAdapter } from './adapter.ts'
 import { authContextFrom, credentialStoreFrom } from './auth.ts'
-import { catalogProvider, catalogProviderIds } from './catalog.ts'
+import { catalogModels, catalogProvider, catalogProviderIds } from './catalog.ts'
+import { SERVICE_TIERS, takesServiceTier } from './service-tier.ts'
 import { assertServiceable, Config, resolveProfiles } from './config.ts'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { discoverModels } from './discovery.ts'
@@ -150,7 +151,7 @@ function directoryEntries(
   settingsNs: string,
 ): LlmConfigurableProvider[] {
   const entries = new Map<string, LlmConfigurableProvider>()
-  const declare = (provider: string, displayName: string, error?: string): void => {
+  const declare = (provider: string, displayName: string, tiered: boolean, error?: string): void => {
     const installed = catalogProvider(provider)
     entries.set(provider, {
       provider,
@@ -162,11 +163,12 @@ function directoryEntries(
       // route is still one pi-ai knows.
       declared: installed === undefined,
       ...installed === undefined ? {} : providerDefaultsOf(installed),
+      ...tiered ? { serviceTiers: SERVICE_TIERS } : {},
       ...error === undefined ? {} : { error },
     })
   }
-  for (const provider of catalogProviderIds()) declare(provider, provider)
-  for (const [provider, profile] of profiles) declare(provider, profile.displayName, profile.catalogError)
+  for (const provider of catalogProviderIds()) declare(provider, provider, [...catalogModels(provider).values()].some(takesServiceTier))
+  for (const [provider, profile] of profiles) declare(provider, profile.displayName, profile.takesServiceTier, profile.catalogError)
   return [...entries.values()]
 }
 

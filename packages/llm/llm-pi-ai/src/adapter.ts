@@ -64,6 +64,7 @@ import { conversationUpdates, createModels, getSupportedThinkingLevels } from '.
 import { toStreamChunks } from './stream.ts'
 import { bindThinkingToPrefix } from './prefix-binding.ts'
 import type { PrefixDigests } from './prefix-binding.ts'
+import { takesServiceTier, withServiceTier } from './service-tier.ts'
 import type { PiAiRequestHeaderContext } from './types.ts'
 
 /**
@@ -472,6 +473,7 @@ export class PiAiAdapter extends LlmAdapter {
       const { context, digest } = bindThinkingToPrefix(converted, model.api, prefixDigests, manualThinking, (count) => {
         this.config.onThinkingOmitted?.({ provider: options.provider, model: options.model, count })
       })
+      const serviceTier = takesServiceTier(model) ? profile.serviceTier : undefined
       const events = snapshot.models.streamSimple(model, context, {
         ...profileOptions(profile, reasoning, apiKey),
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
@@ -479,6 +481,7 @@ export class PiAiAdapter extends LlmAdapter {
         ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },
         signal: watchdog.signal,
         headers: requestHeaders(profile.headers, options, model.baseUrl, this.config.prepareHeaders),
+        ...serviceTier === undefined ? {} : { onPayload: (payload: unknown) => withServiceTier(payload, serviceTier) },
       })
       const iterator = toStreamChunks(events, model.contextWindow, options.signal, model.id, digest)[Symbol.asyncIterator]()
       let exhausted = false

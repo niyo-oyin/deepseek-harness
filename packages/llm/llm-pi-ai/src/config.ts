@@ -42,6 +42,8 @@ import type {
   RouteCatalog,
 } from './catalog.ts'
 import { buildProvider, supportedProtocols } from './provider.ts'
+import { FLEX_STREAM_IDLE_TIMEOUT_MS, SERVICE_TIERS, takesServiceTier } from './service-tier.ts'
+import type { PiAiServiceTier } from './service-tier.ts'
 
 /** Default maximum idle interval while an adapter stream read is outstanding. */
 export const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 300_000
@@ -175,8 +177,18 @@ export interface PiAiProviderProfile {
   timeoutMs?: number
   /** WebSocket connection timeout in milliseconds. */
   websocketConnectTimeoutMs?: number
-  /** Maximum provider idle time while one stream read is outstanding. */
+  /**
+   * Maximum provider idle time while one stream read is outstanding. A route
+   * on the `flex` service tier waits at least fifteen minutes.
+   */
   streamIdleTimeoutMs?: number
+  /**
+   * Gemini API service tier for this route's requests; omission keeps the
+   * standard tier. `flex` costs less and may answer minutes later or be
+   * refused under load; `priority` costs more. Only a route with a model on
+   * the Gemini API protocol may set it.
+   */
+  serviceTier?: PiAiServiceTier
   /**
    * Maximum base64-encoded image payload per request. When a request's
    * accumulated images exceed it, the oldest images are replaced by text
@@ -218,6 +230,8 @@ export interface ResolvedPiAiProviderProfile
   apiKeyEnv?: CredentialRef
   /** Positive finite provider-idle interval after defaulting. */
   streamIdleTimeoutMs: number
+  /** Whether a model on this route speaks a protocol that takes a service tier. */
+  takesServiceTier: boolean
   /** Positive request-level base64 image payload bound after defaulting. */
   maxRequestImageBytes: number
   /** Positive request-level retained image count bound after defaulting. */
@@ -371,6 +385,7 @@ const profile = z.object({
   timeoutMs: z.natural(),
   websocketConnectTimeoutMs: z.natural(),
   streamIdleTimeoutMs: z.number().min(Number.MIN_VALUE).max(MAX_TIMER_DELAY_MS).default(DEFAULT_STREAM_IDLE_TIMEOUT_MS),
+  serviceTier: z.union(SERVICE_TIERS),
   maxRequestImageBytes: z.number().step(1).min(1).default(DEFAULT_MAX_REQUEST_IMAGE_BYTES),
   maxRequestImages: z.number().step(1).min(1).default(DEFAULT_MAX_REQUEST_IMAGES),
   imageOffloadCountQuantum: z.number().step(1).min(1),
@@ -457,14 +472,18 @@ export function resolveProfiles(
       throw new Error(`llm-pi-ai: provider "${provider}" has an empty displayName`)
     }
     assertValidHeaders(provider, source.headers)
-    const streamIdleTimeoutMs = source.streamIdleTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS
-    if (!Number.isFinite(streamIdleTimeoutMs)
-      || streamIdleTimeoutMs <= 0
-      || streamIdleTimeoutMs > MAX_TIMER_DELAY_MS) {
+    const configuredIdleTimeoutMs = source.streamIdleTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS
+    if (!Number.isFinite(configuredIdleTimeoutMs)
+      || configuredIdleTimeoutMs <= 0
+      || configuredIdleTimeoutMs > MAX_TIMER_DELAY_MS) {
       throw new Error(
         `llm-pi-ai: provider "${provider}" streamIdleTimeoutMs must be a positive finite number no greater than ${MAX_TIMER_DELAY_MS}`,
       )
     }
+    // A Flex response may not start for minutes; a shorter wait would abandon requests the provider still serves.
+    const streamIdleTimeoutMs = source.serviceTier === 'flex'
+      ? Math.max(configuredIdleTimeoutMs, FLEX_STREAM_IDLE_TIMEOUT_MS)
+      : configuredIdleTimeoutMs
     const maxRequestImageBytes = source.maxRequestImageBytes ?? DEFAULT_MAX_REQUEST_IMAGE_BYTES
     if (!Number.isInteger(maxRequestImageBytes) || maxRequestImageBytes <= 0) {
       throw new Error(`llm-pi-ai: provider "${provider}" maxRequestImageBytes must be a positive integer`)
@@ -513,6 +532,12 @@ export function resolveProfiles(
         defaultContextWindow: source.defaultContextWindow ?? DEFAULT_CONTEXT_WINDOW,
         defaultMaxTokens: source.defaultMaxTokens ?? DEFAULT_MAX_TOKENS,
       }, validation)
+      if (source.serviceTier !== undefined && !catalog.models.some(takesServiceTier)) {
+        throw new Error(
+          `llm-pi-ai: provider "${provider}" sets serviceTier, which only a Gemini API route takes;`
+          + ' none of its models speaks google-generative-ai',
+        )
+      }
       catalogError = catalog.modelErrors.values().next().value
       piProvider = buildProvider({
         provider,
@@ -533,6 +558,7 @@ export function resolveProfiles(
       displayName,
       ...apiKeyEnv === undefined ? {} : { apiKeyEnv: credentialRef(apiKeyEnv) },
       streamIdleTimeoutMs,
+      takesServiceTier: catalog?.models.some(takesServiceTier) ?? false,
       maxRequestImageBytes,
       maxRequestImages,
       imageOffloadCountQuantum,
