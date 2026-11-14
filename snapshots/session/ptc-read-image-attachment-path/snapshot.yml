@@ -7,4 +7,4 @@ header:
   class: ptc-image
 replay:
   override: true
-platform: posix
+platforms: [posix]

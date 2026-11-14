@@ -5,7 +5,7 @@ composition: partial-landlock
 recording: authored
 header:
   class: sandbox
-platform: posix
+platforms: [posix]
 permission: read-only
 environment:
   DSH_SNAPSHOT_MISSING_SANDBOX_RUNNER: '1'

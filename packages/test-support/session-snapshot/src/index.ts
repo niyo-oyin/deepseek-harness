@@ -62,7 +62,6 @@ export {
   type SnapshotInputManifest,
   type SnapshotManifest,
   type SnapshotPermission,
-  type SnapshotPlatform,
   type SnapshotProfile,
   type SnapshotRecording,
   type SnapshotReplayManifest,
@@ -72,6 +71,20 @@ export {
   type SnapshotSessionWriteMode,
   type SnapshotWorkspaceManifest,
 } from './manifest.ts'
+export {
+  resolveScenarioFile,
+  scenarioDirectoryOf,
+  scenarioFileNames,
+  scenarioLayoutProblems,
+  SNAPSHOT_CAPABILITIES,
+  SNAPSHOT_PLATFORMS,
+  snapshotPlatformOf,
+  snapshotSkipReason,
+  writeScenarioFile,
+  type SnapshotCapability,
+  type SnapshotHost,
+  type SnapshotPlatform,
+} from './platform.ts'
 export {
   assertPersistedSessionVersion,
   assertSessionFixtureVersion,

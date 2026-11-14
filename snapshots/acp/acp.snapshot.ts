@@ -65,8 +65,8 @@ const scenarios: Scenario[] = controllerCases.map((controller) => {
     headerClass: manifest.header.class,
     ...(systemPromptSource === undefined ? {} : { systemPromptSource }),
     ...(toolSchemasSource === undefined ? {} : { toolSchemasSource }),
-    ...(manifest.platform === 'posix' ? { posixOnly: true } : {}),
-    ...(manifest.platform === 'pwsh' ? { pwshOnly: true } : {}),
+    ...(manifest.platforms === undefined ? {} : { platforms: manifest.platforms }),
+    ...(manifest.requires === undefined ? {} : { requires: manifest.requires }),
     ...(controller.configPath === undefined ? {} : { configPath: controller.configPath }),
     ...manifest.permission === undefined && manifest.environment === undefined
       ? {}

@@ -5,6 +5,6 @@ composition: claude-code-mods
 recording: authored
 header:
   class: claude-code-mods
-platform: posix
+platforms: [posix]
 workspace:
   final: true

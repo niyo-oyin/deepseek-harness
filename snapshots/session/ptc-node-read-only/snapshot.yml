@@ -10,7 +10,7 @@ header:
   toolSchemasSource: ptc-turn
 replay:
   override: true
-platform: posix
+platforms: [posix]
 permission: read-only
 workspace:
   final: true

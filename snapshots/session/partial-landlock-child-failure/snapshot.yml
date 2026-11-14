@@ -8,5 +8,5 @@ header:
   pin: true
   systemPromptSource: text-turn
   toolSchemasSource: text-turn
-platform: posix
+platforms: [posix]
 permission: read-only

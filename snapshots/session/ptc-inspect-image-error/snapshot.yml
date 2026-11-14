@@ -5,6 +5,6 @@ composition: ptc-image
 recording: authored
 header:
   class: ptc-image
-platform: posix
+platforms: [posix]
 workspace:
   final: true

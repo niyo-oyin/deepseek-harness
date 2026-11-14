@@ -38,6 +38,11 @@ import {
   captureExpectedWorkspaceSnapshot,
   captureWorkspaceSnapshot,
   type CaptureWorkspaceSnapshotOptions,
+  resolveScenarioFile,
+  scenarioDirectoryOf,
+  scenarioFileNames,
+  SNAPSHOT_PLATFORMS,
+  writeScenarioFile,
   assertSessionFixtureVersion,
   formatSystemPromptSnapshot,
   formatToolSchemasSnapshot,
@@ -160,7 +165,7 @@ async function ownsReplayFixture(replayFixture: string | undefined): Promise<boo
   if (replayFixture === undefined) return false
   const fixture = parseSessionFixtureName(basename(replayFixture))
   if (fixture === undefined || fixture.index !== 0) return false
-  const manifestPath = join(dirname(replayFixture), 'snapshot.yml')
+  const manifestPath = join(scenarioDirectoryOf(replayFixture), 'snapshot.yml')
   if (!existsSync(manifestPath)) return false
   const manifest = parseSnapshotManifest(await readFile(manifestPath, 'utf8'), manifestPath)
   return manifest.session === undefined
@@ -175,12 +180,13 @@ async function ownsReplayFixture(replayFixture: string | undefined): Promise<boo
 export async function selectedSessionFixture(path: string, allowAbsent = false): Promise<string> {
   const requested = parseSessionFixtureName(basename(path))
   if (requested === undefined) return path
-  const entries = await readdir(dirname(path))
+  const scenarioDir = scenarioDirectoryOf(path)
+  const entries = scenarioFileNames(scenarioDir)
   if (allowAbsent && !entries.some(name => parseSessionFixtureName(name) !== undefined)) return path
   const selected = sessionFixtureFiles(entries)
     .find(candidate => candidate.index === requested.index)
   if (selected === undefined) throw new Error(`${path}: missing Session fixture role ${requested.index}`)
-  const resolved = join(dirname(path), selected.name)
+  const resolved = resolveScenarioFile(scenarioDir, selected.name)
   assertSessionFixtureVersion(selected.name, await readFile(resolved, 'utf8'))
   return resolved
 }
@@ -194,7 +200,7 @@ export async function selectedSessionFixture(path: string, allowAbsent = false):
 export function recordedSessionFixturePath(path: string, version: number): string {
   const fixture = parseSessionFixtureName(basename(path))
   if (fixture === undefined) throw new Error(`record harvest: invalid Session fixture path ${path}`)
-  return join(dirname(path), sessionFixtureName(fixture.index, version))
+  return join(scenarioDirectoryOf(path), sessionFixtureName(fixture.index, version))
 }
 
 /** The shipped composition under test: the dsh-base and dsh-web-app bundle patches over the empty profile root. */
@@ -1221,7 +1227,7 @@ async function assertReplaySession(
   harnessHome: string,
 ): Promise<void> {
   let expected = await readFile(fixturePath, 'utf8')
-  const fixtureDir = dirname(fixturePath)
+  const fixtureDir = scenarioDirectoryOf(fixturePath)
   const manifestPath = join(fixtureDir, 'snapshot.yml')
   const manifest = parseSnapshotManifest(await readFile(manifestPath, 'utf8'), manifestPath)
   let expectedPath = fixturePath
@@ -1243,7 +1249,7 @@ async function assertReplaySession(
   if (mode === 'refresh' && writesCurrentSessionFixtures(manifest, mode)) {
     expected = stableSessionFixture(session, expected, sessionCwd, harnessHome)
     expectedPath = recordedSessionFixturePath(fixturePath, session.header.version)
-    await writeFile(expectedPath, expected)
+    writeScenarioFile(fixtureDir, basename(expectedPath), expected)
   }
   const expectedHeader = JSON.parse(expected.split('\n').find(line => line.trim() !== '') ?? '{}') as {
     id?: unknown
@@ -1266,15 +1272,16 @@ async function assertReplaySession(
     .split(webUrl).join('{{webUrl}}')
   const prompts = normalizedSystemPrompts(actual, actualContext).map(normalizePrompt)
   const schemas = normalizedToolSchemas(actual, actualContext)
-  const promptPath = join(fixtureDir, 'system-prompt.expected.md')
-  const schemaPath = join(fixtureDir, 'tool-schemas.expected.json')
   const promptSnapshot = formatSystemPromptSnapshot(prompts[0] as string, prompts.slice(1))
   const schemaSnapshot = formatToolSchemasSnapshot(schemas[0] as unknown[], schemas.slice(1))
   if (mode === 'refresh') {
-    await Promise.all([writeFile(promptPath, promptSnapshot), writeFile(schemaPath, schemaSnapshot)])
+    writeScenarioFile(fixtureDir, 'system-prompt.expected.md', promptSnapshot)
+    writeScenarioFile(fixtureDir, 'tool-schemas.expected.json', schemaSnapshot)
   }
-  expect(promptSnapshot, `${fixturePath}: system-prompt pin`).toBe(await readFile(promptPath, 'utf8'))
-  expect(schemaSnapshot, `${fixturePath}: tool-schema pin`).toBe(await readFile(schemaPath, 'utf8'))
+  expect(promptSnapshot, `${fixturePath}: system-prompt pin`)
+    .toBe(await readFile(resolveScenarioFile(fixtureDir, 'system-prompt.expected.md'), 'utf8'))
+  expect(schemaSnapshot, `${fixturePath}: tool-schema pin`)
+    .toBe(await readFile(resolveScenarioFile(fixtureDir, 'tool-schemas.expected.json'), 'utf8'))
 }
 
 /**
@@ -1290,13 +1297,14 @@ async function assertReplaySession(
 export async function recordFixture(scaffold: WebScaffold, sessionId: SessionId, fixturePath: string): Promise<void> {
   const agent = scaffold.ctx.agents.get(sessionId)
   if (agent === undefined) throw new Error(`record harvest: no live agent for ${sessionId}`)
-  const manifestPath = join(dirname(fixturePath), 'snapshot.yml')
+  const scenarioDir = scenarioDirectoryOf(fixturePath)
+  const manifestPath = join(scenarioDir, 'snapshot.yml')
   const manifest = parseSnapshotManifest(await readFile(manifestPath, 'utf8'), manifestPath)
   if (!writesCurrentSessionFixtures(manifest, 'record')) return
-  const target = recordedSessionFixturePath(fixturePath, agent.session.header.version)
-  const existingPath = existsSync(target) ? target : fixturePath
+  const target = basename(recordedSessionFixturePath(fixturePath, agent.session.header.version))
+  const existingPath = existsSync(resolveScenarioFile(scenarioDir, target)) ? resolveScenarioFile(scenarioDir, target) : fixturePath
   const existing = existsSync(existingPath) ? await readFile(existingPath, 'utf8') : ''
-  await writeFile(target, stableSessionFixture(
+  writeScenarioFile(scenarioDir, target, stableSessionFixture(
     agent.session,
     existing,
     scaffold.workspaceCwd,
@@ -1726,14 +1734,16 @@ export async function captureExpandedTurnProcessAria(
  */
 export async function compareOrRefreshGolden(goldenPath: string, actual: string, mode: WebSnapshotMode): Promise<void> {
   const payload = `${actual}\n`
+  const scenarioDir = scenarioDirectoryOf(goldenPath)
   if (mode === 'refresh') {
-    await writeFile(goldenPath, payload)
+    writeScenarioFile(scenarioDir, basename(goldenPath), payload)
     return
   }
-  if (!existsSync(goldenPath)) {
+  const resolved = resolveScenarioFile(scenarioDir, basename(goldenPath))
+  if (!existsSync(resolved)) {
     throw new Error(`missing golden ${goldenPath} — run DSH_SNAPSHOT=refresh pnpm run test:web to generate it`)
   }
-  expect(payload).toBe(await readFile(goldenPath, 'utf8'))
+  expect(payload).toBe(await readFile(resolved, 'utf8'))
 }
 
 /**
@@ -1743,7 +1753,11 @@ export async function compareOrRefreshGolden(goldenPath: string, actual: string,
  * @param expected - the exact expected file inventory.
  */
 export async function assertFixtureInventory(dir: string, expected: string[]): Promise<void> {
-  const entries = (await readdir(dir)).sort()
+  const platformDirs: readonly string[] = SNAPSHOT_PLATFORMS
+  const entries = [...new Set([
+    ...(await readdir(dir)).filter(name => !platformDirs.includes(name)),
+    ...scenarioFileNames(dir),
+  ])].sort()
   const ownsManifest = entries.includes('snapshot.yml')
   const artifacts = entries.filter(name => name !== 'snapshot.yml')
   const roleInventory = (names: readonly string[]): string[] => [...new Set(names.map((name) => {
@@ -1765,7 +1779,7 @@ export async function assertFixtureInventory(dir: string, expected: string[]): P
     }
   }
   for (const entry of artifacts.filter(name => name.endsWith('.jsonl'))) {
-    const content = await readFile(join(dir, entry), 'utf8')
+    const content = await readFile(resolveScenarioFile(dir, entry), 'utf8')
     expect(scrubModelRequestBulk(content), `${dir}/${entry} carries prompt text or tool-schema bulk`).toBe(content)
     expect(redactSessionSnapshotIds([content]), `${dir}/${entry} carries unredacted identities`).toEqual([content])
   }

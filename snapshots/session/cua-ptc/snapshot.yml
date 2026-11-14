@@ -9,5 +9,5 @@ header:
   toolSchemasSource: ptc-turn
 replay:
   override: true
-platform: posix
+platforms: [posix]
 permission: danger-full-access

@@ -7,7 +7,7 @@ header:
   class: worktree
   pin: true
   systemPromptSource: text-turn
-platform: posix
+platforms: [posix]
 workspace:
   setup: git-worktree
   final: true

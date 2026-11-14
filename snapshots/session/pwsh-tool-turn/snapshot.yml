@@ -6,4 +6,4 @@ recording: live
 header:
   class: pwsh
   pin: true
-platform: pwsh
+requires: [pwsh]

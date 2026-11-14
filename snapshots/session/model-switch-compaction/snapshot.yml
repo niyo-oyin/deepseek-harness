@@ -3,7 +3,7 @@ scenario: model-switch-compaction
 profile: headless
 composition: model-switch-compaction
 recording: authored
-platform: posix
+platforms: [posix]
 header:
   class: model-switch-compaction
   pin: true

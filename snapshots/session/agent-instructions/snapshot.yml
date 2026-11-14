@@ -10,6 +10,6 @@ header:
   changes: 1
 replay:
   override: true
-platform: posix
+platforms: [posix]
 workspace:
   setup: delimiter-path

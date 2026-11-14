@@ -5,6 +5,6 @@ composition: apply-patch
 recording: live
 header:
   class: apply-patch
-platform: posix
+platforms: [posix]
 workspace:
   final: true

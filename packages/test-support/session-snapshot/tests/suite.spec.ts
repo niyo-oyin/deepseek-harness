@@ -1,4 +1,5 @@
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { resolveScenarioFile, SNAPSHOT_PLATFORMS, snapshotPlatformOf } from '../src/platform.ts'
 import { rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -36,11 +37,10 @@ import {
   parseToolSchemasSnapshot,
   refreshFixtureReplacements,
   reconcileCatalogCreationTimes,
-  scenarioSkipped,
+  scenarioSkipReason,
   restorePinnedToolSchemas,
   type SharedSnapshotClaim,
   stabilizeRefreshLog,
-  stdoutExpectedVariants,
   systemPromptPrecedesRequests,
   unknownToolCallIds,
 } from '../src/suite.ts'
@@ -146,24 +146,40 @@ afterAll(async () => {
   await rm(refreshDir, { recursive: true, force: true })
 })
 
+/**
+ * Make one fixture stale for this platform only: the other platform keeps the committed bytes, as a
+ * refresh on this platform must never touch them.
+ */
+function staleForThisPlatform(dir: string, scenario: string, name: string, content: string): void {
+  const shared = join(dir, scenario, name)
+  const other = SNAPSHOT_PLATFORMS.find(platform => platform !== snapshotPlatformOf()) as string
+  if (existsSync(shared)) {
+    mkdirSync(join(dir, scenario, other), { recursive: true })
+    writeFileSync(join(dir, scenario, other, name), readFileSync(shared))
+    rmSync(shared)
+  }
+  mkdirSync(join(dir, scenario, snapshotPlatformOf()), { recursive: true })
+  writeFileSync(join(dir, scenario, snapshotPlatformOf(), name), content)
+}
+
 function staleRefreshFixtures(dir: string): void {
-  writeFileSync(join(dir, 'plain-turn', 'stdout.expected.jsonl'), 'stale stdout\n')
-  writeFileSync(join(dir, 'pin-turn', 'system-prompt.expected.md'), 'STALE PROMPT\n')
-  writeFileSync(join(dir, 'pin-turn', 'tool-schemas.expected.json'), '{"initial":[{"name":"stale"}],"changes":[]}\n')
-  writeFileSync(join(dir, 'plain-turn', 'tool-schemas.1.expected.json'), '{"initial":[{"name":"stale-child"}],"changes":[]}\n')
-  writeFileSync(join(dir, 'plain-turn', 'system-prompt.1.expected.md'), 'STALE CHILD PROMPT\n')
+  staleForThisPlatform(dir, 'plain-turn', 'stdout.expected.jsonl', 'stale stdout\n')
+  staleForThisPlatform(dir, 'pin-turn', 'system-prompt.expected.md', 'STALE PROMPT\n')
+  staleForThisPlatform(dir, 'pin-turn', 'tool-schemas.expected.json', '{"initial":[{"name":"stale"}],"changes":[]}\n')
+  staleForThisPlatform(dir, 'plain-turn', 'tool-schemas.1.expected.json', '{"initial":[{"name":"stale-child"}],"changes":[]}\n')
+  staleForThisPlatform(dir, 'plain-turn', 'system-prompt.1.expected.md', 'STALE CHILD PROMPT\n')
 
   const plainBehaviorFile = join(dir, 'plain-turn', 'behavior.json')
   const plainBehavior = JSON.parse(readFileSync(plainBehaviorFile, 'utf8')) as Record<string, unknown>
   plainBehavior.echoEnv = true
   writeFileSync(plainBehaviorFile, `${JSON.stringify(plainBehavior, null, 2)}\n`)
 
-  writeFileSync(join(dir, 'blocked-log', 'session.jsonl'), [
+  staleForThisPlatform(dir, 'blocked-log', 'session.jsonl', [
     '{"type":"session","id":"99999999-8888-4777-8666-555555555555","createdAt":13,"cwd":"/rec/blocked-cwd","delegationDepth":0}',
     '{"type":"hook/result","seq":0,"time":13,"data":{"decision":"stale","durationMs":99}}',
     '',
   ].join('\n'))
-  writeFileSync(join(dir, 'authored-error', 'session.jsonl'), [
+  staleForThisPlatform(dir, 'authored-error', 'session.jsonl', [
     '{"type":"session","id":"77777777-8888-4777-8666-555555555555","createdAt":13,"cwd":"/rec/error-cwd","delegationDepth":0}',
     '{"type":"turn/end","seq":0,"time":9,"data":{"error":"stale"}}',
     '',
@@ -186,22 +202,22 @@ describe('defineAcpSnapshotSuite: refresh mode', () => {
 
 describe('defineAcpSnapshotSuite: refresh write-back', () => {
   it('rewrites stdout and comparable logs from a replay-mode child run', () => {
-    const stdout = readFileSync(join(refreshDir, 'plain-turn', 'stdout.expected.jsonl'), 'utf8')
+    const stdout = readFileSync(resolveScenarioFile(join(refreshDir, 'plain-turn'), 'stdout.expected.jsonl'), 'utf8')
     expect(stdout).not.toContain('stale stdout')
     expect(stdout).toContain('env:{\\"mode\\":\\"replay\\"')
     expect(stdout).not.toContain('\\"mode\\":\\"refresh\\"')
     // The scenario's own env layer reached the subprocess.
     expect(stdout).toContain('\\"permissionMode\\":\\"never\\"')
 
-    const blocked = readFileSync(join(refreshDir, 'blocked-log', 'session.v3.jsonl'), 'utf8')
+    const blocked = readFileSync(resolveScenarioFile(join(refreshDir, 'blocked-log'), 'session.v3.jsonl'), 'utf8')
     expect(blocked).toContain('"decision":"block"')
     expect(blocked).not.toContain('"decision":"stale"')
 
-    const authored = readFileSync(join(refreshDir, 'authored-error', 'session.v3.jsonl'), 'utf8')
+    const authored = readFileSync(resolveScenarioFile(join(refreshDir, 'authored-error'), 'session.v3.jsonl'), 'utf8')
     expect(authored).toContain('"message":"model exploded"')
     expect(authored).not.toContain('"error":"stale"')
 
-    expect(readFileSync(join(refreshDir, 'pin-turn', 'system-prompt.expected.md'), 'utf8')).toBe([
+    expect(readFileSync(resolveScenarioFile(join(refreshDir, 'pin-turn'), 'system-prompt.expected.md'), 'utf8')).toBe([
       'SYS PROMPT',
       '',
       '<!-- system/message change 1 -->',
@@ -211,18 +227,18 @@ describe('defineAcpSnapshotSuite: refresh write-back', () => {
       'NEW PROMPT LINE',
       '',
     ].join('\n'))
-    const schemas = parseToolSchemasSnapshot(readFileSync(join(refreshDir, 'pin-turn', 'tool-schemas.expected.json'), 'utf8'))
+    const schemas = parseToolSchemasSnapshot(readFileSync(resolveScenarioFile(join(refreshDir, 'pin-turn'), 'tool-schemas.expected.json'), 'utf8'))
     expect(schemas.initial.map(tool => (tool as { name: string }).name)).toEqual(['t1'])
     expect(schemas.changes.map(set => set.map(tool => (tool as { name: string }).name))).toEqual([['t1', 't2']])
-    const childSchemas = readFileSync(join(refreshDir, 'plain-turn', 'tool-schemas.1.expected.json'), 'utf8')
+    const childSchemas = readFileSync(resolveScenarioFile(join(refreshDir, 'plain-turn'), 'tool-schemas.1.expected.json'), 'utf8')
     expect(childSchemas).toContain('"name": "child-only"')
     expect(childSchemas).not.toContain('stale-child')
-    const childPrompt = readFileSync(join(refreshDir, 'plain-turn', 'system-prompt.1.expected.md'), 'utf8')
+    const childPrompt = readFileSync(resolveScenarioFile(join(refreshDir, 'plain-turn'), 'system-prompt.1.expected.md'), 'utf8')
     expect(childPrompt).toBe('SYS PROMPT\n\nCHILD GUIDANCE\n')
 
-    const pinSession = readFileSync(join(refreshDir, 'pin-turn', 'session.v3.jsonl'), 'utf8')
+    const pinSession = readFileSync(resolveScenarioFile(join(refreshDir, 'pin-turn'), 'session.v3.jsonl'), 'utf8')
     expect(pinSession).toContain('"cwd":"{{cwd}}"')
-    expect(readFileSync(join(refreshDir, 'pin-turn', 'session.jsonl'), 'utf8'))
+    expect(readFileSync(resolveScenarioFile(join(refreshDir, 'pin-turn'), 'session.jsonl'), 'utf8'))
       .not.toContain('"version"')
     expect(pinSession.match(/"text":"{{system}}"/g)).toHaveLength(2)
     expect(pinSession).toContain('"surfaceOp":{"op":"replace","startSeq":2,"endSeq":2}')
@@ -629,35 +645,10 @@ describe('Session generation filename helpers', () => {
   })
 })
 
-describe('stdoutExpectedVariants', () => {
-  const scenario: Scenario = {
-    name: 'windows-native',
-    hasModelTurn: true,
-    recorded: true,
-    pinsNativeWindowsStdout: true,
-  }
-
-  it('adds the native sidecar after the shared golden on Windows', () => {
-    expect(stdoutExpectedVariants(scenario, 'win32')).toEqual([
-      { file: 'stdout.expected.jsonl', cwdPathMode: 'canonical' },
-      { file: 'stdout.expected.windows.jsonl', cwdPathMode: 'native' },
-    ])
-  })
-
-  it('keeps only the shared golden on other platforms or without the declaration', () => {
-    expect(stdoutExpectedVariants(scenario, 'linux')).toEqual([
-      { file: 'stdout.expected.jsonl', cwdPathMode: 'canonical' },
-    ])
-    expect(stdoutExpectedVariants({ ...scenario, pinsNativeWindowsStdout: false }, 'win32')).toEqual([
-      { file: 'stdout.expected.jsonl', cwdPathMode: 'canonical' },
-    ])
-  })
-})
-
-describe('scenarioSkipped', () => {
+describe('scenarioSkipReason', () => {
   const authored: Scenario = { name: 'authored', hasModelTurn: true, recorded: false }
-  const posix: Scenario = { name: 'posix-cancel', hasModelTurn: true, recorded: false, posixOnly: true }
-  const pwsh: Scenario = { name: 'pwsh-tool', hasModelTurn: true, recorded: false, pwshOnly: true }
+  const posix: Scenario = { name: 'posix-cancel', hasModelTurn: true, recorded: false, platforms: ['posix'] }
+  const pwsh: Scenario = { name: 'pwsh-tool', hasModelTurn: true, recorded: false, requires: ['pwsh'] }
   const retained: Scenario = {
     name: 'retained-v0',
     hasModelTurn: true,
@@ -666,27 +657,27 @@ describe('scenarioSkipped', () => {
   }
 
   it('skips authored scenarios only while recording', () => {
-    expect(scenarioSkipped(authored, true, 'linux')).toBe(true)
-    expect(scenarioSkipped(authored, false, 'linux')).toBe(false)
+    expect(scenarioSkipReason(authored, true, 'linux')).toBe('not live-recordable')
+    expect(scenarioSkipReason(authored, false, 'linux')).toBeUndefined()
   })
 
   it('skips a retained historical generation while recording but replays and refreshes it', () => {
-    expect(scenarioSkipped(retained, true, 'linux')).toBe(true)
-    expect(scenarioSkipped(retained, false, 'linux')).toBe(false)
+    expect(scenarioSkipReason(retained, true, 'linux')).toBe('not live-recordable')
+    expect(scenarioSkipReason(retained, false, 'linux')).toBeUndefined()
   })
 
-  it('skips posixOnly scenarios on Windows and nowhere else', () => {
-    expect(scenarioSkipped(posix, false, 'win32')).toBe(true)
-    expect(scenarioSkipped(posix, false, 'linux')).toBe(false)
-    expect(scenarioSkipped(posix, false, 'darwin')).toBe(false)
-    expect(scenarioSkipped(authored, false, 'win32')).toBe(false)
+  it('skips a POSIX-only scenario on Windows, with the reason, and nowhere else', () => {
+    expect(scenarioSkipReason(posix, false, 'win32')).toBe('runs on posix only')
+    expect(scenarioSkipReason(posix, false, 'linux')).toBeUndefined()
+    expect(scenarioSkipReason(posix, false, 'darwin')).toBeUndefined()
+    expect(scenarioSkipReason(authored, false, 'win32')).toBeUndefined()
   })
 
-  it('skips pwshOnly scenarios when the host lacks pwsh, and runs them otherwise', () => {
-    expect(scenarioSkipped(pwsh, false, 'linux', false)).toBe(true)
-    expect(scenarioSkipped(pwsh, false, 'win32', true)).toBe(false)
-    expect(scenarioSkipped(pwsh, false, 'linux', true)).toBe(false)
-    expect(scenarioSkipped(authored, false, 'linux', false)).toBe(false)
+  it('skips a scenario that requires pwsh when the host lacks it, and runs it otherwise', () => {
+    expect(scenarioSkipReason(pwsh, false, 'linux', false)).toBe('requires pwsh')
+    expect(scenarioSkipReason(pwsh, false, 'win32', true)).toBeUndefined()
+    expect(scenarioSkipReason(pwsh, false, 'linux', true)).toBeUndefined()
+    expect(scenarioSkipReason(authored, false, 'linux', false)).toBeUndefined()
   })
 })
 

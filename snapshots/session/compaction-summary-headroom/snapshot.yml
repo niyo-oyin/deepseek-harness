@@ -3,7 +3,7 @@ scenario: compaction-summary-headroom
 profile: headless
 composition: compaction-summary-headroom
 recording: authored
-platform: posix
+platforms: [posix]
 header:
   class: compaction-summary-headroom
   pin: true

@@ -37,6 +37,7 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-session-snapshot": "workspace:*",
     "@deepseek-ai/dsh-system-prompt": "workspace:*"
   }
 }

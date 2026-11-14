@@ -3,7 +3,7 @@ scenario: model-switch-overflow-recovery
 profile: headless
 composition: model-switch-overflow-recovery
 recording: authored
-platform: posix
+platforms: [posix]
 header:
   class: model-switch-overflow-recovery
   pin: true

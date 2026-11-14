@@ -15,6 +15,10 @@ import {
   scrubToolSchemas,
   sessionFixtureFiles,
   sessionFixtureNames,
+  resolveScenarioFile,
+  scenarioFileNames,
+  scenarioLayoutProblems,
+  SNAPSHOT_PLATFORMS,
   type SnapshotManifest,
 } from '@deepseek-ai/dsh-session-snapshot'
 import { assertSnapshotCorpusPolicy } from './session-snapshot-corpus-policy.ts'
@@ -107,7 +111,12 @@ it('reserves the snapshot test suffix for recorded-session adapters', async () =
   expect(await snapshotNamedTests()).toEqual([...snapshotAdapters])
 })
 
-it('keeps every recorded session owned, pinned, redacted, and header-scrubbed', async () => {
+it('keeps every scenario directory in the per-platform layout', async () => {
+  for (const { key, dir } of await scenarios()) expect(scenarioLayoutProblems(dir), `${key}: per-platform layout`).toEqual([])
+})
+
+it.each(SNAPSHOT_PLATFORMS)('keeps every recorded session owned, pinned, redacted, and header-scrubbed on %s', async (platform) => {
+  const has = (dir: string, name: string): boolean => existsSync(resolveScenarioFile(dir, name, platform))
   const all = await scenarios()
   const byKey = new Map(all.map(scenario => [scenario.key, scenario]))
   const pinByClass = new Map<string, Scenario>()
@@ -124,24 +133,24 @@ it('keeps every recorded session owned, pinned, redacted, and header-scrubbed', 
     const classKey = `${manifest.composition}/${manifest.header.class}`
     expect(pinByClass.has(classKey), `${key}: missing composition/header pin ${classKey}`).toBe(true)
 
-    const localEntries = await readdir(dir)
+    const localEntries = scenarioFileNames(dir, platform)
     const localSessionNames = localEntries.filter(name => parseSessionFixtureName(name) !== undefined)
     if (manifest.session === undefined) {
       expect(localSessionNames.length, `${key}: owner Session fixture`).toBeGreaterThan(0)
     } else {
       expect(localSessionNames, `${key}: borrower must not own a Session fixture`).toEqual([])
       const target = resolve(dir, manifest.session.source)
-      expect(existsSync(target), `${key}: session source`).toBe(true)
+      expect(has(dirname(target), basename(target)), `${key}: session source`).toBe(true)
       const targetDir = await realpath(dirname(target))
       const sourceKey = relative(corpusRoot, targetDir).split(/[/\\]/).join('/')
       expect(byKey.has(sourceKey), `${key}: session source must name a corpus owner`).toBe(true)
       expect(byKey.get(sourceKey)?.manifest.session, `${key}: session source cannot chain through a borrower`).toBeUndefined()
-      const [selectedParent] = sessionFixtureFiles(await readdir(targetDir))
+      const [selectedParent] = sessionFixtureFiles(scenarioFileNames(targetDir, platform))
       expect(basename(target), `${key}: session source must name the owner's selected parent generation`)
         .toBe(selectedParent?.name)
     }
 
-    expect(existsSync(join(dir, 'replay.override.json')), `${key}: replay override presence`)
+    expect(has(dir, 'replay.override.json'), `${key}: replay override presence`)
       .toBe(manifest.replay?.override === true)
     expect(existsSync(join(dir, 'workspace.expected')), `${key}: final workspace presence`)
       .toBe(manifest.workspace?.final === true)
@@ -151,10 +160,10 @@ it('keeps every recorded session owned, pinned, redacted, and header-scrubbed', 
       expect(existsSync(join(expectedRoot, EMPTY_WORKSPACE_MARKER)), `${key}: empty workspace marker`)
         .toBe(expectedWorkspace.length === 0)
     }
-    expect(existsSync(join(dir, 'input.json')), `${key}: executable input metadata is ACP-only`)
+    expect(has(dir, 'input.json'), `${key}: executable input metadata is ACP-only`)
       .toBe(scenario.profile === 'acp')
     if (scenario.profile !== 'acp') {
-      expect(existsSync(join(dir, 'stdout.expected.jsonl')), `${key}: ACP transcript outside ACP`).toBe(false)
+      expect(has(dir, 'stdout.expected.jsonl'), `${key}: ACP transcript outside ACP`).toBe(false)
     }
 
     if (manifest.header.pin === true) {
@@ -162,8 +171,8 @@ it('keeps every recorded session owned, pinned, redacted, and header-scrubbed', 
       const schemaSource = byKey.get(referencedScenario(scenario, manifest.header.toolSchemasSource ?? scenario.name))
       expect(promptSource, `${key}: system-prompt source`).toBeDefined()
       expect(schemaSource, `${key}: tool-schema source`).toBeDefined()
-      expect(existsSync(join((promptSource as Scenario).dir, 'system-prompt.expected.md')), `${key}: system-prompt sidecar`).toBe(true)
-      expect(existsSync(join((schemaSource as Scenario).dir, 'tool-schemas.expected.json')), `${key}: tool-schema sidecar`).toBe(true)
+      expect(has((promptSource as Scenario).dir, 'system-prompt.expected.md'), `${key}: system-prompt sidecar`).toBe(true)
+      expect(has((schemaSource as Scenario).dir, 'tool-schemas.expected.json'), `${key}: tool-schema sidecar`).toBe(true)
       for (const [field, source] of [
         ['system-prompt.expected.md', promptSource],
         ['tool-schemas.expected.json', schemaSource],
@@ -177,9 +186,9 @@ it('keeps every recorded session owned, pinned, redacted, and header-scrubbed', 
 
     if (manifest.session !== undefined) continue
     const names = sessionFixtureNames(localEntries)
-    const fixtures = await Promise.all(names.map(name => readFile(join(dir, name), 'utf8')))
+    const fixtures = await Promise.all(names.map(name => readFile(resolveScenarioFile(dir, name, platform), 'utf8')))
     for (const name of localSessionNames) {
-      assertSessionFixtureVersion(name, await readFile(join(dir, name), 'utf8'))
+      assertSessionFixtureVersion(name, await readFile(resolveScenarioFile(dir, name, platform), 'utf8'))
     }
     expect(redactSessionSnapshotIds(fixtures), `${key}: typed identity fixed point`).toEqual(fixtures)
     for (const [index, fixture] of fixtures.entries()) {
@@ -188,20 +197,20 @@ it('keeps every recorded session owned, pinned, redacted, and header-scrubbed', 
     }
     for (const index of manifest.header.childSystemPrompts ?? []) {
       expect(names[index], `${key}: child prompt index ${index}`).toBeDefined()
-      expect(existsSync(join(dir, `system-prompt.${index}.expected.md`)), `${key}: child prompt sidecar ${index}`).toBe(true)
+      expect(has(dir, `system-prompt.${index}.expected.md`), `${key}: child prompt sidecar ${index}`).toBe(true)
     }
     for (const index of manifest.header.childToolSchemas ?? []) {
       expect(names[index], `${key}: child schema index ${index}`).toBeDefined()
-      expect(existsSync(join(dir, `tool-schemas.${index}.expected.json`)), `${key}: child schema sidecar ${index}`).toBe(true)
+      expect(has(dir, `tool-schemas.${index}.expected.json`), `${key}: child schema sidecar ${index}`).toBe(true)
     }
   }
 })
 
-it('keeps V3 replay input plus bounded declared historical migration coverage', async () => {
+it.each(SNAPSHOT_PLATFORMS)('keeps V3 replay input plus bounded declared historical migration coverage on %s', async (platform) => {
   const owners = (await scenarios()).filter(scenario => scenario.manifest.session === undefined)
   const inventory = await Promise.all(owners.map(async scenario => ({
     key: scenario.key,
-    selectedVersions: sessionFixtureFiles(await readdir(scenario.dir)).map(file => file.version),
+    selectedVersions: sessionFixtureFiles(scenarioFileNames(scenario.dir, platform)).map(file => file.version),
     ...(scenario.manifest.sessionFormat === undefined
       ? {}
       : { retained: scenario.manifest.sessionFormat }),

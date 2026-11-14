@@ -2,6 +2,7 @@
 
 import { isAbsolute } from 'node:path'
 import * as yaml from 'js-yaml'
+import { SNAPSHOT_CAPABILITIES, SNAPSHOT_PLATFORMS, type SnapshotCapability, type SnapshotPlatform } from './platform.ts'
 
 /** Public `dsh` profile used to control a recorded-session scenario. */
 export type SnapshotProfile = 'headless' | 'sdk' | 'sdk-minimal' | 'acp' | 'web'
@@ -35,8 +36,6 @@ export interface SnapshotReplayManifest {
   override: true
 }
 
-/** Host requirements for a scenario's process-level controller. */
-export type SnapshotPlatform = 'posix' | 'pwsh'
 
 /** Deployment permission preset selected before the scenario starts. */
 export type SnapshotPermission = 'read-only' | 'workspace-write' | 'danger-full-access'
@@ -108,8 +107,10 @@ export interface SnapshotManifest {
   header?: SnapshotHeaderManifest
   /** Exceptional replay metadata absent for ordinary successful recordings. */
   replay?: SnapshotReplayManifest
-  /** Optional host requirement; portable scenarios omit it. */
-  platform?: SnapshotPlatform
+  /** Platforms the scenario runs on; portable scenarios omit it. */
+  platforms?: SnapshotPlatform[]
+  /** Host capabilities the scenario needs on every platform it runs on. */
+  requires?: SnapshotCapability[]
   /** Explicit process fallback permission preset. */
   permission?: SnapshotPermission
   /** Test-only string environment additions needed by the declared composition. */
@@ -145,7 +146,6 @@ export function writesCurrentSessionFixtures(
 
 const PROFILES = new Set<SnapshotProfile>(['headless', 'sdk', 'sdk-minimal', 'acp', 'web'])
 const RECORDINGS = new Set<SnapshotRecording>(['live', 'authored'])
-const PLATFORMS = new Set<SnapshotPlatform>(['posix', 'pwsh'])
 const PERMISSIONS = new Set<SnapshotPermission>(['read-only', 'workspace-write', 'danger-full-access'])
 const SESSION_FORMAT_COVERAGE = new Set<SnapshotSessionFormatCoverage>([
   'multi-hop',
@@ -162,6 +162,18 @@ function record(value: unknown, label: string): Record<string, unknown> {
     throw new Error(`${label} must be a mapping`)
   }
   return value as Record<string, unknown>
+}
+
+function uniqueMembers<T extends string>(value: unknown, allowed: readonly T[], label: string): T[] {
+  if (!Array.isArray(value) || value.length === 0) throw new Error(`${label} must be a non-empty list`)
+  const members = value.map((item) => {
+    if (typeof item !== 'string' || !(allowed as readonly string[]).includes(item)) {
+      throw new Error(`${label} entries must be ${allowed.join(' or ')}`)
+    }
+    return item as T
+  })
+  if (new Set(members).size !== members.length) throw new Error(`${label} must not repeat an entry`)
+  return members
 }
 
 function exactKeys(value: Record<string, unknown>, allowed: readonly string[], label: string): void {
@@ -216,7 +228,8 @@ export function parseSnapshotManifest(source: string, path = 'snapshot.yml'): Sn
       'recording',
       'header',
       'replay',
-      'platform',
+      'platforms',
+      'requires',
       'permission',
       'environment',
       'workspace',
@@ -290,13 +303,12 @@ export function parseSnapshotManifest(source: string, path = 'snapshot.yml'): Sn
       replay = { override: true }
     }
 
-    let platform: SnapshotPlatform | undefined
-    if (root.platform !== undefined) {
-      if (typeof root.platform !== 'string' || !PLATFORMS.has(root.platform as SnapshotPlatform)) {
-        throw new Error('manifest.platform must be posix or pwsh')
-      }
-      platform = root.platform as SnapshotPlatform
-    }
+    const platforms = root.platforms === undefined
+      ? undefined
+      : uniqueMembers(root.platforms, SNAPSHOT_PLATFORMS, 'manifest.platforms')
+    const requires = root.requires === undefined
+      ? undefined
+      : uniqueMembers(root.requires, SNAPSHOT_CAPABILITIES, 'manifest.requires')
 
     let permission: SnapshotPermission | undefined
     if (root.permission !== undefined) {
@@ -417,7 +429,8 @@ export function parseSnapshotManifest(source: string, path = 'snapshot.yml'): Sn
       ...(recording === undefined ? {} : { recording }),
       ...(header === undefined ? {} : { header }),
       ...(replay === undefined ? {} : { replay }),
-      ...(platform === undefined ? {} : { platform }),
+      ...(platforms === undefined ? {} : { platforms }),
+      ...(requires === undefined ? {} : { requires }),
       ...(permission === undefined ? {} : { permission }),
       ...(environment === undefined ? {} : { environment }),
       ...(workspace === undefined ? {} : { workspace }),

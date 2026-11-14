@@ -15,7 +15,15 @@ import { tmpdir } from 'node:os'
 import { basename, delimiter, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { spawnSync } from 'node:child_process'
+import { resolvePwshPath } from '@deepseek-ai/dsh-pwsh-local'
 import {
+  resolveScenarioFile,
+  scenarioFileNames,
+  snapshotPlatformOf,
+  snapshotSkipReason,
+  writeScenarioFile,
+  type SnapshotHost,
   assertPersistedSessionVersion,
   assertSessionFixtureVersion,
   captureExpectedWorkspaceSnapshot,
@@ -309,6 +317,11 @@ async function collectCorpus(): Promise<CorpusScenario[]> {
 }
 
 const corpus = await collectCorpus()
+const host: SnapshotHost = {
+  platform: snapshotPlatformOf(),
+  capabilities: new Set(spawnSync(resolvePwshPath(), ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', '$true']).status === 0
+    ? ['pwsh'] : []),
+}
 const scenarioByKey = new Map(corpus.map(scenario => [scenario.key, scenario]))
 const sdkScenarios = corpus
   .filter(scenario => scenario.manifest.profile === 'sdk' || scenario.manifest.profile === 'sdk-minimal')
@@ -444,9 +457,9 @@ function contextOfContents(contents: readonly string[]): NormalizeContext {
 }
 
 async function fixtureFiles(scenario: CorpusScenario): Promise<string[]> {
-  const names = sessionFixtureNames(await readdir(scenario.dir))
+  const names = sessionFixtureNames(scenarioFileNames(scenario.dir))
   return Promise.all(names.map(async (name) => {
-    const path = join(scenario.dir, name)
+    const path = resolveScenarioFile(scenario.dir, name)
     assertSessionFixtureVersion(name, await readFile(path, 'utf8'))
     return path
   }))
@@ -813,7 +826,7 @@ async function runScenario(scenario: CorpusScenario): Promise<{
     ...legacySdkCompositions.has(scenario.manifest.composition) ? [legacySdkContextPatch] : [],
     ...authoredPatches(scenario, !recording),
     ...assertions.patches ?? [],
-    ...scenario.name === 'session-resume' && !recording ? [join(scenario.dir, 'replay.cordis.yml')] : [],
+    ...scenario.name === 'session-resume' && !recording ? [resolveScenarioFile(scenario.dir, 'replay.cordis.yml')] : [],
   ]
     .map((patch, index) => materializeProfilePatch(patch, cwd, scenario.manifest.profile, patchRoot, index))
   let childSessionsRoot: string | undefined
@@ -866,7 +879,7 @@ async function runScenario(scenario: CorpusScenario): Promise<{
       ...childFixtures.length > 0 ? { DSH_SNAPSHOT_CHILD_FILES: childFixtures.join(delimiter) } : {},
     },
     ...!recording && scenario.manifest.replay?.override === true
-      ? { DSH_SNAPSHOT_OVERRIDE: join(scenario.dir, 'replay.override.json') }
+      ? { DSH_SNAPSHOT_OVERRIDE: resolveScenarioFile(scenario.dir, 'replay.override.json') }
       : {},
     ...scenario.manifest.environment,
     ...assertions.environment,
@@ -1125,14 +1138,14 @@ async function writeHeaderSidecars(
     const prompts = normalizedSystemPrompts(primary.content, ctx)
     const schemas = normalizedToolSchemas(primary.content, ctx)
     if (scenario.manifest.header.systemPromptSource === undefined) {
-      await writeFile(
-        join(scenario.dir, 'system-prompt.expected.md'),
+      writeScenarioFile(
+        scenario.dir, 'system-prompt.expected.md',
         formatSystemPromptSnapshot(prompts[0] as string, prompts.slice(1)),
       )
     }
     if (scenario.manifest.header.toolSchemasSource === undefined) {
-      await writeFile(
-        join(scenario.dir, 'tool-schemas.expected.json'),
+      writeScenarioFile(
+        scenario.dir, 'tool-schemas.expected.json',
         formatToolSchemasSnapshot(schemas[0] as unknown[], schemas.slice(1)),
       )
     }
@@ -1141,7 +1154,7 @@ async function writeHeaderSidecars(
     const child = ordered[index]
     if (child === undefined) throw new Error(`${scenario.name}: no child ${index} prompt to snapshot`)
     const prompts = normalizedSystemPrompts(child.content, ctx)
-    await writeFile(join(scenario.dir, `system-prompt.${index}.expected.md`), formatSystemPromptSnapshot(
+    writeScenarioFile(scenario.dir, `system-prompt.${index}.expected.md`, formatSystemPromptSnapshot(
       prompts[0] as string,
       prompts.slice(1),
     ))
@@ -1150,7 +1163,7 @@ async function writeHeaderSidecars(
     const child = ordered[index]
     if (child === undefined) throw new Error(`${scenario.name}: no child ${index} schemas to snapshot`)
     const schemas = normalizedToolSchemas(child.content, ctx)
-    await writeFile(join(scenario.dir, `tool-schemas.${index}.expected.json`), formatToolSchemasSnapshot(
+    writeScenarioFile(scenario.dir, `tool-schemas.${index}.expected.json`, formatToolSchemasSnapshot(
       schemas[0] as unknown[],
       schemas.slice(1),
     ))
@@ -1174,8 +1187,8 @@ async function verifyHeaders(
   })
   const promptOwner = sourceScenario(pin, pin.manifest.header.systemPromptSource)
   const schemaOwner = sourceScenario(pin, pin.manifest.header.toolSchemasSource)
-  const prompt = await readFile(join(promptOwner.dir, 'system-prompt.expected.md'), 'utf8')
-  const schemas = parseToolSchemasSnapshot(await readFile(join(schemaOwner.dir, 'tool-schemas.expected.json'), 'utf8'))
+  const prompt = await readFile(resolveScenarioFile(promptOwner.dir, 'system-prompt.expected.md'), 'utf8')
+  const schemas = parseToolSchemasSnapshot(await readFile(resolveScenarioFile(schemaOwner.dir, 'tool-schemas.expected.json'), 'utf8'))
   const schemaSets = [schemas.initial, ...schemas.changes]
   const reconstructed = pinned.map((header, index) => restorePinnedToolSchemas(
     header,
@@ -1185,10 +1198,10 @@ async function verifyHeaders(
   const childPrompts = new Map<number, string>()
   const childSchemas = new Map<number, unknown[][]>()
   for (const index of scenario.manifest.header.childSystemPrompts ?? []) {
-    childPrompts.set(index, await readFile(join(scenario.dir, `system-prompt.${index}.expected.md`), 'utf8'))
+    childPrompts.set(index, await readFile(resolveScenarioFile(scenario.dir, `system-prompt.${index}.expected.md`), 'utf8'))
   }
   for (const index of scenario.manifest.header.childToolSchemas ?? []) {
-    const child = parseToolSchemasSnapshot(await readFile(join(scenario.dir, `tool-schemas.${index}.expected.json`), 'utf8'))
+    const child = parseToolSchemasSnapshot(await readFile(resolveScenarioFile(scenario.dir, `tool-schemas.${index}.expected.json`), 'utf8'))
     childSchemas.set(index, [child.initial, ...child.changes])
   }
 
@@ -1220,7 +1233,7 @@ async function verifyHeaders(
 
 describe('TypeScript SDK snapshots over the jsonrpc runtime', () => {
   it('restores the retained V3 max-tokens recording after an interrupted next-turn restart', async () => {
-    const path = join(corpusRoot, 'sdk/max-tokens-continue/session.v3.jsonl')
+    const path = resolveScenarioFile(join(corpusRoot, 'sdk/max-tokens-continue'), 'session.v3.jsonl')
     const fixture = await readFile(path, 'utf8')
     const rows = records(fixture)
     const turnEnd = rows.findIndex(row => row.type === 'turn/end')
@@ -1238,15 +1251,17 @@ describe('TypeScript SDK snapshots over the jsonrpc runtime', () => {
   })
 
   for (const scenario of sdkScenarios) {
-    const scenarioTest = recording
-      && (scenario.manifest.recording === 'authored' || scenario.manifest.sessionFormat !== undefined)
-      ? it.skip
-      : it
-    scenarioTest(`${mode}s ${scenario.name} through dsh --profile ${scenario.manifest.profile}`, async () => {
+    const skipReason = snapshotSkipReason(scenario.manifest, host)
+      ?? (recording && (scenario.manifest.recording === 'authored' || scenario.manifest.sessionFormat !== undefined)
+        ? 'not live-recordable' : undefined)
+    const scenarioTest = skipReason === undefined ? it : it.skip
+    const skipLabel = skipReason === undefined ? '' : ` (skipped: ${skipReason})`
+    scenarioTest(`${mode}s ${scenario.name} through dsh --profile ${scenario.manifest.profile}${skipLabel}`, async () => {
       const scenarioDir = scenario.dir
       const retained = scenario.manifest.sessionFormat !== undefined
-      const notificationsExpectedPath = join(scenarioDir, retained ? 'notifications.current.expected.jsonl' : 'notifications.expected.jsonl')
-      const resultExpectedPath = join(scenarioDir, 'result.expected.json')
+      const notificationsExpectedName = retained ? 'notifications.current.expected.jsonl' : 'notifications.expected.jsonl'
+      const notificationsExpectedPath = resolveScenarioFile(scenarioDir, notificationsExpectedName)
+      const resultExpectedPath = resolveScenarioFile(scenarioDir, 'result.expected.json')
       const hasWireGoldens = existsSync(notificationsExpectedPath) || existsSync(resultExpectedPath)
       const assertions = SDK_ASSERTIONS[scenario.name] ?? {}
       const writesSessionFixtures = writesCurrentSessionFixtures(scenario.manifest, sessionWriteMode)
@@ -1254,7 +1269,7 @@ describe('TypeScript SDK snapshots over the jsonrpc runtime', () => {
       let files = await fixtureFiles(scenario)
       const replayContents = await Promise.all(files.map(file => readFile(file, 'utf8')))
       if (!recording && !refreshing) {
-        const writerFiles = (await readdir(scenarioDir)).filter(name => /^writer(?:\.[1-9]\d*)?\.expected\.jsonl$/u.test(name)).sort()
+        const writerFiles = scenarioFileNames(scenarioDir).filter(name => /^writer(?:\.[1-9]\d*)?\.expected\.jsonl$/u.test(name)).sort()
         expect(writerFiles, 'native writer oracle inventory').toEqual(retained
           ? files.map((_, index) => writerSnapshotName(index)).sort() : [])
       }
@@ -1668,7 +1683,7 @@ describe('TypeScript SDK snapshots over the jsonrpc runtime', () => {
       }
 
       let expectedContents = retained && !refreshing
-        ? await Promise.all(files.map((_, index) => readFile(join(scenarioDir, writerSnapshotName(index)), 'utf8')))
+        ? await Promise.all(files.map((_, index) => readFile(resolveScenarioFile(scenarioDir, writerSnapshotName(index)), 'utf8')))
         : replayContents
 
       if (recording) {
@@ -1697,11 +1712,11 @@ describe('TypeScript SDK snapshots over the jsonrpc runtime', () => {
       }
 
       if (writesSessionFixtures || refreshing && retained) {
-        const outputFiles = ordered.map((log, index) => join(scenarioDir, retained
+        const outputNames = ordered.map((log, index) => retained
           ? writerSnapshotName(index)
-          : sessionFixtureName(index, sessionHeaderVersion(log.content, `harvested Session ${index}`))))
-        await Promise.all(expectedContents.map((stable, index) => writeFile(outputFiles[index] as string, stable)))
-        files = outputFiles
+          : sessionFixtureName(index, sessionHeaderVersion(log.content, `harvested Session ${index}`)))
+        for (const [index, stable] of expectedContents.entries()) writeScenarioFile(scenarioDir, outputNames[index] as string, stable)
+        files = outputNames.map(name => resolveScenarioFile(scenarioDir, name))
         await writeHeaderSidecars(scenario, ordered, actualContext)
       }
 
@@ -1735,16 +1750,16 @@ describe('TypeScript SDK snapshots over the jsonrpc runtime', () => {
         const normalizedNotifications = normalizeNotifications(notifications, actualContext)
         const normalizedResult = normalizeResult(finalResult, actualContext)
         if (recording || refreshing) {
-          await writeFile(notificationsExpectedPath, normalizedNotifications)
-          await writeFile(resultExpectedPath, normalizedResult)
+          writeScenarioFile(scenarioDir, notificationsExpectedName, normalizedNotifications)
+          writeScenarioFile(scenarioDir, 'result.expected.json', normalizedResult)
         }
-        const expectedNotifications = await readFile(notificationsExpectedPath, 'utf8')
+        const expectedNotifications = await readFile(resolveScenarioFile(scenarioDir, notificationsExpectedName), 'utf8')
         expect(
           notificationComparisonRecords(normalizedNotifications, ordered.map(log => log.content)),
           `${scenario.name}: notifications`,
         )
           .toEqual(notificationComparisonRecords(expectedNotifications, expectedContents))
-        expect(normalizedResult).toBe(await readFile(resultExpectedPath, 'utf8'))
+        expect(normalizedResult).toBe(await readFile(resolveScenarioFile(scenarioDir, 'result.expected.json'), 'utf8'))
       }
 
       if (scenario.name === 'system-prompt-in-history') {

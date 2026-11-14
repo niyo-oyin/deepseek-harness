@@ -6,6 +6,6 @@ recording: live
 header:
   class: apply-patch
   pin: true
-platform: posix
+platforms: [posix]
 workspace:
   final: true

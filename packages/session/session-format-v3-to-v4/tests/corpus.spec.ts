@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
+import { resolveScenarioFile, scenarioFileNames } from '@deepseek-ai/dsh-session-snapshot'
 import { expect, it } from 'vitest'
 import { createSessionFormatCatalogWithChildren, historicalSessionFormatCatalog } from '@deepseek-ai/dsh-session-format-catalog'
 import { isSessionFormatJsonObject, type SessionFormatArtifact, type SessionFormatEvent, type SessionFormatJsonObject, type SessionFormatJsonValue } from '@deepseek-ai/dsh-session-format'
@@ -10,7 +11,7 @@ import { liftToolResult } from '../src/tool-role.ts'
 const root = resolve(import.meta.dirname, '../../../..')
 
 function restoreFixture(path: string): SessionFormatArtifact {
-  const records = readFileSync(join(root, path), 'utf8').trim().split('\n').map(line => JSON.parse(line) as Record<string, SessionFormatJsonValue>)
+  const records = readFileSync(resolveScenarioFile(join(root, dirname(path)), basename(path)), 'utf8').trim().split('\n').map(line => JSON.parse(line) as Record<string, SessionFormatJsonValue>)
   const header = records.shift()!
   if (typeof header['cwd'] === 'string' && header['cwd'].startsWith('{{cwd}}')) header['cwd'] = resolve('snapshot-cwd')
   const restore = historicalSessionFormatCatalog.createRestore(header, { recovery: 'strict', validation: 'current' })
@@ -53,7 +54,7 @@ it('refuses recorded parent/child clock conflicts and migrates consistent copies
     const base = `snapshots/${profile}`
     for (const dir of readdirSync(join(root, base), { withFileTypes: true })) {
       if (!dir.isDirectory()) continue
-      const names = readdirSync(join(root, base, dir.name)).filter(name => /^session(?:\.\d+)?\.v3\.jsonl$/.test(name))
+      const names = scenarioFileNames(join(root, base, dir.name)).filter(name => /^session(?:\.\d+)?\.v3\.jsonl$/.test(name))
       if (names.length < 2) continue
       const logs = names.map(name => ({ path: `${base}/${dir.name}/${name}`, artifact: restoreFixture(`${base}/${dir.name}/${name}`) }))
       for (const parent of logs) {

@@ -50,6 +50,7 @@
   },
   "devDependencies": {
     "@deepseek-ai/dsh-brand": "workspace:*",
+    "@deepseek-ai/dsh-session-snapshot": "workspace:*",
     "@deepseek-ai/cordis": "workspace:~"
   }
 }

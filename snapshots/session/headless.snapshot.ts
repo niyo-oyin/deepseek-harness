@@ -47,6 +47,14 @@ import {
   stabilizeRefreshLog,
   tokenizeSessionFixtureCwd,
   writesCurrentSessionFixtures,
+  resolveScenarioFile,
+  scenarioFileNames,
+  SNAPSHOT_PLATFORMS,
+  snapshotPlatformOf,
+  snapshotSkipReason,
+  writeScenarioFile,
+  type SnapshotHost,
+  type SnapshotPlatform,
   type HarvestedLog,
   type NormalizeContext,
   type SnapshotManifest,
@@ -224,10 +232,12 @@ async function persistedSessions(cwd: string): Promise<SessionLog[]> {
   })
 }
 
-async function fixtureSessions(scenario: HeadlessScenario, selectedFiles?: readonly string[]): Promise<string[]> {
-  const files = selectedFiles ?? sessionFixtureNames(await readdir(scenario.dir))
+async function fixtureSessions(
+  scenario: HeadlessScenario, selectedFiles?: readonly string[], platform: SnapshotPlatform = snapshotPlatformOf(),
+): Promise<string[]> {
+  const files = selectedFiles ?? sessionFixtureNames(scenarioFileNames(scenario.dir, platform))
   return Promise.all(files.map(async (file) => {
-    const content = await readFile(join(scenario.dir, file), 'utf8')
+    const content = await readFile(resolveScenarioFile(scenario.dir, file, platform), 'utf8')
     assertSessionFixtureVersion(file, content)
     return content
   }))
@@ -240,9 +250,9 @@ function recordingFixtureNames(names: readonly string[], recordingMode: Snapshot
 }
 
 async function primaryFixtureFile(dir: string): Promise<string> {
-  const [primary] = sessionFixtureNames(await readdir(dir))
+  const [primary] = sessionFixtureNames(scenarioFileNames(dir))
   if (primary === undefined) throw new Error(`${dir}: missing parent Session fixture`)
-  const content = await readFile(join(dir, primary), 'utf8')
+  const content = await readFile(resolveScenarioFile(dir, primary), 'utf8')
   assertSessionFixtureVersion(primary, content)
   return primary
 }
@@ -270,7 +280,7 @@ async function writeSessionFixtures(
     return scrubSessionSnapshot(prepareSessionSnapshotFixtureForComparison(stable))
   })
   const output = redactSessionSnapshotIds(stabilizeFixtureMessageIds(fresh, prior))
-  await Promise.all(output.map((content, index) => writeFile(join(scenario.dir, names[index] as string), content)))
+  for (const [index, content] of output.entries()) writeScenarioFile(scenario.dir, names[index] as string, content)
   return output
 }
 
@@ -295,35 +305,23 @@ async function writeHeaderSidecars(
     const promptOwner = scenario.manifest.header.systemPromptSource ?? scenario.name
     const schemaOwner = scenario.manifest.header.toolSchemasSource ?? scenario.name
     if (promptOwner === scenario.name) {
-      await writeFile(
-        join(scenario.dir, 'system-prompt.expected.md'),
-        formatSystemPromptSnapshot(prompts[0] as string, prompts.slice(1)),
-      )
+      writeScenarioFile(scenario.dir, 'system-prompt.expected.md', formatSystemPromptSnapshot(prompts[0] as string, prompts.slice(1)))
     }
     if (schemaOwner === scenario.name) {
-      await writeFile(
-        join(scenario.dir, 'tool-schemas.expected.json'),
-        formatToolSchemasSnapshot(schemas[0] as unknown[], schemas.slice(1)),
-      )
+      writeScenarioFile(scenario.dir, 'tool-schemas.expected.json', formatToolSchemasSnapshot(schemas[0] as unknown[], schemas.slice(1)))
     }
   }
   for (const index of scenario.manifest.header.childSystemPrompts ?? []) {
     const child = actualLogs[index]
     if (child === undefined) throw new Error(`${scenario.name}: write-back has no child ${index} prompt`)
     const prompts = normalizedSystemPrompts(child.content, ctx)
-    await writeFile(
-      join(scenario.dir, `system-prompt.${index}.expected.md`),
-      formatSystemPromptSnapshot(prompts[0] as string, prompts.slice(1)),
-    )
+    writeScenarioFile(scenario.dir, `system-prompt.${index}.expected.md`, formatSystemPromptSnapshot(prompts[0] as string, prompts.slice(1)))
   }
   for (const index of scenario.manifest.header.childToolSchemas ?? []) {
     const child = actualLogs[index]
     if (child === undefined) throw new Error(`${scenario.name}: write-back has no child ${index} schemas`)
     const schemas = normalizedToolSchemas(child.content, ctx)
-    await writeFile(
-      join(scenario.dir, `tool-schemas.${index}.expected.json`),
-      formatToolSchemasSnapshot(schemas[0] as unknown[], schemas.slice(1)),
-    )
+    writeScenarioFile(scenario.dir, `tool-schemas.${index}.expected.json`, formatToolSchemasSnapshot(schemas[0] as unknown[], schemas.slice(1)))
   }
 }
 
@@ -612,6 +610,7 @@ const hasPwsh = spawnSync(
   ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', '$true'],
   { encoding: 'utf8' },
 ).status === 0
+const host: SnapshotHost = { platform: snapshotPlatformOf(), capabilities: new Set(hasPwsh ? ['pwsh'] : []) }
 const scenarioByName = new Map(scenarios.map(scenario => [scenario.name, scenario]))
 const compositionOwners = new Map<string, HeadlessScenario>()
 const headerPins = new Map<string, HeadlessScenario>()
@@ -1008,7 +1007,7 @@ async function verifyProviderCwdResume(
 
 async function verifyHeaders(scenario: HeadlessScenario, actualLogs: readonly SessionLog[], ctx: NormalizeContext): Promise<void> {
   const pin = pinOf(scenario)
-  const fixture = await readFile(join(pin.dir, await primaryFixtureFile(pin.dir)), 'utf8')
+  const fixture = await readFile(resolveScenarioFile(pin.dir, await primaryFixtureFile(pin.dir)), 'utf8')
   const pinned = normalizedHeaders(fixture, fixtureContext(fixture))
   const changes = pin.manifest.header.changes ?? 0
   expect(pinned, `${scenario.name}: pin header count`).toHaveLength(1 + changes)
@@ -1018,8 +1017,8 @@ async function verifyHeaders(scenario: HeadlessScenario, actualLogs: readonly Se
   if (promptOwner === undefined || schemaOwner === undefined) {
     throw new Error(`${scenario.name}: header sidecar source is not a headless scenario`)
   }
-  const prompt = await readFile(join(promptOwner.dir, 'system-prompt.expected.md'), 'utf8')
-  const schemas = parseToolSchemasSnapshot(await readFile(join(schemaOwner.dir, 'tool-schemas.expected.json'), 'utf8'))
+  const prompt = await readFile(resolveScenarioFile(promptOwner.dir, 'system-prompt.expected.md'), 'utf8')
+  const schemas = parseToolSchemasSnapshot(await readFile(resolveScenarioFile(schemaOwner.dir, 'tool-schemas.expected.json'), 'utf8'))
   const schemaSets = [schemas.initial, ...schemas.changes]
   expect(schemaSets, `${scenario.name}: pin tool-schema count`).toHaveLength(pinned.length)
   const reconstructed = pinned.map((header, index) => restorePinnedToolSchemas(
@@ -1030,10 +1029,10 @@ async function verifyHeaders(scenario: HeadlessScenario, actualLogs: readonly Se
   const childPrompts = new Map<number, string>()
   const childSchemas = new Map<number, unknown[][]>()
   for (const index of scenario.manifest.header.childSystemPrompts ?? []) {
-    childPrompts.set(index, await readFile(join(scenario.dir, `system-prompt.${index}.expected.md`), 'utf8'))
+    childPrompts.set(index, await readFile(resolveScenarioFile(scenario.dir, `system-prompt.${index}.expected.md`), 'utf8'))
   }
   for (const index of scenario.manifest.header.childToolSchemas ?? []) {
-    const child = parseToolSchemasSnapshot(await readFile(join(scenario.dir, `tool-schemas.${index}.expected.json`), 'utf8'))
+    const child = parseToolSchemasSnapshot(await readFile(resolveScenarioFile(scenario.dir, `tool-schemas.${index}.expected.json`), 'utf8'))
     childSchemas.set(index, [child.initial, ...child.changes])
   }
 
@@ -1105,22 +1104,22 @@ describe('headless recorded-session snapshots', () => {
     expect(violations).toEqual([])
   })
 
-  it('stores session-owned inputs with typed redaction and no ACP transcript', async () => {
+  it.each(SNAPSHOT_PLATFORMS)('stores session-owned inputs with typed redaction and no ACP transcript on %s', async (platform) => {
     for (const scenario of scenarios) {
-      const fixtures = await fixtureSessions(scenario)
+      const fixtures = await fixtureSessions(scenario, undefined, platform)
       expect(redactSessionSnapshotIds(fixtures), `${scenario.name}: identity redaction fixed point`).toEqual(fixtures)
       for (const fixture of fixtures) {
         expect(scrubSystemPrompts(fixture), `${scenario.name}: system prompt stays in a sidecar`).toBe(fixture)
         expect(scrubToolSchemas(fixture), `${scenario.name}: tool schemas stay in a sidecar`).toBe(fixture)
       }
-      expect(existsSync(join(scenario.dir, 'input.json')), `${scenario.name}: task comes from session JSONL`).toBe(false)
-      expect(existsSync(join(scenario.dir, 'stdout.expected.jsonl')), `${scenario.name}: no ACP transcript`).toBe(false)
+      expect(scenarioFileNames(scenario.dir, platform), `${scenario.name}: task comes from session JSONL`).not.toContain('input.json')
+      expect(scenarioFileNames(scenario.dir, platform), `${scenario.name}: no ACP transcript`).not.toContain('stdout.expected.jsonl')
     }
   })
 
   it('keeps packed chunk rows logically equal to their unpacked recording', async () => {
     const packedDir = join(snapshotsRoot, 'packed-chunks')
-    const packed = await readFile(join(packedDir, await primaryFixtureFile(packedDir)), 'utf8')
+    const packed = await readFile(resolveScenarioFile(packedDir, await primaryFixtureFile(packedDir)), 'utf8')
     const [header, ...rows] = records(packed)
     const packedTypes = new Set(['text-chunks', 'reasoning-chunks', 'tool-call-chunks'])
     expect([...new Set(rows.filter(row => packedTypes.has(String(row.type))).map(row => row.type))].sort())
@@ -1314,7 +1313,7 @@ describe('headless recorded-session snapshots', () => {
   })
 
   it('session-reference-spill validates captured generations before adapting its fresh source expectation', async () => {
-    const fixture = await readFile(join(snapshotsRoot, 'session-reference-spill/session.v3.jsonl'), 'utf8')
+    const fixture = await readFile(resolveScenarioFile(join(snapshotsRoot, 'session-reference-spill'), 'session.v3.jsonl'), 'utf8')
     const recordedVersion = sessionHeaderVersion(fixture, 'session-reference-spill fixture')
     expect(recordedVersion).toBe(3)
     const normalized = normalizeSessionSnapshots([fixture], contextOf([fixture]))[0]!
@@ -1327,11 +1326,11 @@ describe('headless recorded-session snapshots', () => {
     expect(() => sessionReferenceSpillExpected(actual, normalized, SESSION_FORMAT_VERSION))
       .toThrow('recorded reference-source generation')
     expect(spillReferenceSource(records(normalized), 'unchanged fixture').capturedFormatVersion).toBe(3)
-    expect(await readFile(join(snapshotsRoot, 'session-reference-spill/session.v3.jsonl'), 'utf8')).toBe(fixture)
+    expect(await readFile(resolveScenarioFile(join(snapshotsRoot, 'session-reference-spill'), 'session.v3.jsonl'), 'utf8')).toBe(fixture)
   })
 
   it('rejects a native writer that still emits the recorded tool-result wrapper', async () => {
-    const fixture = await readFile(join(snapshotsRoot, 'tool-call-turn/session.v3.jsonl'), 'utf8')
+    const fixture = await readFile(resolveScenarioFile(join(snapshotsRoot, 'tool-call-turn'), 'session.v3.jsonl'), 'utf8')
     const unconverted = records(fixture)
     unconverted[0]!.version = SESSION_FORMAT_VERSION
     expect(() => verifyToolResultWriterParity(fixture, unconverted.map(row => JSON.stringify(row)).join('\n')))
@@ -1349,17 +1348,18 @@ describe('headless recorded-session snapshots', () => {
       ? [{ scenario, retainedToolInput: 'session.v3.jsonl' }] : [],
   ])
   for (const { scenario, retainedToolInput } of runs) {
-    const skipped = scenario.manifest.platform === 'posix' && process.platform === 'win32'
-      || scenario.manifest.platform === 'pwsh' && !hasPwsh
+    const skipReason = snapshotSkipReason(scenario.manifest, host)
       // A read-only directory does not deny root, so the recorded refusal cannot replay.
-      || scenario.manifest.workspace?.setup === 'readonly-patch-directory' && process.getuid?.() === 0
-      || mode === 'record' && scenario.manifest.recording === 'authored'
-      || mode === 'record' && scenario.manifest.sessionFormat !== undefined
-    const scenarioTest = skipped ? it.skip : mode === 'replay' ? it.concurrent : it
+      ?? (scenario.manifest.workspace?.setup === 'readonly-patch-directory' && process.getuid?.() === 0
+        ? 'root ignores a read-only directory' : undefined)
+      ?? (mode === 'record' && (scenario.manifest.recording === 'authored' || scenario.manifest.sessionFormat !== undefined)
+        ? 'not live-recordable' : undefined)
+    const scenarioTest = skipReason !== undefined ? it.skip : mode === 'replay' ? it.concurrent : it
     const inputLabel = retainedToolInput === undefined ? '' : ' from retained V3 input'
-    scenarioTest(`${mode}s ${scenario.name}${inputLabel} through dsh --profile headless`, async () => {
+    const skipLabel = skipReason === undefined ? '' : ` (skipped: ${skipReason})`
+    scenarioTest(`${mode}s ${scenario.name}${inputLabel} through dsh --profile headless${skipLabel}`, async () => {
       let fixtureFiles = retainedToolInput === undefined
-        ? recordingFixtureNames(await readdir(scenario.dir), mode) : [retainedToolInput]
+        ? recordingFixtureNames(scenarioFileNames(scenario.dir), mode) : [retainedToolInput]
       let fixtures = await fixtureSessions(scenario, fixtureFiles)
       const primaryFixture = fixtures[0]
       const task = (primaryFixture === undefined ? undefined : taskFromSession(primaryFixture))
@@ -1373,7 +1373,7 @@ describe('headless recorded-session snapshots', () => {
         try {
           model = modelFromSession(primaryFixture)
         } catch {
-          model = modelFromSession(await readFile(join(pin.dir, await primaryFixtureFile(pin.dir)), 'utf8'))
+          model = modelFromSession(await readFile(resolveScenarioFile(pin.dir, await primaryFixtureFile(pin.dir)), 'utf8'))
         }
       }
       const composition = ownerOf(scenario)
@@ -1385,7 +1385,7 @@ describe('headless recorded-session snapshots', () => {
         join(baseComposition.dir, 'cordis.yml'),
         ...composition === baseComposition && !replaying ? [] : [compositionPatch],
         ...model === undefined ? [] : [join(baseComposition.dir, 'model.cordis.yml')],
-        ...existsSync(join(scenario.dir, 'runtime.cordis.yml')) ? [join(scenario.dir, 'runtime.cordis.yml')] : [],
+        ...existsSync(resolveScenarioFile(scenario.dir, 'runtime.cordis.yml')) ? [resolveScenarioFile(scenario.dir, 'runtime.cordis.yml')] : [],
       ]
       const patchRoot = '.snapshot-patches'
       const patches = patchSources.map((source, index) => join(patchRoot, `${String(index)}-${basename(source)}`))
@@ -1394,7 +1394,7 @@ describe('headless recorded-session snapshots', () => {
       let initialWorkspace: WorkspaceSnapshotEntry[] | undefined
       let finalWorkspace: WorkspaceSnapshotEntry[] | undefined
       const spillRoot = await mkdtemp(join(tmpdir(), 'acp-snap-spill-'))
-      const fixturePath = join(scenario.dir, fixtureFiles[0] ?? sessionFixtureName(0, SESSION_FORMAT_VERSION))
+      const fixturePath = resolveScenarioFile(scenario.dir, fixtureFiles[0] ?? sessionFixtureName(0, SESSION_FORMAT_VERSION))
       const locatorRoot = snapshotSpillRoot(fixturePath)
       const mcpDemo = scenario.name === 'plugin-manager-mcp' || scenario.name === 'mcp-template-error'
         ? await startHttpMcpFixture({ rejectToolCalls: scenario.name === 'mcp-template-error' }) : undefined
@@ -1430,10 +1430,10 @@ describe('headless recorded-session snapshots', () => {
             DSH_SNAPSHOT_SPILL_LOCATOR_ROOT: locatorRoot,
             DSH_SNAPSHOT_FILE: fixturePath,
             ...(replaying && fixtureFiles.length > 1
-              ? { DSH_SNAPSHOT_CHILD_FILES: fixtureFiles.slice(1).map(file => join(scenario.dir, file)).join(delimiter) }
+              ? { DSH_SNAPSHOT_CHILD_FILES: fixtureFiles.slice(1).map(file => resolveScenarioFile(scenario.dir, file)).join(delimiter) }
               : {}),
             ...(replaying && scenario.manifest.replay?.override === true
-              ? { DSH_SNAPSHOT_OVERRIDE: join(scenario.dir, 'replay.override.json') }
+              ? { DSH_SNAPSHOT_OVERRIDE: resolveScenarioFile(scenario.dir, 'replay.override.json') }
               : {}),
             ...(scenario.manifest.permission === undefined
               ? {}
@@ -1454,7 +1454,7 @@ describe('headless recorded-session snapshots', () => {
             if (scenario.name === 'plugin-manager-mcp') {
               const profileDir = join(cwd, '.dsh/profiles/headless')
               await mkdir(profileDir, { recursive: true })
-              await copyFile(join(scenario.dir, 'profile.patch.yml'), join(profileDir, 'cordis.patch.yml'))
+              await copyFile(resolveScenarioFile(scenario.dir, 'profile.patch.yml'), join(profileDir, 'cordis.patch.yml'))
             }
             await seedWorkspace(scenario, cwd)
             initialWorkspace = await captureWorkspaceSnapshot(cwd, {
@@ -1550,7 +1550,7 @@ describe('headless recorded-session snapshots', () => {
             if (scenario.name === 'provider-cwd') {
               if (model === undefined) throw new Error('provider-cwd resume requires a recorded model')
               await verifyProviderCwdResume(
-                scenario, cwd, actualLogs, patches, model, join(scenario.dir, fixtureFiles[0] as string), task,
+                scenario, cwd, actualLogs, patches, model, resolveScenarioFile(scenario.dir, fixtureFiles[0] as string), task,
               )
             }
             if (scenario.name === 'background-confinement-failure') {
@@ -1598,18 +1598,18 @@ describe('headless recorded-session snapshots', () => {
       expect(result.stdout).toBe(`${finalTextFromSession(fixtures[0] as string)}\n`)
       expect(result.stderr).toBe(expectedStderr)
       expect(actualLogs, `${scenario.name}: persisted session count`).toHaveLength(fixtures.length)
-      const writerFiles = (await readdir(scenario.dir)).filter(name => /^writer(?:\.[1-9]\d*)?\.expected\.jsonl$/u.test(name)).sort()
+      const writerFiles = scenarioFileNames(scenario.dir).filter(name => /^writer(?:\.[1-9]\d*)?\.expected\.jsonl$/u.test(name)).sort()
       if (mode === 'replay') {
         expect(writerFiles, 'native writer oracle inventory').toEqual(scenario.manifest.sessionFormat === undefined
           ? [] : fixtures.map((_, index) => writerSnapshotName(index)).sort())
       }
       let expected = retainedToolInput === undefined ? fixtures : await fixtureSessions(scenario)
       if (retainedToolInput !== undefined) {
-        expect(await readFile(join(scenario.dir, retainedToolInput), 'utf8'), 'retained replay input bytes').toBe(primaryFixture)
+        expect(await readFile(resolveScenarioFile(scenario.dir, retainedToolInput), 'utf8'), 'retained replay input bytes').toBe(primaryFixture)
       }
       if (scenario.manifest.sessionFormat !== undefined) {
         if (mode === 'refresh') await writeSessionFixtures(scenario, actualLogs, fixtures, actualContext)
-        expected = await Promise.all(fixtures.map((_, index) => readFile(join(scenario.dir, writerSnapshotName(index)), 'utf8')))
+        expected = await Promise.all(fixtures.map((_, index) => readFile(resolveScenarioFile(scenario.dir, writerSnapshotName(index)), 'utf8')))
         for (const [index, content] of expected.entries()) {
           expect(sessionHeaderVersion(content, writerSnapshotName(index))).toBeLessThanOrEqual(SESSION_FORMAT_VERSION)
         }

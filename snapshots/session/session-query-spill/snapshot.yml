@@ -8,4 +8,4 @@ header:
   pin: true
 replay:
   override: true
-platform: posix
+platforms: [posix]

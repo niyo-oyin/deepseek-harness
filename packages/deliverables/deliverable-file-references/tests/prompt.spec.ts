@@ -1,6 +1,8 @@
 /** Node-half coverage for the model guidance paired with Web file references. */
 
 import { readFile } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
+import { resolveScenarioFile } from '@deepseek-ai/dsh-session-snapshot'
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it } from 'vitest'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -26,12 +28,12 @@ describe('desktop file-reference prompt', () => {
 
     // Only live request pins track current guidance; seeded sessions retain their recorded prompt.
     for (const scenario of ['fresh-round-trip', 'ptc-round']) {
-      const sidecar = await readFile(new URL(`../../../../snapshots/web/${scenario}/system-prompt.expected.md`, import.meta.url), 'utf8')
+      const sidecar = await readFile(resolveScenarioFile(fileURLToPath(new URL(`../../../../snapshots/web/${scenario}`, import.meta.url)), 'system-prompt.expected.md'), 'utf8')
       expect(sidecar, scenario).toContain(section!.text)
     }
 
     for (const scenario of ['desktop-context', 'desktop-ptc-context']) {
-      const sidecar = await readFile(new URL(`../../../../snapshots/sdk/${scenario}/system-prompt.expected.md`, import.meta.url), 'utf8')
+      const sidecar = await readFile(resolveScenarioFile(fileURLToPath(new URL(`../../../../snapshots/sdk/${scenario}`, import.meta.url)), 'system-prompt.expected.md'), 'utf8')
       expect(sidecar, scenario).toContain(section!.text)
     }
 

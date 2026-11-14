@@ -18,8 +18,19 @@
  * @module @deepseek-ai/dsh-session-snapshot/suite
  */
 
-import { readFile, readdir, writeFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
+import {
+  resolveScenarioFile,
+  scenarioFileNames,
+  scenarioLayoutProblems,
+  SNAPSHOT_PLATFORMS,
+  snapshotPlatformOf,
+  snapshotSkipReason,
+  writeScenarioFile,
+  type SnapshotCapability,
+  type SnapshotPlatform,
+} from './platform.ts'
 import { join } from 'node:path'
 import { isSurfaceEligibleType } from '@deepseek-ai/dsh-session/surface'
 import { SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
@@ -39,7 +50,6 @@ import {
   sessionHeaderVersion,
 } from './session-files.ts'
 import {
-  type CwdPathMode,
   type NormalizeContext,
   extractSnapshotSpillPaths,
   normalizeSessionLog,
@@ -67,8 +77,8 @@ function childSystemPromptSnapshot(index: number): string {
   return `system-prompt.${index}.expected.md`
 }
 
-/** The optional full Windows-native stdout transcript. */
-const WINDOWS_STDOUT_SNAPSHOT = 'stdout.expected.windows.jsonl'
+/** The canonical stdout transcript every scenario compares. */
+const STDOUT_SNAPSHOT = 'stdout.expected.jsonl'
 
 /** Stable session-log token standing in for the sidecar's initial schemas. */
 const TOOLS_TOKEN = '{{tools}}'
@@ -190,72 +200,39 @@ export interface Scenario {
    */
   prepareWorkspace?: (cwd: string) => void | Promise<void>
   /**
-   * Whether Windows additionally compares stdout with native separators against
-   * `stdout.expected.windows.jsonl`. The shared canonical stdout expected output is still
-   * compared on every platform, and the fixture guard requires this sidecar
-   * exactly when the option is set.
+   * Platforms the scenario runs on, from its manifest; absent means every platform. The run test is
+   * skipped elsewhere with the reason in its name, and its fixtures stay guarded on every platform.
    */
-  pinsNativeWindowsStdout?: boolean
+  platforms?: readonly SnapshotPlatform[]
   /**
-   * Whether the scenario requires a non-Windows host, such as for POSIX process
-   * semantics or generated paths Windows cannot represent. The scenario's run
-   * test is skipped on Windows; its fixtures stay guarded on every platform.
+   * Host capabilities the scenario needs, from its manifest. The run test is skipped, with the
+   * reason in its name, when the suite's {@link SnapshotSuiteOptions.hasPwsh} probe is false.
    */
-  posixOnly?: boolean
-  /**
-   * Whether the scenario boots a composition that needs a usable `pwsh`
-   * (the pwsh-tool-turn scenario). The run test is skipped when the suite's
-   * {@link SnapshotSuiteOptions.hasPwsh} probe is false; fixtures stay guarded
-   * on every platform.
-   */
-  pwshOnly?: boolean
+  requires?: readonly SnapshotCapability[]
 }
 
 /**
- * Whether a scenario's run test is skipped for this mode and host: record mode
- * skips authored (non-`recorded`) scenarios and explicit historical Session
- * generations, {@link Scenario.posixOnly} scenarios skip on Windows, and
- * {@link Scenario.pwshOnly} scenarios skip when the caller's `hasPwsh` probe
- * is false.
+ * Why a scenario's run test does not execute for this mode and host: record mode skips authored
+ * (non-`recorded`) scenarios and explicit historical Session generations, and a scenario skips
+ * where its declared platforms or required capabilities are not met.
  *
  * @param scenario The scenario whose run test is being registered.
  * @param recording Whether the suite runs in record mode.
  * @param platform The running Node platform, injectable for unit coverage.
- * @param hasPwsh The caller's pwsh-availability probe; `pwshOnly` scenarios
- *   skip unless it is true.
- * @returns True when the scenario's run test must not execute.
+ * @param hasPwsh The caller's pwsh-availability probe.
+ * @returns The skip reason, or undefined when the run test executes.
  */
-export function scenarioSkipped(
+export function scenarioSkipReason(
   scenario: Scenario,
   recording: boolean,
   platform: NodeJS.Platform = process.platform,
   hasPwsh?: boolean,
-): boolean {
-  if (recording && (!scenario.recorded || scenario.sessionFormat !== undefined)) return true
-  if (scenario.posixOnly === true && platform === 'win32') return true
-  return scenario.pwshOnly === true && hasPwsh !== true
-}
-
-/** One stdout expected output selected for a platform run. */
-interface StdoutExpectedVariant {
-  file: string
-  cwdPathMode: CwdPathMode
-}
-
-/**
- * Select the shared stdout expected output plus any platform-native assertion declared by a scenario.
- *
- * @param scenario The scenario whose stdout contract is being selected.
- * @param platform The running Node platform, injectable for unit coverage.
- * @returns The ordered expected-output variants: shared canonical first, then optional Windows native.
- */
-export function stdoutExpectedVariants(
-  scenario: Scenario,
-  platform: NodeJS.Platform = process.platform,
-): StdoutExpectedVariant[] {
-  const canonical: StdoutExpectedVariant = { file: 'stdout.expected.jsonl', cwdPathMode: 'canonical' }
-  if (platform !== 'win32' || scenario.pinsNativeWindowsStdout !== true) return [canonical]
-  return [canonical, { file: WINDOWS_STDOUT_SNAPSHOT, cwdPathMode: 'native' }]
+): string | undefined {
+  if (recording && (!scenario.recorded || scenario.sessionFormat !== undefined)) return 'not live-recordable'
+  return snapshotSkipReason(scenario, {
+    platform: snapshotPlatformOf(platform),
+    capabilities: new Set(hasPwsh === true ? ['pwsh'] : []),
+  })
 }
 
 /** One suite's inputs: the agent to boot, where its fixtures live, and its scenario table. */
@@ -276,7 +253,7 @@ export interface SnapshotSuiteOptions {
   mode: 'replay' | 'record' | 'refresh'
   /**
    * Whether a real `pwsh` executable is available on this host (the probe the
-   * caller owns; `pwshOnly` scenarios skip when this is not true).
+   * caller owns; scenarios that require pwsh skip when this is not true).
    */
   hasPwsh?: boolean
 }
@@ -346,12 +323,11 @@ export function assertUniqueSnapshotContents(
   }
 }
 
-/** Read one scenario directory's validated session-fixture inventory. */
-async function sessionFixtures(dir: string): Promise<string[]> {
-  const entries = await readdir(dir, { withFileTypes: true })
-  const names = sessionFixtureNames(entries.filter(entry => entry.isFile()).map(entry => entry.name))
+/** Read one scenario directory's validated session-fixture inventory as a platform sees it. */
+async function sessionFixtures(dir: string, platform: SnapshotPlatform = snapshotPlatformOf()): Promise<string[]> {
+  const names = sessionFixtureNames(scenarioFileNames(dir, platform))
   await Promise.all(names.map(async (name) => {
-    assertSessionFixtureVersion(name, await readFile(join(dir, name), 'utf8'))
+    assertSessionFixtureVersion(name, await readFile(resolveScenarioFile(dir, name, platform), 'utf8'))
   }))
   return names
 }
@@ -1191,13 +1167,16 @@ export function stabilizeRefreshLog(
  * Historical roles retain their released bytes, including roles retired by the current writer.
  * @param dir Scenario directory containing canonical Session fixtures.
  * @param scenarioName Scenario name used in failure diagnostics.
+ * @param platform Platform whose view of the fixtures is checked.
  * @returns Resolves when all selected fixtures satisfy the storage checks.
  */
-export async function assertSessionFixtureStorage(dir: string, scenarioName: string): Promise<void> {
-  const files = await sessionFixtures(dir)
+export async function assertSessionFixtureStorage(
+  dir: string, scenarioName: string, platform: SnapshotPlatform = snapshotPlatformOf(),
+): Promise<void> {
+  const files = await sessionFixtures(dir, platform)
   const currentFixtures: string[] = []
   for (const file of files) {
-    const fixture = await readFile(join(dir, file), 'utf8')
+    const fixture = await readFile(resolveScenarioFile(dir, file, platform), 'utf8')
     const version = assertSessionFixtureVersion(file, fixture)
     expect(unknownToolCallIds(fixture), `${scenarioName}/${file} contains UNKNOWN_TOOL`)
       .toEqual([])
@@ -1309,14 +1288,16 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
   scenarioSuite('snapshot scenarios', () => {
     for (const scenario of scenarios) {
       // In RECORD mode, only re-run the `recorded` (live-API) scenarios; the `authored` ones
-      // (sidecar-driven errors/cancel) are never re-recorded. `posixOnly` scenarios skip on Windows;
-      // `pwshOnly` scenarios skip when the caller's `hasPwsh` probe is false.
-      it.skipIf(scenarioSkipped(scenario, RECORDING, process.platform, options.hasPwsh))(`snapshot: ${scenario.name} matches the expected outputs`, async ({ expect }) => {
+      // (sidecar-driven errors/cancel) are never re-recorded. A scenario outside its declared
+      // platforms or capabilities is reported as skipped with the reason.
+      const skipReason = scenarioSkipReason(scenario, RECORDING, process.platform, options.hasPwsh)
+      const title = `snapshot: ${scenario.name} matches the expected outputs`
+      it.skipIf(skipReason !== undefined)(skipReason === undefined ? title : `${title} (skipped: ${skipReason})`, async ({ expect }) => {
         const dir = join(snapshotsDir, scenario.name)
         const manifestPath = join(dir, 'snapshot.yml')
         const manifest = parseSnapshotManifest(await readFile(manifestPath, 'utf8'), manifestPath)
-        const input = JSON.parse(await readFile(join(dir, 'input.json'), 'utf8')) as InputScript
-        const overrideFile = join(dir, 'replay.override.json')
+        const input = JSON.parse(await readFile(resolveScenarioFile(dir, 'input.json'), 'utf8')) as InputScript
+        const overrideFile = resolveScenarioFile(dir, 'replay.override.json')
         const workspaceDir = join(dir, 'workspace')
         // Replay/refresh need the committed inventory up front because those
         // files drive the model scripts. Record mode creates that inventory
@@ -1332,12 +1313,14 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
         const result = await runScenario(input, {
           agent,
           mode: childMode,
-          fixtureFile: join(dir, primaryFixtureFile),
+          fixtureFile: resolveScenarioFile(dir, primaryFixtureFile),
           ...scenario.env !== undefined ? { env: scenario.env } : {},
           ...existsSync(overrideFile) ? { overrideFile } : {},
           // In REPLAY, forward the recorded child fixtures so each subagent session
           // replays from its own script. In RECORD they are harvested, not read.
-          ...!RECORDING && childFixtureFiles.length > 0 ? { childFiles: childFixtureFiles.map(file => join(dir, file)) } : {},
+          ...!RECORDING && childFixtureFiles.length > 0
+            ? { childFiles: childFixtureFiles.map(file => resolveScenarioFile(dir, file)) }
+            : {},
           ...existsSync(workspaceDir) ? { workspaceDir } : {},
           ...scenario.prepareWorkspace !== undefined ? { prepareWorkspace: scenario.prepareWorkspace } : {},
           ...scenario.workspaceParent !== undefined ? { workspaceParent: scenario.workspaceParent } : {},
@@ -1387,7 +1370,7 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
           const existingFixtures = await Promise.all(outputFixtureFiles.map(async (_file, index) => {
             const file = fixtureFiles[index]
             if (file === undefined) return ''
-            return readFile(join(dir, file), 'utf8')
+            return readFile(resolveScenarioFile(dir, file), 'utf8')
           }))
           const refreshReplacements = REFRESHING
             ? refreshFixtureReplacements(result.sessionLogs, existingFixtures)
@@ -1403,8 +1386,9 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
           const outputFixtures = redactSessionSnapshotIds(stabilizeFixtureMessageIds(
             reconcileCatalogCreationTimes(freshFixtures, 'preserve-headers'), existingFixtures,
           ))
-          await Promise.all(outputFixtures.map((fixture, index) =>
-            writeFile(join(dir, outputFixtureFiles[index] as string), fixture)))
+          for (const [index, fixture] of outputFixtures.entries()) {
+            writeScenarioFile(dir, outputFixtureFiles[index] as string, fixture)
+          }
           fixtureFiles = outputFixtureFiles
           if (scenario.pinsHeader === true) {
             const primary = result.sessionLogs[0] as HarvestedLog
@@ -1416,7 +1400,7 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
             const promptSource = promptSourceByClass.get(classOf(scenario)) ?? scenario
             const promptPath = join(snapshotsDir, promptSource.name, SYSTEM_PROMPT_SNAPSHOT)
             claimSharedSnapshot(promptClaims, promptPath, scenario.name, promptSnapshot)
-            await writeFile(promptPath, promptSnapshot)
+            writeScenarioFile(join(snapshotsDir, promptSource.name), SYSTEM_PROMPT_SNAPSHOT, promptSnapshot)
 
             const schemaSets = toolSchemasFrom(pinningHeaderPayloads(primary.content, ctx))
             expect(schemaSets.length, `${mode} produced a tool-schema count that differs from 1 + expectedHeaderChanges`)
@@ -1429,7 +1413,7 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
             const schemaSource = schemaSourceByClass.get(classOf(scenario)) ?? scenario
             const schemaPath = join(snapshotsDir, schemaSource.name, TOOL_SCHEMAS_SNAPSHOT)
             claimSharedSnapshot(schemaClaims, schemaPath, scenario.name, toolSchemasSnapshot)
-            await writeFile(schemaPath, toolSchemasSnapshot)
+            writeScenarioFile(join(snapshotsDir, schemaSource.name), TOOL_SCHEMAS_SNAPSHOT, toolSchemasSnapshot)
           }
           for (const index of childSchemaPins) {
             const log = result.sessionLogs[index]
@@ -1441,7 +1425,7 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
             ))
             expect(schemaSets.length, `${mode}: child ${index} produced no tool schemas to snapshot`)
               .toBeGreaterThan(0)
-            await writeFile(join(dir, childToolSchemasSnapshot(index)), formatToolSchemasSnapshot(
+            writeScenarioFile(dir, childToolSchemasSnapshot(index), formatToolSchemasSnapshot(
               schemaSets[0] as unknown[],
               schemaSets.slice(1),
             ))
@@ -1453,20 +1437,13 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
             const prompts = normalizedSystemPrompts((log as HarvestedLog).content, ctx)
             expect(prompts.length, `${mode}: child ${index} produced no system prompt to snapshot`)
               .toBeGreaterThan(0)
-            await writeFile(
-              join(dir, childSystemPromptSnapshot(index)),
-              formatSystemPromptSnapshot(prompts[0] as string),
-            )
+            writeScenarioFile(dir, childSystemPromptSnapshot(index), formatSystemPromptSnapshot(prompts[0] as string))
           }
         }
 
-        for (const expected of stdoutExpectedVariants(scenario)) {
-          const stdout = normalizeStdout(result.rawStdout, ctx, { cwdPathMode: expected.cwdPathMode })
-          if (REFRESHING) {
-            await writeFile(join(dir, expected.file), stdout)
-          }
-          await expect(stdout, `${expected.file} mismatch`).toMatchFileSnapshot(join(dir, expected.file))
-        }
+        const stdout = normalizeStdout(result.rawStdout, ctx)
+        if (RECORDING || REFRESHING) writeScenarioFile(dir, STDOUT_SNAPSHOT, stdout)
+        expect(stdout, `${STDOUT_SNAPSHOT} mismatch`).toBe(await readFile(resolveScenarioFile(dir, STDOUT_SNAPSHOT), 'utf8'))
 
         // A model turn always produces a log worth comparing; an explicitly
         // authored non-model scenario may opt in independently.
@@ -1474,7 +1451,7 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
           // The harvested logs (primary-first) must match their committed fixtures 1:1.
           expect(result.sessionLogs.length, 'this scenario must persist one log per session fixture').toBe(fixtureFiles.length)
           const harvested = result.sessionLogs.map(log => log.content)
-          const fixtures = await Promise.all(fixtureFiles.map(file => readFile(join(dir, file), 'utf8')))
+          const fixtures = await Promise.all(fixtureFiles.map(file => readFile(resolveScenarioFile(dir, file), 'utf8')))
           const fixtureContexts = fixtures.map(fixtureContext)
           const fixtureCtx: NormalizeContext = {
             sessionIds: fixtureContexts.flatMap(context => context.sessionIds),
@@ -1498,10 +1475,10 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
         const schemaSource = schemaSourceByClass.get(classOf(scenario)) ?? pinningScenario
         const pinningDir = join(snapshotsDir, pinningScenario.name)
         const [pinningFixtureFile] = await sessionFixtures(pinningDir)
-        const pinnedFixture = await readFile(join(pinningDir, pinningFixtureFile as string), 'utf8')
+        const pinnedFixture = await readFile(resolveScenarioFile(pinningDir, pinningFixtureFile as string), 'utf8')
         const pinned = pinningHeaderPayloads(pinnedFixture, fixtureContext(pinnedFixture))
         const promptSnapshot = await readFile(
-          join(snapshotsDir, promptSource.name, SYSTEM_PROMPT_SNAPSHOT),
+          resolveScenarioFile(join(snapshotsDir, promptSource.name), SYSTEM_PROMPT_SNAPSHOT),
           'utf8',
         )
         const initialPromptSnapshot = initialSystemPromptSnapshot(promptSnapshot)
@@ -1510,7 +1487,7 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
         expect(parseSystemPromptSnapshot(promptSnapshot).changes.length, `the prompt source (${promptSource.name}) has an unexpected system prompt change count`)
           .toBe(pinningScenario.expectedPromptChanges ?? 0)
         const toolSchemasSnapshot = await readFile(
-          join(snapshotsDir, schemaSource.name, TOOL_SCHEMAS_SNAPSHOT),
+          resolveScenarioFile(join(snapshotsDir, schemaSource.name), TOOL_SCHEMAS_SNAPSHOT),
           'utf8',
         )
         const toolSchemas = parseToolSchemasSnapshot(toolSchemasSnapshot)
@@ -1523,7 +1500,7 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
         ))
         const childPinnedSchemas = new Map<number, unknown[][]>()
         for (const index of childSchemaPins) {
-          const sidecar = await readFile(join(dir, childToolSchemasSnapshot(index)), 'utf8')
+          const sidecar = await readFile(resolveScenarioFile(dir, childToolSchemasSnapshot(index)), 'utf8')
           const parsed = parseToolSchemasSnapshot(sidecar)
           childPinnedSchemas.set(index, [parsed.initial, ...parsed.changes])
         }
@@ -1531,7 +1508,7 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
         for (const index of childPromptPins) {
           childPinnedPrompts.set(
             index,
-            await readFile(join(dir, childSystemPromptSnapshot(index)), 'utf8'),
+            await readFile(resolveScenarioFile(dir, childSystemPromptSnapshot(index)), 'utf8'),
           )
         }
         for (const [logIndex, log] of result.sessionLogs.entries()) {
@@ -1616,13 +1593,18 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
       expect(onDisk).toEqual(registered)
     })
 
-    it('every registered scenario has its required fixture files', async () => {
+    it('every scenario keeps a valid per-platform layout', () => {
+      for (const { name } of scenarios) {
+        expect(scenarioLayoutProblems(join(snapshotsDir, name)), `${name}: per-platform layout`).toEqual([])
+      }
+    })
+
+    it.each(SNAPSHOT_PLATFORMS)('every registered scenario has its required fixture files on %s', async (platform) => {
       // Every scenario needs input, stdout, a primary session fixture, and matching optional sidecars.
-      for (const { name, overridden, pinsNativeWindowsStdout, pinsChildToolSchemas, pinsChildSystemPrompts } of scenarios) {
+      for (const { name, overridden, pinsChildToolSchemas, pinsChildSystemPrompts } of scenarios) {
         const dir = join(snapshotsDir, name)
-        const files = (await readdir(dir, { withFileTypes: true }))
-          .filter(entry => entry.isFile())
-          .map(entry => entry.name)
+        const files = scenarioFileNames(dir, platform)
+        const has = (file: string): boolean => existsSync(resolveScenarioFile(dir, file, platform))
         const manifestPath = join(dir, 'snapshot.yml')
         expect(existsSync(manifestPath), `${name}/snapshot.yml`).toBe(true)
         const manifest = parseSnapshotManifest(await readFile(manifestPath, 'utf8'), manifestPath)
@@ -1636,19 +1618,15 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
           .toEqual(new Set(pinsChildToolSchemas ?? []))
         expect(childIndices(/^system-prompt\.([1-9]\d*)\.expected\.md$/), `${name}: child system-prompt sidecars must match \`pinsChildSystemPrompts\``)
           .toEqual(new Set(pinsChildSystemPrompts ?? []))
-        expect(existsSync(join(dir, 'input.json')), `${name}/input.json`).toBe(true)
-        expect(existsSync(join(dir, 'stdout.expected.jsonl')), `${name}/stdout.expected.jsonl`).toBe(true)
-        expect(
-          existsSync(join(dir, WINDOWS_STDOUT_SNAPSHOT)),
-          `${name}/${WINDOWS_STDOUT_SNAPSHOT} presence must match \`pinsNativeWindowsStdout\``,
-        ).toBe(pinsNativeWindowsStdout === true)
-        expect(existsSync(join(dir, 'replay.override.json')), `${name}/replay.override.json presence must match \`overridden\``)
+        expect(has('input.json'), `${name}/input.json`).toBe(true)
+        expect(has(STDOUT_SNAPSHOT), `${name}/${STDOUT_SNAPSHOT}`).toBe(true)
+        expect(has('replay.override.json'), `${name}/replay.override.json presence must match \`overridden\``)
           .toBe(overridden === true)
-        expect(existsSync(join(dir, SYSTEM_PROMPT_SNAPSHOT)), `${name}/${SYSTEM_PROMPT_SNAPSHOT} presence must match snapshot-source ownership`)
+        expect(has(SYSTEM_PROMPT_SNAPSHOT), `${name}/${SYSTEM_PROMPT_SNAPSHOT} presence must match snapshot-source ownership`)
           .toBe(promptOwners.has(name))
-        expect(existsSync(join(dir, TOOL_SCHEMAS_SNAPSHOT)), `${name}/${TOOL_SCHEMAS_SNAPSHOT} presence must match snapshot-source ownership`)
+        expect(has(TOOL_SCHEMAS_SNAPSHOT), `${name}/${TOOL_SCHEMAS_SNAPSHOT} presence must match snapshot-source ownership`)
           .toBe(schemaOwners.has(name))
-        await expect(sessionFixtures(dir), `${name}: session fixture inventory`).resolves.toBeDefined()
+        await expect(sessionFixtures(dir, platform), `${name}: session fixture inventory`).resolves.toBeDefined()
       }
     })
 
@@ -1667,7 +1645,7 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
       }
     })
 
-    it('every pinning fixture composes one tokenized header sequence with its referenced sidecars', async () => {
+    it.each(SNAPSHOT_PLATFORMS)('every pinning fixture composes one tokenized header sequence with its referenced sidecars on %s', async (platform) => {
       // Assert the committed pin directly because a class containing only its
       // pinning scenario has no non-pinning live run to catch undeclared changes.
       for (const scenario of pinningByClass.values()) {
@@ -1676,17 +1654,17 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
         /* v8 ignore next -- registration guarantees every pin has resolved sources. */
         const schemaSource = schemaSourceByClass.get(classOf(scenario)) ?? scenario
         const fixtureDir = join(snapshotsDir, scenario.name)
-        const [fixtureFile] = await sessionFixtures(fixtureDir)
-        const fixture = await readFile(join(fixtureDir, fixtureFile as string), 'utf8')
+        const [fixtureFile] = await sessionFixtures(fixtureDir, platform)
+        const fixture = await readFile(resolveScenarioFile(fixtureDir, fixtureFile as string, platform), 'utf8')
         const headers = pinningHeaderPayloads(fixture, fixtureContext(fixture))
         const promptSnapshot = await readFile(
-          join(snapshotsDir, promptSource.name, SYSTEM_PROMPT_SNAPSHOT),
+          resolveScenarioFile(join(snapshotsDir, promptSource.name), SYSTEM_PROMPT_SNAPSHOT, platform),
           'utf8',
         )
         expect(headers.length, `${scenario.name}: unexpected request/header count`)
           .toBe(1 + (scenario.expectedHeaderChanges ?? 0))
         const toolSchemasSnapshot = await readFile(
-          join(snapshotsDir, schemaSource.name, TOOL_SCHEMAS_SNAPSHOT),
+          resolveScenarioFile(join(snapshotsDir, schemaSource.name), TOOL_SCHEMAS_SNAPSHOT, platform),
           'utf8',
         )
         const toolSchemas = parseToolSchemasSnapshot(toolSchemasSnapshot)
@@ -1710,28 +1688,28 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
       }
     })
 
-    it('stores each distinct prompt and tool-schema snapshot once', async () => {
+    it.each(SNAPSHOT_PLATFORMS)('stores each distinct prompt and tool-schema snapshot once on %s', async (platform) => {
       const prompts = await Promise.all([...promptOwners].map(async (owner): Promise<NamedSnapshotContent> => ({
         path: `${owner}/${SYSTEM_PROMPT_SNAPSHOT}`,
-        content: await readFile(join(snapshotsDir, owner, SYSTEM_PROMPT_SNAPSHOT), 'utf8'),
+        content: await readFile(resolveScenarioFile(join(snapshotsDir, owner), SYSTEM_PROMPT_SNAPSHOT, platform), 'utf8'),
       })))
       const schemas = await Promise.all([...schemaOwners].map(async (owner): Promise<NamedSnapshotContent> => ({
         path: `${owner}/${TOOL_SCHEMAS_SNAPSHOT}`,
-        content: await readFile(join(snapshotsDir, owner, TOOL_SCHEMAS_SNAPSHOT), 'utf8'),
+        content: await readFile(resolveScenarioFile(join(snapshotsDir, owner), TOOL_SCHEMAS_SNAPSHOT, platform), 'utf8'),
       })))
       assertUniqueSnapshotContents('system-prompt', prompts)
       assertUniqueSnapshotContents('tool-schema', schemas)
     })
 
-    it('every declared child sidecar is canonical and names a real child', async () => {
+    it.each(SNAPSHOT_PLATFORMS)('every declared child sidecar is canonical and names a real child on %s', async (platform) => {
       for (const scenario of scenarios) {
         const dir = join(snapshotsDir, scenario.name)
-        const files = await sessionFixtures(dir)
+        const files = await sessionFixtures(dir, platform)
         for (const index of scenario.pinsChildToolSchemas ?? []) {
           expect(files[index], `${scenario.name}: child schema pin ${index} must name an existing session.<n>.jsonl fixture`)
             .toBeDefined()
           const file = childToolSchemasSnapshot(index)
-          const sidecar = await readFile(join(dir, file), 'utf8')
+          const sidecar = await readFile(resolveScenarioFile(dir, file, platform), 'utf8')
           const parsed = parseToolSchemasSnapshot(sidecar)
           expect(sidecar, `${scenario.name}/${file} must use canonical JSON formatting`)
             .toBe(formatToolSchemasSnapshot(parsed.initial, parsed.changes))
@@ -1742,22 +1720,22 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
           expect(files[index], `${scenario.name}: child prompt pin ${index} must name an existing session.<n>.jsonl fixture`)
             .toBeDefined()
           const file = childSystemPromptSnapshot(index)
-          const sidecar = await readFile(join(dir, file), 'utf8')
+          const sidecar = await readFile(resolveScenarioFile(dir, file, platform), 'utf8')
           /* v8 ignore next -- registration guarantees every scenario class has resolved sources. */
           const promptSource = promptSourceByClass.get(classOf(scenario)) ?? scenario
-          const classPin = await readFile(join(snapshotsDir, promptSource.name, SYSTEM_PROMPT_SNAPSHOT), 'utf8')
+          const classPin = await readFile(resolveScenarioFile(join(snapshotsDir, promptSource.name), SYSTEM_PROMPT_SNAPSHOT, platform), 'utf8')
           assertChildSystemPromptSnapshot(sidecar, initialSystemPromptSnapshot(classPin), `${scenario.name}/${file}`)
         }
       }
     })
 
-    it('every committed JSONL has valid tool results and canonical fixture storage', async () => {
+    it.each(SNAPSHOT_PLATFORMS)('every committed JSONL has valid tool results and canonical fixture storage on %s', async (platform) => {
       // Prompt text and schemas always leave JSONL, every model request
       // follows a logged system prompt, and portable cwd tokens never retain a
       // platform realpath prefix. Fixed-point checks make these storage rules
       // fail loud.
       for (const scenario of scenarios) {
-        await assertSessionFixtureStorage(join(snapshotsDir, scenario.name), scenario.name)
+        await assertSessionFixtureStorage(join(snapshotsDir, scenario.name), scenario.name, platform)
       }
     })
   })

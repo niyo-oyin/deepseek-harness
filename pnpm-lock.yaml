@@ -8397,6 +8397,9 @@ importers:
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-session-snapshot':
+        specifier: workspace:*
+        version: link:../../test-support/session-snapshot
       '@deepseek-ai/dsh-system-prompt':
         specifier: workspace:*
         version: link:../../core/system-prompt
@@ -15735,6 +15738,9 @@ importers:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../util/brand
+      '@deepseek-ai/dsh-session-snapshot':
+        specifier: workspace:*
+        version: link:../../test-support/session-snapshot
 
   packages/session/session-persistence:
     dependencies:

@@ -5,6 +5,6 @@ composition: default
 recording: authored
 header:
   class: default
-platform: posix
+platforms: [posix]
 workspace:
   final: true

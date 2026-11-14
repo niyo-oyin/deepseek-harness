@@ -3,7 +3,7 @@ scenario: working-directory-admission
 profile: headless
 composition: working-directory-admission
 recording: authored
-platform: posix
+platforms: [posix]
 header:
   class: working-directory-admission
   pin: true

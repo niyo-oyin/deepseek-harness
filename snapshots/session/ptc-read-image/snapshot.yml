@@ -7,6 +7,6 @@ header:
   class: ptc-image
   pin: true
   toolSchemasSource: ptc-turn
-platform: posix
+platforms: [posix]
 workspace:
   final: true
