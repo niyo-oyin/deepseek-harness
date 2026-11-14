@@ -46,6 +46,8 @@ The [form projection](src/schema.ts) strips runtime references and ordinary fiel
 
 Secret roles are redacted from values, inherited values, profile overrides, and schema defaults; clients receive presence markers. Path edits preserve fields a client did not receive.
 
+On Windows a write stores the text of every secret-role field protected: the profile patch holds `{ __dpapi: <ciphertext> }` in its place, encrypted for the current Windows account through [`dsh-secret-protection`](../../util/secret-protection/README.md), and the launcher opens it before the plugin reads its configuration. A secret that repeats the inherited layer's value is left as written, so a field that only restates its default stays equal to it. After startup the service rewrites any profile entry that still stores secret text, such as one written by an earlier build or by hand. Linux and macOS store secret fields as written.
+
 </details>
 
 <a id="further-exploration"></a>
@@ -69,6 +71,8 @@ Consumers that change request prefixes determine cache effects.
 <a id="known-limitations-and-deferred-work"></a>
 
 - Nested Includes own separate configurations and are not editable through the active profile’s form.
+- Only fields declared `role('secret')` and editable through a form are protected. A secret a plugin keeps in an ordinary field, a field that is not volatile, or a bundle's own patch file stays plain text.
+- A protected secret copied to another machine or Windows account cannot be opened there; its entry does not start until the value is set again.
 - Field-level resets restore inherited values; they cannot delete a value supplied by a lower configuration layer. Unsetting an array index removes that element.
 
 <a id="dev-note"></a>

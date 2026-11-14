@@ -2,7 +2,7 @@
 // presence rather than content answers "configured", and every write goes
 // through one serialized read-modify-write so a rotating credential cannot be
 // lost between processes.
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -10,6 +10,9 @@ import { join } from 'node:path'
 import { credentialKey, credentialKeyScope, credentialRef, parseCredentialKey } from '@deepseek-ai/dsh-credentials'
 import type { CredentialKey, CredentialRecord } from '@deepseek-ai/dsh-credentials'
 import { LocalCredentialProvider } from '../src/index.ts'
+
+// These suites pin the document's text as written; protect.spec.ts covers the protected spelling.
+vi.mock('@deepseek-ai/dsh-secret-protection', () => ({ loadPlatformProtection: () => Promise.resolve(undefined) }))
 
 /** Credential documents are seeded owner-only, exactly as the provider creates them. */
 function writeCredentials(file: string, text: string): Promise<void> {

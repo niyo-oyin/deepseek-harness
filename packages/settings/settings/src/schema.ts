@@ -1,5 +1,6 @@
 /** Derive editable forms and plain values from plugin Config schemas. */
 import { redactSecrets } from './redact.ts'
+import { isProtectedValue } from '@deepseek-ai/dsh-secret-protection'
 import z from '@deepseek-ai/schemastery'
 import { isVolatile } from '@deepseek-ai/cosmokit'
 
@@ -46,9 +47,9 @@ export function volatileForm(schema: z): z | undefined {
   return undefined
 }
 
-/** Whether a raw config node is an unevaluated `!!js` expression, kept whole rather than projected field by field. */
+/** Whether a raw config node is an unevaluated `!!js` expression or a protected value, kept whole rather than projected field by field. */
 function isExpression(value: object): boolean {
-  return Object.keys(value).length === 1 && typeof Reflect.get(value, '__jsExpr') === 'string'
+  return (Object.keys(value).length === 1 && typeof Reflect.get(value, '__jsExpr') === 'string') || isProtectedValue(value)
 }
 
 /** Project only schema-declared fields, excluding ordinary configuration.

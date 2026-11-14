@@ -37,6 +37,9 @@
     },
     {
       "path": "../../util/native-command"
+    },
+    {
+      "path": "../../util/secret-protection"
     }
   ]
 }

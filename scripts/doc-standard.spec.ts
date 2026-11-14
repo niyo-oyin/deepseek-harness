@@ -97,6 +97,7 @@ const PACKAGE_LIBRARIES: Readonly<Record<string, string>> = {
   'packages/fs/fs-patch': 'Pure patch parsing and hunk application without plugin registration or filesystem I/O.',
   'packages/util/home-paths': 'Zero-dependency harness-home path resolver.',
   'packages/util/launch-environment': 'Zero-dependency environment resolver.',
+  'packages/util/secret-protection': 'Operating-system secret encryption and protected configuration values without a plugin entry.',
   'packages/util/lazy-require': 'Caller-relative CommonJS-compatible dependency loader.',
   'packages/util/native-command': 'Host-side subprocess runner utility.',
   'packages/util/output-retention': 'Zero-dependency retention utility.',

@@ -40,7 +40,7 @@ import z from '@deepseek-ai/schemastery'
 import { watch as chokidarWatch } from 'chokidar'
 import { mkdir, readFile, stat } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
-import { Document, isMap, isScalar, parseDocument, type YAMLError } from 'yaml'
+import { Document, isMap, isScalar, parseDocument, type ScalarTag, type YAMLError } from 'yaml'
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import { canonicalizeWatchPath, resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
@@ -56,6 +56,8 @@ import type {
   ResolvedCredential,
 } from '@deepseek-ai/dsh-credentials'
 import type { LaunchEnvironmentEntry } from '@deepseek-ai/dsh-launch-environment'
+import { loadPlatformProtection } from '@deepseek-ai/dsh-secret-protection'
+import type { SecretProtection } from '@deepseek-ai/dsh-secret-protection'
 
 /** Basename of the credentials document inside the harness home. */
 export const CREDENTIALS_FILENAME = '.credentials.yaml'
@@ -163,6 +165,88 @@ function describeYamlError(error: YAMLError): string {
   return `${error.code}${where}`
 }
 
+/** A stored secret in its protected spelling: the ciphertext of a `!dpapi` scalar. */
+class Sealed {
+  constructor(readonly ciphertext: string) {}
+}
+
+/** The `!dpapi` scalar tag: a secret only the Windows account that stored it can read. */
+const SEALED_TAG: ScalarTag = {
+  tag: '!dpapi',
+  identify: value => value instanceof Sealed,
+  resolve: text => new Sealed(text),
+  stringify: item => (item.value as Sealed).ciphertext,
+}
+
+/** Parser and writer options that admit the `!dpapi` scalar. */
+const SEALED_TAGS = { customTags: [SEALED_TAG] }
+
+/**
+ * Reads the secrets of one document, opening the protected ones and noting
+ * whether any was stored unprotected.
+ */
+class SecretReader {
+  /** Whether a secret in the document is stored as plain text. */
+  unprotected = false
+
+  constructor(
+    private readonly filename: string,
+    private readonly protection: SecretProtection | undefined,
+  ) {}
+
+  /**
+   * The stored spelling of one text secret, opened when it is protected.
+   * @param value - the parsed node value.
+   * @param subject - what the value is, for a diagnostic; never the value itself.
+   * @returns the secret, or the unprotected value unchanged for the caller's own checks.
+   */
+  text(value: unknown, subject: string): unknown {
+    if (value instanceof Sealed) return this.open(value, subject)
+    this.unprotected = true
+    return value
+  }
+
+  /**
+   * The stored spelling of one JSON secret, opened when it is protected.
+   * @param value - the parsed node value.
+   * @param subject - what the value is, for a diagnostic; never the value itself.
+   * @returns the JSON value.
+   */
+  json(value: unknown, subject: string): unknown {
+    if (!(value instanceof Sealed)) {
+      this.unprotected = true
+      return value
+    }
+    const text = this.open(value, subject)
+    try {
+      const parsed: unknown = JSON.parse(text)
+      return parsed
+    } catch {
+      throw new Error(`credentials-local: ${subject} in ${this.filename} does not hold JSON; ${REPLACE_HINT}`)
+    }
+  }
+
+  private open(sealed: Sealed, subject: string): string {
+    if (this.protection === undefined) {
+      throw new Error(
+        `credentials-local: ${subject} in ${this.filename} is protected by a Windows account`
+        + ` and cannot be read on this platform; ${REPLACE_HINT}`,
+      )
+    }
+    try {
+      return this.protection.unprotect(sealed.ciphertext)
+    } catch {
+      throw new Error(
+        `credentials-local: ${subject} in ${this.filename} cannot be decrypted by this Windows account;`
+        + ` it was stored by another account or on another machine; ${REPLACE_HINT}`,
+      )
+    }
+  }
+}
+
+/** What to do about a stored secret that can no longer be read. */
+const REPLACE_HINT = 'remove the entry and store the credential again'
+
 /** The document layout this build reads and writes. */
 export const DOCUMENT_VERSION = 1
 
@@ -174,6 +258,8 @@ export interface CredentialsDocument {
   records: Map<string, CredentialRecord>
   /** Top-level keys this build does not read; they stay on disk and resolve nothing. */
   ignoredKeys: string[]
+  /** Whether a reference value or a record secret is stored as plain text. */
+  unprotected: boolean
 }
 
 /**
@@ -187,15 +273,16 @@ export interface CredentialsDocument {
  * and needs no version.
  * @param text - the document's text.
  * @param filename - absolute path, quoted in errors.
+ * @param protection - opens `!dpapi` values; omitted where the platform has none, which refuses them.
  * @returns the parsed references, records, and ignored top-level keys.
  */
-export function parseCredentialsDocument(text: string, filename: string): CredentialsDocument {
+export function parseCredentialsDocument(text: string, filename: string, protection?: SecretProtection): CredentialsDocument {
   // `prettyErrors` is on only for `linePos`; `error.message` is never used,
   // because the parser quotes the offending source line and in this document
   // that line is a secret. Only the code and position leave this function, and
   // the same rule governs every other diagnostic here — a key name is safe to
   // print, a value is not.
-  const document = parseDocument(text, { prettyErrors: true, uniqueKeys: true })
+  const document = parseDocument(text, { prettyErrors: true, uniqueKeys: true, ...SEALED_TAGS })
   if (document.errors.length > 0) {
     throw new Error(`credentials-local: invalid document at ${filename}: ${
       document.errors.map(describeYamlError).join('; ')}`)
@@ -208,7 +295,7 @@ export function parseCredentialsDocument(text: string, filename: string): Creden
   const keys = Object.keys(fields)
   // An empty (or comment-only) document is the empty store and needs no
   // version: there is nothing in it a later layout could have meant.
-  if (keys.length === 0) return { refs: new Map(), records: new Map(), ignoredKeys: [] }
+  if (keys.length === 0) return { refs: new Map(), records: new Map(), ignoredKeys: [], unprotected: false }
   if (!('version' in fields)) {
     throw new Error(
       `credentials-local: ${filename} uses the pre-release flat layout. Add \`version: ${DOCUMENT_VERSION}\``
@@ -222,10 +309,12 @@ export function parseCredentialsDocument(text: string, filename: string): Creden
       + ` this build reads version ${DOCUMENT_VERSION}`,
     )
   }
+  const reader = new SecretReader(filename, protection)
   return {
-    refs: parseRefs(fields['refs'], filename),
-    records: parseRecords(fields['records'], filename),
+    refs: parseRefs(fields['refs'], filename, reader),
+    records: parseRecords(fields['records'], filename, reader),
     ignoredKeys: keys.filter(key => key !== 'version' && key !== 'refs' && key !== 'records'),
+    unprotected: reader.unprotected,
   }
 }
 
@@ -269,13 +358,14 @@ export function renderFlatLayoutMigration(text: string): string | undefined {
 }
 
 /** Admit a `refs` section: POSIX-identifier keys over non-empty string values. */
-function parseRefs(section: unknown, filename: string): Map<string, string> {
+function parseRefs(section: unknown, filename: string, reader: SecretReader): Map<string, string> {
   const entries = new Map<string, string>()
-  for (const [key, value] of Object.entries(asSection(section, 'refs', filename))) {
+  for (const [key, stored] of Object.entries(asSection(section, 'refs', filename))) {
     // credentialRef throws on anything that is not a POSIX identifier, which
     // is exactly the constraint a stored reference must satisfy to be
     // addressable through the seam.
     credentialRef(key)
+    const value = reader.text(stored, `the value for "${key}"`)
     // The key name is quoted, never the value: a wrong-typed entry is still a
     // secret the user meant to store.
     if (typeof value !== 'string') {
@@ -290,11 +380,11 @@ function parseRefs(section: unknown, filename: string): Map<string, string> {
 }
 
 /** Admit a `records` section: `<scope>/<id>` keys over tagged record mappings. */
-function parseRecords(section: unknown, filename: string): Map<string, CredentialRecord> {
+function parseRecords(section: unknown, filename: string, reader: SecretReader): Map<string, CredentialRecord> {
   const entries = new Map<string, CredentialRecord>()
   for (const [key, value] of Object.entries(asSection(section, 'records', filename))) {
     parseCredentialKey(key)
-    entries.set(key, parseRecord(key, value, filename))
+    entries.set(key, parseRecord(key, value, filename, reader))
   }
   return entries
 }
@@ -329,7 +419,7 @@ function asSection(section: unknown, name: string, filename: string): Record<str
 }
 
 /** Admit one record entry, rejecting an unknown tag or field rather than dropping it. */
-function parseRecord(key: string, value: unknown, filename: string): CredentialRecord {
+function parseRecord(key: string, value: unknown, filename: string, reader: SecretReader): CredentialRecord {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new TypeError(`credentials-local: record "${key}" in ${filename} must be a mapping`)
   }
@@ -337,11 +427,11 @@ function parseRecord(key: string, value: unknown, filename: string): CredentialR
   const kind = fields['kind']
   if (kind === 'api-key') {
     assertFields(key, fields, ['kind', 'key', 'env'], filename)
-    const apiKey = fields['key']
+    const apiKey = fields['key'] === undefined ? undefined : reader.text(fields['key'], `record "${key}" key`)
     if (apiKey !== undefined && (typeof apiKey !== 'string' || apiKey.length === 0)) {
       throw new TypeError(`credentials-local: record "${key}" in ${filename} has a non-string or empty key`)
     }
-    const env = parseRecordEnv(key, fields['env'], filename)
+    const env = parseRecordEnv(key, fields['env'], filename, reader)
     return {
       kind: 'api-key',
       ...apiKey === undefined ? {} : { key: apiKey },
@@ -353,8 +443,9 @@ function parseRecord(key: string, value: unknown, filename: string): CredentialR
     if (!('payload' in fields)) {
       throw new Error(`credentials-local: record "${key}" in ${filename} has no payload`)
     }
-    assertJsonValue(`record "${key}" payload in ${filename}`, fields['payload'], new Set())
-    return { kind: 'grant', payload: fields['payload'] }
+    const payload = reader.json(fields['payload'], `record "${key}" payload`)
+    assertJsonValue(`record "${key}" payload in ${filename}`, payload, new Set())
+    return { kind: 'grant', payload }
   }
   if (kind === undefined) throw new Error(`credentials-local: record "${key}" in ${filename} has no kind`)
   throw new Error(`credentials-local: record "${key}" in ${filename} has unknown kind ${JSON.stringify(kind)}`)
@@ -370,14 +461,15 @@ function assertFields(key: string, fields: Record<string, unknown>, allowed: str
 }
 
 /** Admit an api-key record's provider environment: POSIX names over non-empty strings. */
-function parseRecordEnv(key: string, env: unknown, filename: string): Record<string, string> | undefined {
+function parseRecordEnv(key: string, env: unknown, filename: string, reader: SecretReader): Record<string, string> | undefined {
   if (env === undefined) return undefined
   if (typeof env !== 'object' || env === null || Array.isArray(env)) {
     throw new TypeError(`credentials-local: record "${key}" in ${filename} has a non-mapping env`)
   }
   const parsed: Record<string, string> = {}
-  for (const [name, value] of Object.entries(env as Record<string, unknown>)) {
+  for (const [name, stored] of Object.entries(env as Record<string, unknown>)) {
     credentialRef(name)
+    const value = reader.text(stored, `record "${key}" env "${name}"`)
     if (typeof value !== 'string' || value.length === 0) {
       throw new TypeError(
         `credentials-local: record "${key}" env "${name}" in ${filename} must be a non-empty string`,
@@ -429,7 +521,7 @@ function mutableDocument(text: string | undefined): Document {
   // `text` only ever caches content that parsed successfully, so this re-parse
   // for the mutable comment-preserving tree cannot fail. `intAsBigInt` keeps an
   // integer beyond 2^53 in a foreign top-level entry exact when re-serialized.
-  const document = text === undefined ? new Document({}) : parseDocument(text, { intAsBigInt: true })
+  const document = text === undefined ? new Document({}, SEALED_TAGS) : parseDocument(text, { intAsBigInt: true, ...SEALED_TAGS })
   // Stamped on every edit so a document this provider creates is readable by
   // the same parser that admitted the one it edits; an existing stamp is
   // rewritten to the identical value.
@@ -438,16 +530,59 @@ function mutableDocument(text: string | undefined): Document {
 }
 
 /**
+ * The spelling one text secret is stored in.
+ * @param secret - the secret.
+ * @param protection - the platform's protection, when it has one.
+ * @returns the protected scalar, or the secret itself where the platform has no protection.
+ */
+function storedSecret(secret: string, protection: SecretProtection | undefined): string | Sealed {
+  return protection === undefined ? secret : new Sealed(protection.protect(secret))
+}
+
+/**
+ * The spelling one record is stored in: every secret it carries protected.
+ * @param record - the record as the seam holds it.
+ * @param protection - the platform's protection, when it has one.
+ * @returns the mapping to write under the record's key.
+ */
+function storedRecord(record: CredentialRecord, protection: SecretProtection | undefined): unknown {
+  if (protection === undefined) return record
+  if (record.kind === 'grant') return { kind: 'grant', payload: new Sealed(protection.protect(JSON.stringify(record.payload))) }
+  return {
+    kind: 'api-key',
+    ...record.key === undefined ? {} : { key: storedSecret(record.key, protection) },
+    ...record.env === undefined
+      ? {}
+      : { env: Object.fromEntries(Object.entries(record.env).map(([name, value]) => [name, storedSecret(value, protection)])) },
+  }
+}
+
+/**
  * Render the next document text with one reference set or deleted.
  * @param text - the current document text, `undefined` while the file is absent.
  * @param ref - the reference to write.
  * @param value - the new value, or `undefined` to delete the key.
+ * @param protection - the platform's protection, when it has one.
  * @returns the text to persist.
  */
-function renderRef(text: string | undefined, ref: CredentialRef, value: string | undefined): string {
+function renderRef(
+  text: string | undefined, ref: CredentialRef, value: string | undefined, protection: SecretProtection | undefined,
+): string {
   const document = mutableDocument(text)
-  if (value === undefined) deleteSectionEntry(document, 'refs', ref)
-  else document.setIn(['refs', ref], value)
+  if (value === undefined) {
+    deleteSectionEntry(document, 'refs', ref)
+    return document.toString()
+  }
+  const stored = storedSecret(value, protection)
+  const existing: unknown = document.getIn(['refs', ref], true)
+  if (stored instanceof Sealed && isScalar(existing)) {
+    // Edited in place, as a plain value is, so the entry keeps its own comments.
+    existing.value = stored
+    existing.tag = SEALED_TAG.tag
+    delete existing.type
+  } else {
+    document.setIn(['refs', ref], stored instanceof Sealed ? document.createNode(stored) : stored)
+  }
   return document.toString()
 }
 
@@ -458,12 +593,15 @@ function renderRef(text: string | undefined, ref: CredentialRef, value: string |
  * @param text - the current document text, `undefined` while the file is absent.
  * @param key - the record to write.
  * @param record - the new record, or `undefined` to delete it.
+ * @param protection - the platform's protection, when it has one.
  * @returns the text to persist.
  */
-function renderRecord(text: string | undefined, key: CredentialKey, record: CredentialRecord | undefined): string {
+function renderRecord(
+  text: string | undefined, key: CredentialKey, record: CredentialRecord | undefined, protection: SecretProtection | undefined,
+): string {
   const document = mutableDocument(text)
   if (record === undefined) deleteSectionEntry(document, 'records', key)
-  else document.setIn(['records', key], record)
+  else document.setIn(['records', key], document.createNode(storedRecord(record, protection)))
   return document.toString()
 }
 
@@ -547,6 +685,10 @@ export class LocalCredentialProvider extends CredentialProvider {
   private values = new Map<string, string>()
   /** Parsed record snapshot; replaced wholesale on every reload. */
   private records = new Map<string, CredentialRecord>()
+  /** Protection for stored secrets; Windows only, loaded before the first read. */
+  private protection: SecretProtection | undefined
+  /** Whether the document on disk stores a secret as plain text that {@link protection} could protect. */
+  private unprotected = false
   /**
    * Single exclusive operation chain: watcher reloads and line edits run one
    * at a time in queue order (settled tail), so an edit can never render from
@@ -591,6 +733,7 @@ export class LocalCredentialProvider extends CredentialProvider {
       this.closed = true
       await this.operations
     }
+    this.protection = await loadPlatformProtection()
     await this.loadInitial()
     if (!this.spec.watch) return
     const watcher = chokidarWatch(await canonicalizeWatchPath(this.spec.filename), {
@@ -712,10 +855,11 @@ export class LocalCredentialProvider extends CredentialProvider {
         // next boot rejects, and a value refused here has not been stored.
         if (next.kind === 'grant') assertJsonValue(`record "${key}" payload`, next.payload, new Set())
         else assertStorableApiKey(key, next)
-        const nextText = renderRecord(this.text, key, next)
+        const nextText = renderRecord(this.protectedText(), key, next, this.protection)
         // 0600: a document holding secrets is never world-readable.
         await writeFileAtomic(this.spec.filename, nextText, { mode: 0o600, dirMode: 0o700 })
         this.text = nextText
+        this.unprotected = false
         this.records.set(key, next)
         // After the commit, on the same terms as a reference write.
         this.notifyRecordUpdated(key)
@@ -734,9 +878,10 @@ export class LocalCredentialProvider extends CredentialProvider {
       await withFileLock(this.spec.filename, async () => {
         await this.reconcileFromDisk()
         if (!this.records.has(key)) return
-        const nextText = renderRecord(this.text, key, undefined)
+        const nextText = renderRecord(this.protectedText(), key, undefined, this.protection)
         await writeFileAtomic(this.spec.filename, nextText, { mode: 0o600, dirMode: 0o700 })
         this.text = nextText
+        this.unprotected = false
         this.records.delete(key)
         this.notifyRecordUpdated(key)
       }, { waitMs: DOCUMENT_LOCK_WAIT_MS })
@@ -776,10 +921,11 @@ export class LocalCredentialProvider extends CredentialProvider {
         await this.reconcileFromDisk()
         const existing = this.values.get(ref)
         if (value === undefined && existing === undefined) return
-        const nextText = renderRef(this.text, ref, value)
+        const nextText = renderRef(this.protectedText(), ref, value, this.protection)
         // 0600: a document holding secrets is never world-readable.
         await writeFileAtomic(this.spec.filename, nextText, { mode: 0o600, dirMode: 0o700 })
         this.text = nextText
+        this.unprotected = false
         if (value === undefined) this.values.delete(ref)
         else this.values.set(ref, value)
         // After the commit: a broken observer must never make the durable
@@ -807,11 +953,46 @@ export class LocalCredentialProvider extends CredentialProvider {
       return
     }
     if (renderFlatLayoutMigration(text) !== undefined) text = await this.migrateFlatDocument()
-    const document = parseCredentialsDocument(text, this.spec.filename)
+    const document = parseCredentialsDocument(text, this.spec.filename, this.protection)
     this.warnIgnoredKeys(document)
     this.values = document.refs
     this.records = document.records
     this.text = text
+    this.unprotected = this.protection !== undefined && document.unprotected
+    await this.protectStored()
+  }
+
+  /**
+   * The current document text with every stored secret protected: the text a
+   * write renders from, so one write leaves no plain-text secret beside it.
+   * @returns the cached text, re-rendered only while it stores a secret as plain text.
+   */
+  private protectedText(): string | undefined {
+    if (!this.unprotected) return this.text
+    let text = this.text
+    for (const [ref, value] of this.values) text = renderRef(text, credentialRef(ref), value, this.protection)
+    for (const [key, record] of this.records) text = renderRecord(text, parseCredentialKey(key), record, this.protection)
+    return text
+  }
+
+  /**
+   * Rewrite a document that stores a secret as plain text — one an earlier
+   * build wrote, or one edited by hand — with every secret protected. Runs
+   * under the writer lock and re-reads first, like any other write.
+   */
+  private async protectStored(): Promise<void> {
+    if (!this.unprotected) return
+    await withFileLock(this.spec.filename, async () => {
+      await this.reconcileFromDisk()
+      if (!this.unprotected || this.isClosed()) return
+      const nextText = this.protectedText()
+      /* v8 ignore next -- `unprotected` is only ever true beside a parsed document, so the text exists. */
+      if (nextText === undefined) return
+      await writeFileAtomic(this.spec.filename, nextText, { mode: 0o600, dirMode: 0o700 })
+      this.text = nextText
+      this.unprotected = false
+      this.ctx.logger.info('credentials-local: protected the plain-text secrets in %s for this Windows account', this.spec.filename)
+    }, { waitMs: DOCUMENT_LOCK_WAIT_MS })
   }
 
   /**
@@ -855,6 +1036,7 @@ export class LocalCredentialProvider extends CredentialProvider {
     if (this.closed) return
     try {
       await this.reconcileFromDisk()
+      await this.protectStored()
     } catch (error) {
       this.ctx.logger.warn('credentials-local: reload failed at %s; keeping the last good document', this.spec.filename)
       this.ctx.logger.warn(error)
@@ -881,12 +1063,13 @@ export class LocalCredentialProvider extends CredentialProvider {
     }
     if (text === this.text || this.isClosed()) return
     const next = text === undefined
-      ? { refs: new Map<string, string>(), records: new Map<string, CredentialRecord>(), ignoredKeys: [] }
-      : parseCredentialsDocument(text, this.spec.filename)
+      ? { refs: new Map<string, string>(), records: new Map<string, CredentialRecord>(), ignoredKeys: [], unprotected: false }
+      : parseCredentialsDocument(text, this.spec.filename, this.protection)
     this.warnIgnoredKeys(next)
     const changedRefs = this.changedRefs(this.values, next.refs)
     const changedRecords = this.changedRecords(this.records, next.records)
     this.text = text
+    this.unprotected = this.protection !== undefined && next.unprotected
     this.values = next.refs
     this.records = next.records
     for (const ref of changedRefs) this.notifyUpdated(ref)

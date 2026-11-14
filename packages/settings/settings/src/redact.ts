@@ -94,6 +94,76 @@ function walk(node: SchemaNode | undefined, value: unknown, path: string[], secr
   }
 }
 
+/** One member of an inherited container, or `undefined` when the inherited layer has none. */
+function inheritedMember(inherited: unknown, key: string | number): unknown {
+  if (Array.isArray(inherited)) return typeof key === 'number' ? inherited[key] : undefined
+  return isRecord(inherited) && Object.hasOwn(inherited, key) ? inherited[key] : undefined
+}
+
+function protectWalk(
+  node: SchemaNode | undefined, value: unknown, inherited: unknown, protect: (secret: string) => unknown,
+): unknown {
+  if (node === undefined || value === undefined) return value
+  if (node.meta?.role === 'secret') {
+    return typeof value === 'string' && value.length > 0 && value !== inherited ? protect(value) : value
+  }
+  switch (node.type) {
+    case 'object': {
+      if (!isRecord(value)) return value
+      const properties = node.dict ?? {}
+      return Object.fromEntries(Object.entries(value).map(([key, entry]) =>
+        [key, protectWalk(properties[key], entry, inheritedMember(inherited, key), protect)]))
+    }
+    case 'dict':
+      if (!isRecord(value)) return value
+      return Object.fromEntries(Object.entries(value).map(([key, entry]) =>
+        [key, protectWalk(node.inner, entry, inheritedMember(inherited, key), protect)]))
+    case 'array':
+      return Array.isArray(value)
+        ? value.map((entry, index) => protectWalk(node.inner, entry, inheritedMember(inherited, index), protect))
+        : value
+    case 'union':
+    case 'intersect':
+      return (node.list ?? []).reduce<unknown>((current, child) => protectWalk(child, current, inherited, protect), value)
+    case 'transform':
+      return protectWalk(node.inner, value, inherited, protect)
+    default:
+      return value
+  }
+}
+
+/**
+ * Replace the text of every `role('secret')` field a schema declares with its
+ * protected spelling. A field is left as it is when it is unset or empty, when
+ * it is already something other than text — an expression or an earlier
+ * protected value — and when it repeats the inherited layer's value, so a
+ * value that only restates its default stays equal to it. The input is never
+ * mutated.
+ * @param schema - live schemastery schema describing the value.
+ * @param value - raw configuration to store.
+ * @param inherited - raw configuration of the layers beneath the stored one.
+ * @param protect - builds the stored spelling of one secret.
+ * @returns the value with secret text protected.
+ */
+export function protectSecrets(
+  schema: z<never>, value: unknown, inherited: unknown, protect: (secret: string) => unknown,
+): unknown {
+  return protectWalk(schema, value, inherited, protect)
+}
+
+/**
+ * Whether a raw configuration stores secret text that {@link protectSecrets} would protect.
+ * @param schema - live schemastery schema describing the value.
+ * @param value - raw configuration as stored.
+ * @param inherited - raw configuration of the layers beneath the stored one.
+ * @returns whether any `role('secret')` field holds text of its own.
+ */
+export function storesSecretText(schema: z<never>, value: unknown, inherited: unknown): boolean {
+  let found = false
+  protectWalk(schema, value, inherited, (secret) => { found = true; return secret })
+  return found
+}
+
 /**
  * Remove every `role('secret')` field a schema declares from a value. The
  * walker visits every union branch, conservatively removing any field declared

@@ -8,6 +8,9 @@ import { createLaunchEnvironmentSnapshot, DSH_LAUNCH_ENVIRONMENT_KEY } from '@de
 import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
 import { LocalCredentialProvider, resolveSpec } from '../src/index.ts'
 
+// These suites pin the document's text as written; protect.spec.ts covers the protected spelling.
+vi.mock('@deepseek-ai/dsh-secret-protection', () => ({ loadPlatformProtection: () => Promise.resolve(undefined) }))
+
 function writeCredentials(file: string, text: string): Promise<void> {
   return writeFile(file, text, { mode: 0o600 })
 }

@@ -19,6 +19,7 @@ import Include, { applyEntryPatches, entryListSchema, type PatchOptions } from '
 import Group from '@deepseek-ai/cordis-plugin-group'
 import { dshHomePath, resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { createLaunchEnvironmentSnapshot, type LaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
+import { loadPlatformProtection, openProtectedValues } from '@deepseek-ai/dsh-secret-protection'
 export { readBundlePatches, readProfilePatches, type ProfileContext, type ProfilePnpmInvocation } from './profile-context.ts'
 export { sanitizeProfile } from './profile-sanitize.ts'
 export { getDshRuntimeVersion, evaluatePluginCompatibility, pluginCompatibilityWarning, type PluginCompatibility } from './plugin-compatibility.ts'
@@ -1186,6 +1187,9 @@ export async function auditStartupEntries(
   if (failures.length > 0) warn(activationDiagnostic(binName, failures))
 }
 
+/** The Loader's marker on a plugin that carries a tree of child entries. */
+const ENTRY_GROUP = Symbol.for('cordis.group')
+
 /**
  * Boot the Loader against `absoluteConfigPath` and return only after the whole
  * tree settles. Relative entry names resolve against the config directory;
@@ -1242,6 +1246,15 @@ export async function boot(
     ctx.baseUrl = pathToFileURL(dirname(absoluteConfigPath)).href + '/'
     ctx.provide('dshHomePath', dshHomePath)
     await ctx.plugin(Loader)
+    const protection = await loadPlatformProtection()
+    // Registered before any entry mounts: a plugin must read its secrets, never their protected spelling.
+    ctx.on('internal/config', (fiber, next) => {
+      const config: unknown = next()
+      // As the Loader does for expressions: a tree carrier leaves its child entries' values to them.
+      if (!fiber.entry || fiber.parent.fiber?.entry === fiber.entry) return config
+      if (Reflect.get(fiber.runtime?.callback ?? {}, ENTRY_GROUP) !== undefined) return config
+      return openProtectedValues(config, protection, `configuration of "${fiber.entry.options.id}"`)
+    })
     await prepare?.(ctx)
     stage = 'plugin tree failed to load'
     await mountRootInclude(ctx, absoluteConfigPath, patches, bareModuleBaseUrl, binName)

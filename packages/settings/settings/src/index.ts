@@ -8,7 +8,8 @@ import type z from '@deepseek-ai/schemastery'
 import { interpolate, type Entry } from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-config-editor'
 import type {} from '@deepseek-ai/dsh-app-boot'
-import { redactSecrets, type RedactedSecret } from './redact.ts'
+import { loadPlatformProtection, protectValue } from '@deepseek-ai/dsh-secret-protection'
+import { protectSecrets, redactSecrets, storesSecretText, type RedactedSecret } from './redact.ts'
 import { isVolatilePath, plainConfig, projectForm, volatileForm } from './schema.ts'
 import type { SettingsNamespace } from './types.ts'
 
@@ -237,7 +238,31 @@ export class SettingsForms extends Service {
     const ctx = ownerContext
     ctx.effect(() => () => { this.closed = true })
     ctx.on('app-boot/config-reload', () => { this.invalidate() })
-    void ctx.root.loader.await().then(() => this.importLegacyDocument()).catch((error: unknown) => { ctx.logger.error(error) })
+    void ctx.root.loader.await()
+      .then(() => this.importLegacyDocument())
+      .then(() => this.protectStoredSecrets())
+      .catch((error: unknown) => { ctx.logger.error(error) })
+  }
+
+  /**
+   * Rewrite every profile entry that stores the text of a secret field — one an
+   * earlier build wrote, or one edited by hand — with that text protected. A
+   * platform without protection stores secrets as written.
+   */
+  private async protectStoredSecrets(): Promise<void> {
+    if (await loadPlatformProtection() === undefined) return
+    for (const { entry, inherited, override } of this.ownerContext.configEditor.configuration()) {
+      const schema = this.schema(entry)
+      const form = schema === undefined ? undefined : volatileForm(schema)
+      if (form === undefined || !storesSecretText(form as z<never>, projectForm(form, override), projectForm(form, inherited))) continue
+      try {
+        await this.write(String(entry.options.id), current => current)
+        this.ownerContext.logger.info('settings: protected the secrets stored for entry %s', String(entry.options.id))
+      } catch (error) {
+        this.ownerContext.logger.warn('settings: the secrets stored for entry %s were not protected', String(entry.options.id))
+        this.ownerContext.logger.warn(error)
+      }
+    }
   }
 
   /** Move the sections of the removed `settings.yaml` into the active profile once the Loader has settled every entry.
@@ -395,6 +420,7 @@ export class SettingsForms extends Service {
     if (entry === undefined || schema === undefined) throw new Error(`No configurable plugin entry "${ns}"`)
     const form = volatileForm(schema)
     if (form === undefined) throw new Error(`Plugin entry "${ns}" has no volatile fields`)
+    const protection = await loadPlatformProtection()
     for (const path of paths) {
       if (path.length && !isVolatilePath(schema, path)) throw new Error(`Config field "${path.join('.')}" is not volatile`)
     }
@@ -428,7 +454,11 @@ export class SettingsForms extends Service {
         }
         return result
       }
-      return mergeLayers(strip(raw, form), next) as Record<string, unknown>
+      // Secret text is stored protected where the platform protects it; the Loader opens it for the plugin.
+      const stored = protection === undefined
+        ? next
+        : protectSecrets(form as z<never>, next, base, secret => protectValue(secret, protection)) as Record<string, unknown>
+      return mergeLayers(strip(raw, form), stored) as Record<string, unknown>
     })
     this.describe()
   }

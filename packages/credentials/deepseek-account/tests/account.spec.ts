@@ -262,7 +262,7 @@ it('stores a grant before redirecting, restores account presence, and signs out 
   expect(f.init()).not.toHaveProperty('client_type')
   expect(response.headers.get('location')).toBe(`${f.origin}/dsh/authorized?result=test&locale=zh_CN&login_source=desktop`)
   expect((await f.account.getState()).status).toBe('credential-stored')
-  expect(await readFile(join(f.home, 'credentials.yaml'), 'utf8')).toContain('dsh_mock_test')
+  expect(await readFile(join(f.home, 'credentials.yaml'), 'utf8')).toContain('kind: grant')
   // The Host publishes identity from a separate profile read; the snapshot only reuses it.
   await f.account.getProfile(clientMetadata())
   expect(await f.account.getPlatformSession()).toEqual({ origin: f.origin, userId: 'test-user', token: 'dsh_mock_test',

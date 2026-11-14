@@ -108,15 +108,31 @@ You can edit the file directly — the store reloads it automatically and picks 
 
 A key's value can be any text, multi-line values included — no quoting tricks needed. An empty value means "no key", which is why an empty string in the file is rejected: removing a key deletes it, it does not blank it. A `grant` payload must survive a JSON round trip, enforced on the way in and on the way out, so the store refuses a value it could not read back exactly as written. If the file on disk no longer parses, saving fails instead of overwriting content the product could not read.
 
+### Protected values on Windows
+
+On Windows the store encrypts every secret before it writes it: each reference value, each `api-key` record's key and environment values, and each `grant` payload. A protected value is a `!dpapi` scalar holding base64 ciphertext from the Windows Data Protection API, which only the Windows account that stored it, on that machine, can decrypt:
+
+```yaml
+version: 1
+
+refs:
+  EXA_API_KEY: !dpapi AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAA…
+```
+
+Nothing changes in use: the store decrypts on read, with no password to enter. A value you add by hand as plain text still works; the store encrypts it at the next start, on the next reload, or with the next write, and keeps the entry's comments. A file that already holds plain-text values is rewritten the same way the first time this build starts. Record names, reference names, and record kinds stay readable.
+
+A protected file does not move between machines or accounts. Copied elsewhere, its values cannot be decrypted and the store refuses to load it, naming the entry: remove that entry and store the credential again. On Linux and macOS values are stored as written, and a `!dpapi` value is refused the same way.
+
 ### Who can read the file
 
-Only your OS user can read the file: the product creates it with owner-only permissions, and on POSIX it refuses to load a file that any other user can read — the error tells you to run `chmod 600`. Windows has no mode to inspect, so the check is skipped there rather than faked. The agent is not another user: its tool processes run as you, so they can read the file like any other file you own. The product never hands the agent the file's path and never loads the file into the environment, so reaching a value takes a deliberate read of a path the agent was not given. That is discretion, not a boundary: a deployment that must keep provider keys away from its own agent cannot get there with file permissions.
+Only your OS user can read the file: the product creates it with owner-only permissions, and on POSIX it refuses to load a file that any other user can read — the error tells you to run `chmod 600`. Windows has no mode to inspect, so the check is skipped there rather than faked. The agent is not another user: its tool processes run as you, so they can read the file like any other file you own. The product never hands the agent the file's path and never loads the file into the environment, so reaching a value takes a deliberate read of a path the agent was not given. That is discretion, not a boundary: a deployment that must keep provider keys away from its own agent cannot get there with file permissions. Windows protection does not change this either: it keeps a copied, synced, or backed-up file unreadable elsewhere, and makes reading the file alone useless, but a process running as you can ask Windows to decrypt a value.
 
 ### What can go wrong
 
 - **A key the launching environment supplies is a fallback** — saving a value stores a higher-priority credential; removing it reveals the launch environment again. To make an exported key apply, delete its entry under `refs` in the file.
 - **An empty value cannot be saved** — storing an empty string is refused; remove the key instead.
 - **The store refuses to load a file it cannot trust** — a file any other user can read, malformed YAML, or an unreachable path fails at startup; on a live reload the last good content keeps serving with a warning.
+- **A protected value from another Windows account or machine stops startup** — the store names the entry it cannot decrypt; remove the entry and store the credential again.
 - **Changes made at the same time are both kept** — if you edit the file while the product writes, your change is folded in rather than overwritten.
 
 -----
@@ -140,7 +156,7 @@ This section explains the design decisions behind the provider and points at the
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Provider: layer resolution, strict document parse, reference and record write paths under the writer lock, watcher lifecycle, permissions check |
+| [`src/index.ts`](src/index.ts) | Provider: layer resolution, strict document parse, reference and record write paths under the writer lock, watcher lifecycle, permissions check, protected spelling of stored secrets, encrypted through [`dsh-secret-protection`](../../util/secret-protection/README.md) |
 
 ### Resolution and write paths
 
@@ -194,7 +210,8 @@ No direct invalidation; stored values never enter a request prefix.
 These limits define when the provider is a poor fit or needs special operational care. They are current package constraints, not a task backlog.
 
 - **Same-reference concurrent writes are last-write-wins** — the writer lock and the read-modify-write keep concurrent writers from dropping each other's entries, but two writers editing one reference still resolve to the later write; there is no revision check.
-- **A same-UID process can read the document** — the file-effect sandbox modes do not deny reads, and an OS-keychain provider is deferred.
+- **A same-UID process can read the document** — the file-effect sandbox modes do not deny reads. On Windows the values in it are encrypted, but that process can call the Data Protection API as you and decrypt them. An OS-keychain provider is deferred.
+- **Linux and macOS store values as plain text** — only the owner-only file mode protects them there.
 - **Environment changes are invisible** — the snapshot is frozen at launch, so a variable exported after startup reaches neither resolution nor `describe`; changing an environment-sourced credential takes a restart.
 - **Atomic, not crash-durable** — inherited from `dsh-atomic-write`; the store re-reads on boot.
 
