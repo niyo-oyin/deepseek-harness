@@ -47,6 +47,11 @@ function localScenarioSource(source: string | undefined): string | undefined {
   return source?.includes('/') === false ? source : undefined
 }
 
+/** A sidecar source in another profile's corpus (`session/text-turn`), as that scenario's directory. */
+function outsideScenarioDir(source: string | undefined): string | undefined {
+  return source?.includes('/') === true ? join(corpusDir, '..', source) : undefined
+}
+
 const scenarios: Scenario[] = controllerCases.map((controller) => {
   const manifestPath = join(corpusDir, controller.name, 'snapshot.yml')
   const manifest = parseSnapshotManifest(readFileSync(manifestPath, 'utf8'), manifestPath)
@@ -55,6 +60,8 @@ const scenarios: Scenario[] = controllerCases.map((controller) => {
   }
   const systemPromptSource = localScenarioSource(manifest.header.systemPromptSource)
   const toolSchemasSource = localScenarioSource(manifest.header.toolSchemasSource)
+  const systemPromptDir = outsideScenarioDir(manifest.header.systemPromptSource)
+  const toolSchemasDir = outsideScenarioDir(manifest.header.toolSchemasSource)
   return {
     ...controller,
     recorded: manifest.recording === 'live',
@@ -65,6 +72,8 @@ const scenarios: Scenario[] = controllerCases.map((controller) => {
     headerClass: manifest.header.class,
     ...(systemPromptSource === undefined ? {} : { systemPromptSource }),
     ...(toolSchemasSource === undefined ? {} : { toolSchemasSource }),
+    ...(systemPromptDir === undefined ? {} : { systemPromptDir }),
+    ...(toolSchemasDir === undefined ? {} : { toolSchemasDir }),
     ...(manifest.platforms === undefined ? {} : { platforms: manifest.platforms }),
     ...(manifest.requires === undefined ? {} : { requires: manifest.requires }),
     ...(controller.configPath === undefined ? {} : { configPath: controller.configPath }),

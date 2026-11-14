@@ -337,6 +337,8 @@ describe('defineAcpSnapshotSuite: registration contract', () => {
   it.each([
     ['systemPromptSource', 'owner'],
     ['toolSchemasSource', 'owner'],
+    ['systemPromptDir', '/elsewhere/owner'],
+    ['toolSchemasDir', '/elsewhere/owner'],
     ['expectedHeaderChanges', 1],
     ['expectedPromptChanges', 1],
   ] as const)(
@@ -420,6 +422,45 @@ describe('defineAcpSnapshotSuite: registration contract', () => {
         mode: 'replay',
       })
     }).toThrow(/consumer names system-prompt snapshot source "redirect", which does not own its sidecar/)
+  })
+
+  it('rejects a pin that names both an in-suite source and an outside owner', () => {
+    expect(() => {
+      defineAcpSnapshotSuite({
+        agent: AGENT,
+        snapshotsDir: REPLAY_DIR,
+        scenarios: [{
+          name: 'pin',
+          hasModelTurn: true,
+          recorded: true,
+          pinsHeader: true,
+          systemPromptSource: 'pin',
+          systemPromptDir: '/elsewhere/owner',
+        }],
+        mode: 'replay',
+      })
+    }).toThrow(/pin names both a systemPromptSource and a systemPromptDir/)
+  })
+
+  it('rejects a source whose own sidecar is borrowed from outside the suite', () => {
+    expect(() => {
+      defineAcpSnapshotSuite({
+        agent: AGENT,
+        snapshotsDir: REPLAY_DIR,
+        scenarios: [
+          { name: 'borrower', hasModelTurn: true, recorded: true, pinsHeader: true, toolSchemasDir: '/elsewhere/owner' },
+          {
+            name: 'consumer',
+            hasModelTurn: true,
+            recorded: true,
+            pinsHeader: true,
+            headerClass: 'consumer',
+            toolSchemasSource: 'borrower',
+          },
+        ],
+        mode: 'replay',
+      })
+    }).toThrow(/consumer names tool-schema snapshot source "borrower", which does not own its sidecar/)
   })
 
   it('rejects shared sidecars with different header-change counts', () => {

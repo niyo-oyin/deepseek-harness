@@ -1,7 +1,7 @@
 /** Repository-wide ownership and storage invariants for the recorded-session corpus. */
 
 import { existsSync } from 'node:fs'
-import { lstat, readFile, readdir, realpath } from 'node:fs/promises'
+import { readFile, readdir, realpath } from 'node:fs/promises'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 import { expect, it } from 'vitest'
 import {
@@ -202,10 +202,8 @@ it.each(SNAPSHOT_PLATFORMS)('keeps every recorded session owned, pinned, redacte
         ['system-prompt.expected.md', promptSource],
         ['tool-schemas.expected.json', schemaSource],
       ] as const) {
-        const local = join(dir, field)
-        if (!existsSync(local) || !(await lstat(local)).isSymbolicLink()) continue
-        expect(await realpath(local), `${key}: ${field} symlink follows its manifest source`)
-          .toBe(await realpath(join((source as Scenario).dir, field)))
+        if (source === scenario) continue
+        expect(has(dir, field), `${key}: ${field} is read from its manifest source, so the scenario keeps no copy`).toBe(false)
       }
     }
 
