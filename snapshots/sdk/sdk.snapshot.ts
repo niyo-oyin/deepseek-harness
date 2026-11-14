@@ -65,7 +65,7 @@ import {
   type SdkUserQuestionResult,
 } from '@deepseek-ai/dsh-sdk-client'
 import { SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
-import { deriveReplayScript, parseSessionLog } from '@deepseek-ai/dsh-llm-replay'
+import { deriveReplayScript, loadSessionScripts, parseSessionLog } from '@deepseek-ai/dsh-llm-replay'
 
 const corpusRoot = fileURLToPath(new URL('../', import.meta.url))
 
@@ -456,7 +456,9 @@ async function hydrateReplayFixtures(scenario: CorpusScenario, cwd: string): Pro
   await mkdir(root, { recursive: true })
   return Promise.all((await fixtureFiles(scenario)).map(async (source) => {
     const destination = join(root, basename(source))
-    await writeFile(destination, (await readFile(source, 'utf8')).replaceAll('{{cwd}}', cwd))
+    // The token sits inside JSON strings, so the cwd is written as JSON string content: a Windows path's backslashes
+    // would otherwise make the fixture invalid JSON.
+    await writeFile(destination, (await readFile(source, 'utf8')).replaceAll('{{cwd}}', JSON.stringify(cwd).slice(1, -1)))
     return destination
   }))
 }
@@ -839,6 +841,15 @@ async function runScenario(scenario: CorpusScenario): Promise<{
     ...assertions.environment,
     ...childEnvironment,
     ...resumeReplayFile === undefined ? {} : { DSH_SNAPSHOT_OVERRIDE: resumeReplayFile },
+  }
+  // A fixture the child cannot load leaves deepseek-official without its replay adapter, and the SDK server then
+  // mounts the live provider instead. Loading it here with the child's own loader fails the scenario before launch.
+  if (parentFixture !== undefined) {
+    loadSessionScripts({
+      file: parentFixture,
+      ...childFixtures.length > 0 ? { childFiles: childFixtures } : {},
+      ...env.DSH_SNAPSHOT_OVERRIDE === undefined ? {} : { overrideFile: env.DSH_SNAPSHOT_OVERRIDE },
+    })
   }
 
   const planReviews = assertions.planReviews === undefined ? undefined : [...assertions.planReviews]
