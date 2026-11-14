@@ -1377,6 +1377,32 @@ describe('installLlmReplay (through the real LlmRuntime)', () => {
       expect(resolveScriptedEntry(entry, requestMessages)).toBe(entry)
     })
 
+    it('escapes a capture as JSON string content in tool arguments but not in text', () => {
+      const path = String.raw`C:\Users\dev\work "a"`
+      const messages = [createUserMessage({
+        content: [{ type: 'text' as const, text: `<path>${path}\\red.png</path>` }],
+        source: { kind: 'user' as const },
+      })]
+      const placeholder = String.raw`{{fromRequest:<path>(.+)[\\/]red\.png</path>}}`
+      const entry: ReplayEntry = {
+        kind: 'chunks',
+        chunks: [
+          ...scriptedCall(`{"file_path":"${placeholder}/x.png"}`),
+          { type: 'text-delta', index: 1, text: placeholder },
+        ],
+      }
+      const resolved = resolveScriptedEntry(entry, messages)
+      if (resolved.kind !== 'chunks') throw new Error('expected chunks entry')
+      const delta = resolved.chunks.find(chunk => chunk.type === 'tool-call-delta')
+      const end = resolved.chunks.find(chunk => chunk.type === 'block-end')
+      if (delta?.type !== 'tool-call-delta' || end?.type !== 'block-end' || end.block.type !== 'tool-call') {
+        throw new Error('expected a scripted tool call')
+      }
+      expect(JSON.parse(delta.argumentsDelta)).toEqual({ file_path: `${path}/x.png` })
+      expect(JSON.parse(end.block.arguments)).toEqual({ file_path: `${path}/x.png` })
+      expect(resolved.chunks.at(-1)).toMatchObject({ text: path })
+    })
+
     it('skips non-string request leaves when building the corpus', () => {
       const messages = requestMessages.map(message => ({ ...message, seq: 7 })) as GenerateOptions['messages']
       const entry: ReplayEntry = { kind: 'chunks', chunks: scriptedCall('{"goal_id":"{{fromRequest:goal-42[a-z]+}}"}') }

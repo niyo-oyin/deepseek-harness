@@ -573,8 +573,17 @@ function resolveFromRequest(pattern: string, corpus: string): string {
   return last[1] ?? last[0]
 }
 
-/** Replace every `{{fromRequest:<pattern>}}` occurrence in one scripted string. */
-function substituteString(text: string, corpus: string): string {
+/** Scripted fields whose text is JSON: a capture lands there as a JSON string's content. */
+const JSON_TEXT_KEYS = new Set(['arguments', 'argumentsDelta'])
+
+/**
+ * Replace every `{{fromRequest:<pattern>}}` occurrence in one scripted string.
+ * @param text - the scripted string.
+ * @param corpus - the request text the patterns search.
+ * @param json - whether `text` is JSON, so each capture is escaped as string content.
+ * @returns the string with every placeholder resolved.
+ */
+function substituteString(text: string, corpus: string, json: boolean): string {
   let result = ''
   let cursor = 0
   while (true) {
@@ -588,19 +597,28 @@ function substituteString(text: string, corpus: string): string {
     // so a pattern may end with a brace quantifier like `[0-9a-f]{4}`.
     while (text[close + FROM_REQUEST_CLOSE.length] === '}') close += 1
     const pattern = text.slice(open + FROM_REQUEST_OPEN.length, close)
-    result += text.slice(cursor, open) + resolveFromRequest(pattern, corpus)
+    const capture = resolveFromRequest(pattern, corpus)
+    result += text.slice(cursor, open) + (json ? JSON.stringify(capture).slice(1, -1) : capture)
     cursor = close + FROM_REQUEST_CLOSE.length
   }
 }
 
-/** Deep-copy one JSON-compatible value with scripted placeholders resolved. */
-function substituteValue(value: unknown, corpus: string): unknown {
+/**
+ * Deep-copy one JSON-compatible value with scripted placeholders resolved.
+ * @param value - the scripted value.
+ * @param corpus - the request text the patterns search.
+ * @param key - the property that holds `value`, which decides whether its text is JSON.
+ * @returns the resolved copy.
+ */
+function substituteValue(value: unknown, corpus: string, key?: string): unknown {
   if (typeof value === 'string') {
-    return value.includes(FROM_REQUEST_OPEN) ? substituteString(value, corpus) : value
+    return value.includes(FROM_REQUEST_OPEN)
+      ? substituteString(value, corpus, key !== undefined && JSON_TEXT_KEYS.has(key))
+      : value
   }
   if (Array.isArray(value)) return value.map(item => substituteValue(item, corpus))
   if (value !== null && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, substituteValue(item, corpus)]))
+    return Object.fromEntries(Object.entries(value).map(([name, item]) => [name, substituteValue(item, corpus, name)]))
   }
   return value
 }
@@ -610,8 +628,10 @@ function substituteValue(value: unknown, corpus: string): unknown {
  * against the live request. The corpus is every string leaf of the request
  * messages joined by newlines; the pattern's LAST corpus match wins and its
  * first capture group (or, without one, the whole match) substitutes in place.
- * Scenario sidecars use this to script arguments no static file can know,
- * such as a randomly minted goal id the model must echo back. A pattern that
+ * In a tool call's `arguments` or `argumentsDelta`, which are JSON text, the
+ * capture is escaped as JSON string content, as a model echoing it would write
+ * it; a Windows path keeps its backslashes. Scenario sidecars use this to
+ * script arguments no static file can know, such as a randomly minted goal id the model must echo back. A pattern that
  * matches nothing, an invalid pattern, and an unterminated placeholder each
  * fail loud. The last two braces of a consecutive `}` run terminate the
  * placeholder, so a pattern may end with a brace quantifier but cannot
