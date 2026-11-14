@@ -75,16 +75,15 @@ export {
   resolveScenarioFile,
   scenarioDirectoryOf,
   scenarioFileNames,
-  scenarioLayoutProblems,
   SNAPSHOT_CAPABILITIES,
   SNAPSHOT_PLATFORMS,
   snapshotPlatformOf,
   snapshotSkipReason,
-  writeScenarioFile,
   type SnapshotCapability,
   type SnapshotHost,
   type SnapshotPlatform,
 } from './platform.ts'
+export { scenarioLayoutProblems, writeScenarioFile } from './layout.ts'
 export {
   assertPersistedSessionVersion,
   assertSessionFixtureVersion,

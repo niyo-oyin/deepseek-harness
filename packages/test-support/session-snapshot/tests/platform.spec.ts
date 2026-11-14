@@ -2,14 +2,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import {
-  resolveScenarioFile,
-  scenarioFileNames,
-  scenarioLayoutProblems,
-  snapshotPlatformOf,
-  snapshotSkipReason,
-  writeScenarioFile,
-} from '../src/platform.ts'
+import { scenarioLayoutProblems, writeScenarioFile } from '../src/layout.ts'
+import { resolveScenarioFile, scenarioFileNames, snapshotPlatformOf, snapshotSkipReason } from '../src/platform.ts'
 
 const dirs: string[] = []
 function scenario(files: Record<string, string>): string {
@@ -71,6 +65,17 @@ describe('snapshot platforms', () => {
     expect(readFileSync(join(dir, 'out.json'), 'utf8')).toBe('a')
     expect(existsSync(join(dir, 'posix'))).toBe(false)
     expect(existsSync(join(dir, 'windows'))).toBe(false)
+  })
+
+  it('keeps a single-platform scenario shared and refuses a platform it does not run on', () => {
+    const dir = scenario({ 'snapshot.yml': 'version: 1\nprofile: headless\nplatforms: [windows]\n', 'session.jsonl': 'old' })
+    writeScenarioFile(dir, 'session.jsonl', 'refreshed', 'windows')
+    expect(readFileSync(join(dir, 'session.jsonl'), 'utf8')).toBe('refreshed')
+    expect(existsSync(join(dir, 'posix'))).toBe(false)
+    expect(existsSync(join(dir, 'windows'))).toBe(false)
+    expect(() => { writeScenarioFile(dir, 'session.jsonl', 'posix output', 'posix') }).toThrow('does not run on posix')
+    expect(scenarioLayoutProblems(scenario({ 'snapshot.yml': 'version: 1\nprofile: headless\nplatforms: [posix]\n', 'posix/a.md': 'x', 'windows/a.md': 'y' })))
+      .toEqual(['a.md: split, but the scenario runs on posix only'])
   })
 
   it('reports half splits, a lingering shared copy, and identical sides', () => {

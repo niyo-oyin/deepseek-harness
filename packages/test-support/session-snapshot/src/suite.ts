@@ -23,14 +23,13 @@ import { existsSync } from 'node:fs'
 import {
   resolveScenarioFile,
   scenarioFileNames,
-  scenarioLayoutProblems,
   SNAPSHOT_PLATFORMS,
   snapshotPlatformOf,
   snapshotSkipReason,
-  writeScenarioFile,
   type SnapshotCapability,
   type SnapshotPlatform,
 } from './platform.ts'
+import { scenarioLayoutProblems, writeScenarioFile } from './layout.ts'
 import { join } from 'node:path'
 import { isSurfaceEligibleType } from '@deepseek-ai/dsh-session/surface'
 import { SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
