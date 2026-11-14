@@ -116,8 +116,8 @@ describe('dsh path helpers', () => {
   })
 
   it.each([
-    [undefined, join(homedir(), '.dsh')],
-    ['', join(homedir(), '.dsh')],
+    [undefined, join(homedir(), '.dsh-fork')],
+    ['', join(homedir(), '.dsh-fork')],
     ['~/env-dsh', join(homedir(), 'env-dsh')],
     ['./relative-dsh', resolve('./relative-dsh')],
   ] as const)('resolves category paths with DSH_HOME=%j', (home, expectedHome) => {
