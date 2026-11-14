@@ -9,7 +9,7 @@
  * fixtures and rewrites expected outputs.
  */
 
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { cp, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, delimiter, join } from 'node:path'
@@ -66,6 +66,7 @@ import {
 } from '@deepseek-ai/dsh-sdk-client'
 import { SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import { deriveReplayScript, loadSessionScripts, parseSessionLog } from '@deepseek-ai/dsh-llm-replay'
+import { parseEntryYaml, type PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 
 const corpusRoot = fileURLToPath(new URL('../', import.meta.url))
 
@@ -730,6 +731,8 @@ const legacySdkCompositions = new Set([
   'subagent-send-message',
   'system-prompt-in-history',
 ])
+/** Package whose entry serves recorded model responses in replay. */
+const LLM_REPLAY_PACKAGE = '@deepseek-ai/dsh-llm-replay'
 const legacySdkContextPatch = fileURLToPath(new URL('./legacy-context.patch.yml', import.meta.url))
 
 function authoredPatches(scenario: CorpusScenario, replaying: boolean): string[] {
@@ -744,6 +747,22 @@ function authoredPatches(scenario: CorpusScenario, replaying: boolean): string[]
     ...owner === base && !replaying ? [] : [join(owner.dir, replaying ? 'cordis.snapshot.yml' : 'cordis.yml')],
     join(base.dir, 'model.cordis.yml'),
   ]
+}
+
+/**
+ * Whether the composed profile patches mount an enabled `llm-replay` entry, as the child will see them.
+ * @param patches - materialized patch files in application order.
+ * @returns true when the last word on some llm-replay entry leaves it enabled.
+ */
+function mountsLlmReplay(patches: readonly string[]): boolean {
+  const enabled = new Map<string, boolean>()
+  for (const patch of patches.flatMap(file => parseEntryYaml(readFileSync(file, 'utf8')) as PatchOptions[])) {
+    for (const entry of [patch, ...patch.insert ?? []]) {
+      if (entry.name === LLM_REPLAY_PACKAGE && entry.id !== undefined) enabled.set(entry.id, entry.disabled !== true)
+      else if (entry.id !== undefined && enabled.has(entry.id) && entry.disabled !== undefined) enabled.set(entry.id, entry.disabled !== true)
+    }
+  }
+  return [...enabled.values()].some(Boolean)
 }
 
 /** One SDK-controlled recorded scenario against a fresh SDK-profile subprocess. */
@@ -844,7 +863,8 @@ async function runScenario(scenario: CorpusScenario): Promise<{
   }
   // A fixture the child cannot load leaves deepseek-official without its replay adapter, and the SDK server then
   // mounts the live provider instead. Loading it here with the child's own loader fails the scenario before launch.
-  if (parentFixture !== undefined) {
+  // Scenarios whose composition answers the model by other means (a fixture provider) load no fixture there.
+  if (parentFixture !== undefined && mountsLlmReplay(patches)) {
     loadSessionScripts({
       file: parentFixture,
       ...childFixtures.length > 0 ? { childFiles: childFixtures } : {},
