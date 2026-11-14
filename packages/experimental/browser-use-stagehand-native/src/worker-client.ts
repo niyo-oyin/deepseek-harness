@@ -5,8 +5,30 @@ import { StagehandDrainError, StagehandError } from './error.ts'
 import type { NativeBrowserConfig, NativeBrowserRuntime } from './native.ts'
 import { request } from './worker-rpc.ts'
 
+/** Variables Windows resolves its temp and system directories from; none carries a credential. */
+const WINDOWS_SYSTEM_ENV = ['SystemRoot', 'windir', 'TEMP', 'TMP'] as const
+
 /**
- * Connect Stagehand through an isolated Worker that receives no ambient environment.
+ * The environment a Stagehand Worker receives. Ambient credentials and proxy settings stay outside; on Windows the
+ * system and temp locations cross, because without them `os.tmpdir()` resolves to the relative `undefined	emp` and
+ * temporary files land in the process working directory, the user's workspace.
+ * @param environment - the host process environment.
+ * @param platform - the host platform.
+ * @returns the Worker's whole environment.
+ */
+export function workerEnvironment(
+  environment: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform,
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {}
+  if (environment.TSX_TSCONFIG_PATH !== undefined) env.TSX_TSCONFIG_PATH = environment.TSX_TSCONFIG_PATH
+  if (platform === 'win32') {
+    for (const name of WINDOWS_SYSTEM_ENV) if (environment[name] !== undefined) env[name] = environment[name]
+  }
+  return env
+}
+
+/**
+ * Connect Stagehand through an isolated Worker that receives no ambient environment beyond {@link workerEnvironment}.
  * @param config - resolved CDP connection and operation options.
  * @param signal - cancellation of lazy browser acquisition.
  * @param warn - report SDK cleanup failures after connection termination.
@@ -18,8 +40,7 @@ export async function openBrowserWorker(
   signal.throwIfAborted()
   const entry = new URL('./worker.js', import.meta.url)
   // Only explicit model credentials cross in workerData; ambient credentials and proxy settings stay outside.
-  const env: NodeJS.ProcessEnv = {}
-  if (process.env.TSX_TSCONFIG_PATH !== undefined) env.TSX_TSCONFIG_PATH = process.env.TSX_TSCONFIG_PATH
+  const env = workerEnvironment()
   let worker: Worker
   /* v8 ignore next 3 -- native.e2e.ts starts the bundled Worker through a plain-Node provider fixture. */
   if (!import.meta.url.endsWith('.ts')) {
