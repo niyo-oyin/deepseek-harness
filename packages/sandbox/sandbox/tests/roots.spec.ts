@@ -5,6 +5,7 @@
  * additional set stays one shared derivation across backend dialects.
  */
 
+import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -64,6 +65,60 @@ describe('workspaceWritableRoots', () => {
       mode: 'workspace-write', workspaceRoot: ws, additionalWritableRoots: [alias, extra],
     })
     expect(grants).toEqual([ws, physical])
+  })
+
+  describe.skipIf(process.platform !== 'win32')('8.3 short-name spellings on Windows', () => {
+    /** The volume's 8.3 spelling of an existing path, or undefined where the volume generates none. */
+    function shortSpelling(path: string): string | undefined {
+      const result = spawnSync('cmd.exe', ['/d', '/c', `for %I in ("${path}") do @echo %~sI`], {
+        encoding: 'utf8', windowsVerbatimArguments: true,
+      })
+      const short = result.stdout.trim()
+      return result.status === 0 && short !== '' && short.toLowerCase() !== path.toLowerCase() ? short : undefined
+    }
+    function directoryWithShortName(ws: string, name: string): { long: string; short: string } | undefined {
+      const long = join(ws, name)
+      mkdirSync(long)
+      const short = shortSpelling(long)
+      return short === undefined ? undefined : { long, short }
+    }
+
+    it('accepts a short-name spelling of a real directory and stores its long path', (context) => {
+      const ws = realpathSync.native(mkdtempSync(join(tmpdir(), 'dsh-roots-')))
+      roots.push(ws)
+      const extra = directoryWithShortName(ws, 'Writable Long Directory Name')
+      if (extra === undefined) return context.skip('this volume generates no 8.3 names')
+      expect(workspaceWritableRoots({ mode: 'workspace-write', workspaceRoot: ws, additionalWritableRoots: [extra.short] }))
+        .toEqual([ws, extra.long])
+    })
+
+    it.each(['junction', 'dir'] as const)('still rejects a short-name spelling through a %s', (kind, context) => {
+      const ws = realpathSync.native(mkdtempSync(join(tmpdir(), 'dsh-roots-')))
+      roots.push(ws)
+      const target = join(ws, 'Redirect Target Directory')
+      mkdirSync(target)
+      const link = join(ws, 'Redirecting Alias Directory')
+      symlinkSync(target, link, kind)
+      const short = shortSpelling(link)
+      if (short === undefined) return context.skip('this volume generates no 8.3 names')
+      for (const spelling of [link, short]) {
+        expect(() => workspaceWritableRoots({ mode: 'workspace-write', workspaceRoot: ws, additionalWritableRoots: [spelling] }))
+          .toThrow('symlinked grants are not supported')
+      }
+    })
+
+    it('keeps the POSIX comparison: a short-name spelling is rejected where the host is not Windows', (context) => {
+      const ws = realpathSync.native(mkdtempSync(join(tmpdir(), 'dsh-roots-')))
+      roots.push(ws)
+      const extra = directoryWithShortName(ws, 'Posix Comparison Directory')
+      if (extra === undefined) return context.skip('this volume generates no 8.3 names')
+      const platform = Object.getOwnPropertyDescriptor(process, 'platform')!
+      Object.defineProperty(process, 'platform', { ...platform, value: 'linux' })
+      try {
+        expect(() => workspaceWritableRoots({ mode: 'workspace-write', workspaceRoot: ws, additionalWritableRoots: [extra.short] }))
+          .toThrow('use the physical directory path')
+      } finally { Object.defineProperty(process, 'platform', platform) }
+    })
   })
 
   it('rejects invalid extra roots and checks them again on each call', () => {

@@ -13,9 +13,9 @@
  * @module dsh-sandbox/roots
  */
 
-import { realpathSync, statSync } from 'node:fs'
+import { lstatSync, realpathSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { relative } from 'node:path'
+import { dirname, relative, resolve } from 'node:path'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
 import type { SandboxExecutionPolicy } from './index.ts'
 
@@ -32,6 +32,38 @@ export class SandboxInvalidRootError extends HarnessError {
   }
 }
 
+/** One 8.3 short name, which Windows generates with a `~N` suffix. */
+const SHORT_NAME = /^[^\\/.~]{1,6}~\d{1,6}(?:\.[^\\/.]{0,3})?$/u
+
+/**
+ * Whether a Windows path names `physical` itself and differs from it only by 8.3 short-name spelling. Every
+ * component must either equal the physical component or be a short name in its place, and no component of the
+ * path as given may be a symbolic link or junction (Node reports both as symbolic links), so an alias that
+ * actually redirects is still rejected.
+ * @param path - the directory as the caller spelled it.
+ * @param physical - its native real path.
+ * @returns true only on Windows for a short-name spelling of the same directory.
+ */
+function isShortNameSpelling(path: string, physical: string): boolean {
+  if (process.platform !== 'win32') return false
+  const given = resolve(path).split(/[\\/]+/u).filter(part => part !== '')
+  const real = physical.split(/[\\/]+/u).filter(part => part !== '')
+  if (given.length !== real.length) return false
+  if (!given.every((part, index) => part.toLowerCase() === real[index]?.toLowerCase() || SHORT_NAME.test(part))) return false
+  for (let current = resolve(path); current !== dirname(current); current = dirname(current)) {
+    if (mayRedirect(current)) return false
+  }
+  return true
+}
+
+function mayRedirect(component: string): boolean {
+  try {
+    return lstatSync(component).isSymbolicLink()
+  } catch (_unreadable) {
+    return true // A component that cannot be inspected is never taken as proof that no link is present.
+  }
+}
+
 /** Resolve existing directories, rejecting aliases that differ under the host's path comparison. */
 function additionalRoot(path: string): string {
   let physical: string
@@ -43,7 +75,7 @@ function additionalRoot(path: string): string {
     throw new SandboxInvalidRootError(path, `cannot read the directory: ${String(error)}`)
   }
   if (!directory) throw new SandboxInvalidRootError(path, 'expected an existing directory')
-  if (relative(path, physical) !== '') {
+  if (relative(path, physical) !== '' && !isShortNameSpelling(path, physical)) {
     throw new SandboxInvalidRootError(path, `use the physical directory path ${JSON.stringify(physical)}; symlinked grants are not supported`)
   }
   return physical
