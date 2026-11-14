@@ -506,6 +506,8 @@ describe('agent tools in the production loop', () => {
   it('updates the fixed language rule in the next prompt assembly', async () => {
     const f = await setup()
     try {
+      // The default rule follows the Host display language; without a preference it would follow the machine's.
+      f.ctx.provide('settings', { describe: () => [{ ns: 'locale', value: { preference: 'en' } }] } as never)
       const prompt = () => f.ctx.systemPrompt.assemble({ scope: f.agent })
       expect(
         (await prompt()).sections.find(section => section.name === 'timeline:planning')?.text,

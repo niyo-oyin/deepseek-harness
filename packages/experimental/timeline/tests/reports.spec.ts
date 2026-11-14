@@ -660,6 +660,8 @@ describe('background summaries through a real agent loop', () => {
     const adapter = new Adapter()
     adapter.calls = 0
     const f = await running({}, adapter)
+    // The fixed text follows the Host display language; without a preference it would follow the machine's.
+    f.ctx.provide('settings', { describe: () => [{ ns: 'locale', value: { preference: 'en' } }] } as never)
     await vi.advanceTimersByTimeAsync(60000)
     await f.waitRecords('plugin:timeline/report')
     expect(f.reports()[0]).toMatchObject({
