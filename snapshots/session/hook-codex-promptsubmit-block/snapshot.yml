@@ -5,3 +5,6 @@ composition: default
 recording: authored
 header:
   class: default
+
+# The hook command is POSIX shell syntax and runs in pwsh on Windows, where it does not parse.
+platforms: [posix]
