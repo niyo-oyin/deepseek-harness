@@ -1,0 +1,10 @@
+version: 1
+scenario: hook-cc-pretool-deny-pwsh
+profile: headless
+composition: default
+recording: authored
+header:
+  class: default
+
+# The pwsh counterpart of hook-cc-pretool-deny: a Windows build composes pwsh, and hook commands run in it.
+platforms: [windows]

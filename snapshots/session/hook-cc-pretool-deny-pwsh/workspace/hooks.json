@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "pwsh",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[Console]::Error.WriteLine('pwsh is disabled by policy in this session'); exit 2"
+          }
+        ]
+      }
+    ]
+  }
+}
