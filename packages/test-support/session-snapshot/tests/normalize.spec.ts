@@ -133,6 +133,15 @@ describe('normalizeStdout', () => {
     expect(frame).toEqual({ cwd: '{{cwd}}', path: '{{cwd}}/nested/proof.txt' })
   })
 
+  it('scrubs a Windows cwd quoted as a JSON string literal inside text, as prompt context renders it', () => {
+    const windowsCtx: NormalizeContext = { sessionIds: [], cwd: String.raw`C:\Users\runner\AppData\Local\Temp\sdk-snapshot` }
+    const raw = JSON.stringify({
+      text: `Current working directory: ${JSON.stringify(windowsCtx.cwd)}. Writable: ${JSON.stringify(`${windowsCtx.cwd}\\nested`)}.`,
+    })
+    const frame = JSON.parse(normalizeStdout(raw, windowsCtx)) as { text: string }
+    expect(frame.text).toBe('Current working directory: "{{cwd}}". Writable: "{{cwd}}/nested".')
+  })
+
   it('canonicalizes only cwd-rooted path separators', () => {
     const windowsCtx: NormalizeContext = {
       sessionIds: [],
@@ -1061,6 +1070,20 @@ describe('tokenizeSessionFixtureCwd', () => {
     expect(resultText).toContain('/tmp/authored.txt')
     expect(resultText).not.toContain(`${reportedCwd}/proof.txt`)
     expect(tokenizeSessionFixtureCwd(out)).toBe(out)
+  })
+
+  it('stores a quoted Windows workspace whose prompt spelling differs from the header', () => {
+    const header = String.raw`C:\Users\RUNNER~1\AppData\Local\Temp\sdk-snapshot-abc123`
+    const longForm = String.raw`C:\Users\runneradmin\AppData\Local\Temp\sdk-snapshot-abc123`
+    const raw = [
+      JSON.stringify({ type: 'session', id: 's', createdAt: 1, cwd: header }),
+      JSON.stringify({ type: 'user/message', data: { text: `Current working directory: ${JSON.stringify(longForm)}.` } }),
+      '',
+    ].join('\n')
+
+    const text = (JSON.parse(tokenizeSessionFixtureCwd(raw).split('\n')[1] as string) as { data: { text: string } }).data.text
+
+    expect(text).toBe('Current working directory: "{{cwd}}".')
   })
 
   it('collapses a residual macOS realpath prefix around an existing cwd token', () => {

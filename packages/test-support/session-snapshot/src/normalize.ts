@@ -121,7 +121,11 @@ function cwdSpellings(ctx: NormalizeContext): string[] {
   const macAliases = spellings
     .filter(spelling => spelling.startsWith('/') && !spelling.startsWith('/private/'))
     .map(spelling => `/private${spelling}`)
-  return [...new Set([...spellings, ...macAliases])]
+  // Prompt text quotes a directory as a JSON string literal, which doubles a Windows path's backslashes.
+  const quoted = spellings
+    .filter(spelling => spelling.includes('\\'))
+    .map(spelling => JSON.stringify(spelling).slice(1, -1))
+  return [...new Set([...spellings, ...macAliases, ...quoted])]
     .sort((left, right) => right.length - left.length)
 }
 
@@ -186,7 +190,8 @@ function scrubString(
   if (cwdPathMode === 'canonical') {
     // Restrict separator conversion to paths rooted at the cwd token. A global
     // backslash rewrite would corrupt regexes, commands, and model-authored text.
-    out = out.replace(CWD_ROOTED_PATH_RE, path => path.replaceAll('\\', '/'))
+    // In a quoted Windows path each doubled backslash is one separator.
+    out = out.replace(CWD_ROOTED_PATH_RE, path => path.replaceAll('\\\\', '/').replaceAll('\\', '/'))
     out = canonicalizeEmbeddedPaths(out)
   }
   out = out.replace(LOCAL_SPILL_PATH_RE, (_match, name: string) => `{{spillLocator:${name}}}`)
@@ -242,8 +247,9 @@ function escapeRegExp(value: string): string {
 /** Replace any absolute spelling whose final segment is the generated cwd basename. */
 function tokenizeFixtureString(value: string, ctx: NormalizeContext, basename: string): string {
   const exact = replaceCwd(value, ctx, CWD)
+  // A separator may be doubled where the path is quoted as a JSON string literal inside text.
   const absoluteCwd = new RegExp(
-    String.raw`(?:[A-Za-z]:)?[\\/](?:[^\\/\s<>"]+[\\/])*${escapeRegExp(basename)}`
+    String.raw`(?:[A-Za-z]:)?(?:\\\\|[\\/])(?:[^\\/\s<>"]+(?:\\\\|[\\/]))*${escapeRegExp(basename)}`
     + String.raw`(?=$|[\\/\s<>'"()\[\]{},;:!?=])`,
     'g',
   )
