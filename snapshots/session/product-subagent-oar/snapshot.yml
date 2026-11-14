@@ -6,3 +6,5 @@ recording: authored
 header:
   class: product-subagent-oar
   pin: true
+# Its composition loads two OAR runtimes; startup alone takes about 10 s on Windows and exceeds the default under load.
+processTimeoutMs: 60000

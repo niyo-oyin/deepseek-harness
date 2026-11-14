@@ -111,6 +111,8 @@ export interface SnapshotManifest {
   platforms?: SnapshotPlatform[]
   /** Host capabilities the scenario needs on every platform it runs on. */
   requires?: SnapshotCapability[]
+  /** Process deadline for a scenario whose composition is slower to start than the suite default allows. */
+  processTimeoutMs?: number
   /** Explicit process fallback permission preset. */
   permission?: SnapshotPermission
   /** Test-only string environment additions needed by the declared composition. */
@@ -230,6 +232,7 @@ export function parseSnapshotManifest(source: string, path = 'snapshot.yml'): Sn
       'replay',
       'platforms',
       'requires',
+      'processTimeoutMs',
       'permission',
       'environment',
       'workspace',
@@ -309,6 +312,11 @@ export function parseSnapshotManifest(source: string, path = 'snapshot.yml'): Sn
     const requires = root.requires === undefined
       ? undefined
       : uniqueMembers(root.requires, SNAPSHOT_CAPABILITIES, 'manifest.requires')
+    if (root.processTimeoutMs !== undefined
+      && (!Number.isSafeInteger(root.processTimeoutMs) || (root.processTimeoutMs as number) <= 0)) {
+      throw new Error('manifest.processTimeoutMs must be a positive integer')
+    }
+    const processTimeoutMs = root.processTimeoutMs as number | undefined
 
     let permission: SnapshotPermission | undefined
     if (root.permission !== undefined) {
@@ -431,6 +439,7 @@ export function parseSnapshotManifest(source: string, path = 'snapshot.yml'): Sn
       ...(replay === undefined ? {} : { replay }),
       ...(platforms === undefined ? {} : { platforms }),
       ...(requires === undefined ? {} : { requires }),
+      ...(processTimeoutMs === undefined ? {} : { processTimeoutMs }),
       ...(permission === undefined ? {} : { permission }),
       ...(environment === undefined ? {} : { environment }),
       ...(workspace === undefined ? {} : { workspace }),

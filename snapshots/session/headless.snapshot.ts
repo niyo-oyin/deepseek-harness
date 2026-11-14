@@ -60,7 +60,7 @@ import {
   type SnapshotManifest,
   type WorkspaceSnapshotEntry,
 } from '@deepseek-ai/dsh-session-snapshot'
-import { LOADER_SMOKE_TEST_TIMEOUT_MS, resolveExampleMode, runLoaderSmoke } from '@deepseek-ai/dsh-loader-smoke'
+import { DEFAULT_PROCESS_TIMEOUT_MS, LOADER_SMOKE_TEST_TIMEOUT_MS, resolveExampleMode, runLoaderSmoke } from '@deepseek-ai/dsh-loader-smoke'
 import { resolvePwshPath } from '@deepseek-ai/dsh-pwsh-local'
 import { parseSessionLog, prepareSessionSnapshotFixtureForComparison } from '@deepseek-ai/dsh-llm-replay'
 
@@ -1418,6 +1418,7 @@ describe('headless recorded-session snapshots', () => {
         result = await runLoaderSmoke({
           label: `${scenario.name} headless snapshot`,
           tempDirPrefix: 'dsh-log-snap-',
+          ...(scenario.manifest.processTimeoutMs === undefined ? {} : { processTimeoutMs: scenario.manifest.processTimeoutMs }),
           ...(scenario.name === 'compaction-recovery' ? await compactionWorkspaceOptions() : {}),
           ...(scenario.manifest.workspace?.parent === 'outside-temp' ? { tempDirParent: outsideTempWorkspaceParent() } : {}),
           binScript: dshBin,
@@ -1655,6 +1656,8 @@ describe('headless recorded-session snapshots', () => {
       } else {
         expect(finalWorkspace, `${scenario.name}: a changed workspace requires workspace.final`).toEqual(initialWorkspace)
       }
-    }, scenario.name === 'provider-cwd' ? 3 * LOADER_SMOKE_TEST_TIMEOUT_MS : LOADER_SMOKE_TEST_TIMEOUT_MS)
+    }, scenario.name === 'provider-cwd'
+      ? 3 * LOADER_SMOKE_TEST_TIMEOUT_MS
+      : LOADER_SMOKE_TEST_TIMEOUT_MS + Math.max(0, (scenario.manifest.processTimeoutMs ?? 0) - DEFAULT_PROCESS_TIMEOUT_MS))
   }
 })
