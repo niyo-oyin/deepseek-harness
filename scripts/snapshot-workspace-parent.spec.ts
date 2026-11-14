@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
-import { dirname, join, parse } from 'node:path'
+import { basename, dirname, join, parse } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { SandboxedFileSystem } from '@deepseek-ai/dsh-fs-sandbox'
 import { canonicalPath } from '@deepseek-ai/dsh-sandbox'
@@ -12,6 +12,15 @@ import { assertWorkspaceOutsideTemp, outsideTempWorkspaceParent } from './snapsh
 
 // Host disk exhaustion is not simulated: placement and the real write fence are the regression oracles.
 describe('snapshot workspace parent', () => {
+  it('allocates workspaces whose physical path is the spelled one, even where the host redirects app data', async () => {
+    const workspace = await mkdtemp(join(outsideTempWorkspaceParent(), 'dsh-snapshot-physical-'))
+    try {
+      expect(canonicalPath(workspace)).toBe(join(canonicalPath(dirname(workspace)), basename(workspace)))
+    } finally {
+      await rm(workspace, { recursive: true, force: true })
+    }
+  })
+
   // Windows directory permissions and root bypass do not enforce POSIX write bits.
   it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)('uses home when the temp parent is not writable', async () => {
     const base = await mkdtemp(join(outsideTempWorkspaceParent(), '.dsh-snapshot-readonly-'))

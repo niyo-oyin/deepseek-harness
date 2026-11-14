@@ -1,8 +1,8 @@
 /** Workspace placement for snapshots that must not inherit temporary-directory write grants. */
 
-import { accessSync, constants } from 'node:fs'
+import { accessSync, constants, mkdtempSync, rmSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
-import { dirname, isAbsolute, parse, relative, sep } from 'node:path'
+import { basename, dirname, isAbsolute, join, parse, relative, sep } from 'node:path'
 import { canonicalPath, writableRoots } from '@deepseek-ai/dsh-sandbox'
 
 function contains(root: string, path: string): boolean {
@@ -11,7 +11,7 @@ function contains(root: string, path: string): boolean {
 }
 
 /**
- * Select a writable temp sibling parent, or home when that parent is unavailable for writes.
+ * Select a writable temp sibling parent, or home when that parent is unavailable for writes or redirects them.
  * The caller atomically allocates and owns cleanup of the generated workspace.
  * @param tempRoot - platform temporary directory.
  * @param home - fallback when temp siblings require a system directory or a non-writable parent.
@@ -30,7 +30,23 @@ export function outsideTempWorkspaceParent(tempRoot = tmpdir(), home = homedir()
     if (code === 'EACCES' || code === 'EPERM' || code === 'EROFS') return home
     throw error
   }
-  return parent
+  return hostsOwnDirectories(parent) ? parent : home
+}
+
+/**
+ * Whether a directory created in `parent` is physically where it is spelled. A process inside a packaged Windows
+ * app has its new AppData entries redirected into the package's LocalCache, so a workspace there would have a
+ * different physical path and the sandbox would rightly refuse grants spelled under it.
+ * @param parent - candidate workspace parent.
+ * @returns true when a probe directory's real path is its own.
+ */
+function hostsOwnDirectories(parent: string): boolean {
+  const probe = mkdtempSync(join(parent, '.dsh-parent-probe-'))
+  try {
+    return canonicalPath(probe) === join(canonicalPath(parent), basename(probe))
+  } finally {
+    rmSync(probe, { recursive: true, force: true })
+  }
 }
 
 /**
