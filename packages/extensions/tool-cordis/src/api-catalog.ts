@@ -1106,6 +1106,20 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'deepseekChatImport',
+    summary: 'Serves the owner-only export upload route and the limits the browser checks first.',
+    description: 'Serves the owner-only export upload route and the limits the browser checks first.',
+    methods: [
+      {
+        signature: '@Remote limits(signal: AbortSignal): DeepseekChatImportLimits',
+        description: 'Report the limits the browser checks before uploading. Only the owner may import, so every other principal is refused.',
+        parameters: [{ name: 'signal', description: 'Client cancellation or Remote withdrawal.' }],
+        returns: 'the largest accepted archive size.',
+        throws: ['{RemoteError} `deepseekChatImport/owner-only` for a caller that is not the owner.'],
+      },
+    ],
+  },
+  {
     key: 'directoryPicker',
     summary: 'Abstract directory-picking service.',
     description: 'Abstract directory-picking service. Subclass, implement `capability()`, and load the subclass as a plugin — it registers as `ctx.directoryPicker` (one implementation per context; loading a second throws, cordis\' standard duplicate-service behavior). The capability object must be stable for the service lifetime: consumers may capture it across calls.',
@@ -3419,6 +3433,26 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'request', description: 'Session identity whose cwd and preset select the catalog view.' }, { name: 'signal', description: 'caller lifetime carried by the Remote transport; admitted catalog reads retain their existing completion semantics.' }],
         returns: 'user-invocable skill metadata without loading skill bodies.',
         throws: ['RemoteError when the Session cannot be inspected or no registry can serve it.'],
+      },
+    ],
+  },
+  {
+    key: 'sessionStatus',
+    summary: 'Shared owner reading records; no reading operation changes model history.',
+    description: 'Shared owner reading records; no reading operation changes model history.',
+    methods: [
+      {
+        signature: '@Remote async mark(sessionId: SessionId, action: SessionReadAction): Promise<void>',
+        description: 'Update one Session; read positions advance only through Client-observed completions.',
+        parameters: [{ name: 'sessionId', description: 'Session identity.' }, { name: 'action', description: 'Explicit reminder change or automatic read-position acknowledgement.' }],
+        throws: ['RemoteError when closing, the Session is missing, or its metadata cannot be read.'],
+      },
+      {
+        signature: '@Remote({ mode: \'stream\' }) async *follow(signal: AbortSignal): AsyncIterable<SessionReadFrame>',
+        description: 'Follow accessible reading records; every connection starts with a complete baseline.',
+        parameters: [{ name: 'signal', description: 'generation cancellation.' }],
+        returns: 'the baseline and whole-record changes, filtered by Session access.',
+        throws: ['RemoteError when the service is closing.'],
       },
     ],
   },
