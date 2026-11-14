@@ -6,13 +6,15 @@
  * (a throwing observer only logs), and asserted in `agent/turn-stopping`, whose
  * serial dispatch commits the turn — so a violated expectation fails the run.
  */
+import { EOL } from 'node:os'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 
 export const inject = ['jobs', 'tools']
 
 const STEER_TEXT = 'STEER_WHILE_WAITING'
 const PRODUCER_OUTPUT = 'producer ready'
-const STEERED_RESULT = 'producer ready\n[status: running, user steered]'
+// The producer's shell ends its line with the platform newline (CRLF from pwsh on Windows).
+const STEERED_RESULT = `${PRODUCER_OUTPUT}${EOL}[status: running, user steered]`
 
 /** @param {import('@deepseek-ai/cordis').Context} ctx - Scenario-owned runtime. */
 export function apply(ctx) {

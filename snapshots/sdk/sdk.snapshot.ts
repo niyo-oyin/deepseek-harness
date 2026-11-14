@@ -79,6 +79,9 @@ import { parseEntryYaml, type PatchOptions } from '@deepseek-ai/cordis-plugin-in
 const corpusRoot = fileURLToPath(new URL('../', import.meta.url))
 
 const MINIMAL_SYSTEM_PROMPT = 'You are the environment-selected minimal software engineer.'
+/** The shell tool a shipped composition offers on this platform. */
+const SHELL_TOOL = snapshotPlatformOf() === 'windows' ? 'pwsh' : 'bash'
+
 const MINIMAL_BASH_DESCRIPTION = `Run commands in a bash shell
 * When invoking this tool, the contents of the "command" parameter does NOT need to be XML-escaped.
 * You don't have access to the internet via this tool.
@@ -219,7 +222,7 @@ const SDK_ASSERTIONS: Readonly<Record<string, SdkAssertions>> = {
   },
   'minimal-image-compaction': {
     expectedFinalResponse: 'MINIMAL_IMAGE_OK',
-    expectedTools: { bash: ['command'], read_image: ['file_path'], working_directory: [] },
+    expectedTools: { [SHELL_TOOL]: ['command'], read_image: ['file_path'], working_directory: [] },
   },
   'session-title-stability': { waitForProviderTitle: true },
   'dynamic-tool-updates': {
@@ -1655,7 +1658,7 @@ describe('TypeScript SDK snapshots over the jsonrpc runtime', () => {
         const headers = events.filter(event => event.type === 'request/header')
           .map(event => (event.data.header as { tools: { name: string }[] }).tools.map(tool => tool.name))
         expect(headers, JSON.stringify(events.filter(event => event.type === 'turn/end' || event.type === 'tool/result'))).toHaveLength(2)
-        expect(headers[0]).toContain(host.platform === 'windows' ? 'pwsh' : 'bash')
+        expect(headers[0]).toContain(SHELL_TOOL)
         expect(headers[0]).not.toContain('run_code')
         expect(headers[1]).toEqual(['run_code'])
         const errors = events.filter(event => event.type === 'tool/result' || event.type === 'tool/ptc-dispatch')
@@ -1704,8 +1707,9 @@ describe('TypeScript SDK snapshots over the jsonrpc runtime', () => {
         const refreshed = ordered.map((log, index) => {
           const existing = expectedContents[index]
           if (existing === undefined) throw new Error(`no fixture for persisted log ${index}`)
+          // Tokenized first, so alias cwd spellings are still recognizable after stabilization.
           return scrubSessionSnapshot(tokenizeSessionFixtureCwd(
-            stabilizeRefreshLog(log.content, existing, replacements, actualContext),
+            stabilizeRefreshLog(tokenizeSessionFixtureCwd(log.content), existing, replacements, actualContext),
           ))
         })
         expectedContents = redactSessionSnapshotIds(stabilizeFixtureMessageIds(reconcileCatalogCreationTimes(refreshed, 'preserve-headers'), expectedContents))

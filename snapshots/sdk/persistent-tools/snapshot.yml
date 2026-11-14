@@ -8,3 +8,6 @@ header:
   pin: true
 workspace:
   final: true
+
+# The persistent bash tool itself is under test; persistent-pwsh-tool-turn covers the persistent pwsh tool.
+platforms: [posix]
