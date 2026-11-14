@@ -9,7 +9,7 @@ export default defineConfig({
     execArgv: vitestExecArgv,
     pool: 'forks',
     setupFiles: [
-      './scripts/test-proxy-environment.ts', './scripts/test-network-guard.mjs', './scripts/test-dom-environment.ts',
+      './scripts/test-proxy-environment.ts', './scripts/test-dom-environment.ts', './scripts/test-official-listing-guard.ts',
     ],
     include: [RESOLUTION_MATRIX_SPEC],
   },
