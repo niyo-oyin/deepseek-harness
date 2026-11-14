@@ -5,4 +5,5 @@
     launch:
       kind: node-script
       executable: !!js process.execPath
-      bootstrapPath: !!js "decodeURIComponent(new URL('./runner.mjs', 'file://' + process.env.DSH_SNAPSHOT_FILE).pathname)"
+      # The runner sits in the scenario directory, above any posix/ or windows/ fixture copy.
+      bootstrapPath: !!js "process.env.DSH_SNAPSHOT_FILE.replace(/(?:[\\\\/](?:posix|windows))?[\\\\/][^\\\\/]+$/u, '') + '/runner.mjs'"
