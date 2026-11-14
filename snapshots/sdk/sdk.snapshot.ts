@@ -533,6 +533,19 @@ function records(log: string): JsonObject[] {
     .map(line => JSON.parse(line) as JsonObject)
 }
 
+/**
+ * A Session's records with automatic provider titles set apart. Those titles commit asynchronously: generation
+ * never delays the turn and a late result appends a standalone event (dsh-session-title), so their position among
+ * the turn's events is not part of the product's contract. Their values and message references still compare, in
+ * their own order.
+ */
+function sessionComparisonRecords(log: string): { events: JsonObject[]; providerTitles: JsonObject[] } {
+  const isProviderTitle = (row: JsonObject): boolean => row.type === 'session/title'
+    && ((row.data as JsonObject | undefined)?.source as JsonObject | undefined)?.kind === 'provider'
+  const rows = records(log)
+  return { events: rows.filter(row => !isProviderTitle(row)), providerTitles: rows.filter(isProviderTitle) }
+}
+
 function notificationComparisonRecords(log: string, sourceLogs: readonly string[]): JsonObject[] {
   const versions = sourceLogs.map((source, index) => sessionHeaderVersion(source, `notification Session ${index}`))
   expect(new Set(versions).size, 'wire golden Session roles share one native writer generation').toBe(1)
@@ -1712,7 +1725,8 @@ describe('TypeScript SDK snapshots over the jsonrpc runtime', () => {
       const expectedContext = contextOfContents(expectedContents)
       const actualSnapshots = normalizeSessionSnapshots(ordered.map(log => log.content), actualContext, { nativeWriterOutput: true })
       const expectedSnapshots = normalizeSessionSnapshots(expectedContents, expectedContext, { nativeWriterOutput: true })
-      expect(actualSnapshots.map(records), `${scenario.name}: sessions`).toEqual(expectedSnapshots.map(records))
+      expect(actualSnapshots.map(sessionComparisonRecords), `${scenario.name}: sessions`)
+        .toEqual(expectedSnapshots.map(sessionComparisonRecords))
       await verifyHeaders(scenario, ordered, actualContext, assertions.dshSdkChild?.agentConfig)
 
       // Genuine SDK protocol cases retain their secondary wire projections.
