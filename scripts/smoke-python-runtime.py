@@ -1911,7 +1911,7 @@ def smoke_sdk_v3_resume(base_url: str, executable: Path) -> None:
             return DeepSeekHarness(
                 provider="deepseek-official", model="smoke-model", cwd=str(root),
                 dsh_bin=str(executable), dsh_home=str(root / "home"), patches=(str(patch),),
-                env={"DSH_TELEMETRY_DISABLED": "1"}, api_key="sk-keyless-smoke", base_url=base_url,
+                api_key="sk-keyless-smoke", base_url=base_url,
                 request_timeout_seconds=60,
             )
 
