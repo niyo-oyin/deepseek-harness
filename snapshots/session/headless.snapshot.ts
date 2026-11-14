@@ -2,7 +2,7 @@
 
 import { startHttpMcpFixture } from '../../packages/mcp/mcp-client/tests/http-fixture.ts'
 import { chmod, cp, copyFile, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, utimes, writeFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
+import { existsSync, realpathSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { basename, delimiter, dirname, isAbsolute, join, relative, sep } from 'node:path'
@@ -194,13 +194,21 @@ function headerOf(log: string): JsonObject {
   return records(log)[0] ?? {}
 }
 
-function contextOf(logs: readonly string[]): NormalizeContext {
+/**
+ * Normalization context of persisted logs.
+ * @param logs - primary-first Session logs.
+ * @param runCwds - the run's own spellings of its workspace: Windows reports one directory in both its short (8.3)
+ *   and long form, and the product does not use one of them consistently.
+ * @returns the context whose cwd spellings, each also with forward slashes, become `{{cwd}}`.
+ */
+function contextOf(logs: readonly string[], runCwds: readonly string[] = []): NormalizeContext {
   const headers = logs.map(headerOf)
   const cwd = typeof headers[0]?.cwd === 'string' ? headers[0].cwd : '\0missing-cwd\0'
+  const spellings = [cwd, ...runCwds]
   return {
     sessionIds: headers.flatMap(header => typeof header.id === 'string' ? [header.id] : []),
     cwd,
-    cwdAliases: [cwd.split(sep).join('/')],
+    cwdAliases: [...new Set([...spellings, ...spellings.map(spelling => spelling.split(sep).join('/'))])],
   }
 }
 
@@ -274,8 +282,10 @@ async function writeSessionFixtures(
     if (replacement.from === ctx.cwd) replacements.push({ from: ctx.cwd.split(sep).join('/'), to: replacement.to })
   }
   const fresh = actualLogs.map((log, index) => {
+    // Tokenize the fresh log first: stabilization copies the prior header's {{cwd}}, after which an
+    // alias spelling such as a Windows long path or a JSON-quoted one could no longer be recognized.
     const stable = tokenizeSessionFixtureCwd(mode === 'refresh'
-      ? stabilizeRefreshLog(log.content, prior[index] as string, replacements, ctx)
+      ? stabilizeRefreshLog(tokenizeSessionFixtureCwd(log.content), prior[index] as string, replacements, ctx)
       : log.content)
     return scrubSessionSnapshot(prepareSessionSnapshotFixtureForComparison(stable))
   })
@@ -611,6 +621,8 @@ const hasPwsh = spawnSync(
   { encoding: 'utf8' },
 ).status === 0
 const host: SnapshotHost = { platform: snapshotPlatformOf(), capabilities: new Set(hasPwsh ? ['pwsh'] : []) }
+/** The shell tool a shipped composition offers on this platform. */
+const SHELL_TOOL = host.platform === 'windows' ? 'pwsh' : 'bash'
 const scenarioByName = new Map(scenarios.map(scenario => [scenario.name, scenario]))
 const compositionOwners = new Map<string, HeadlessScenario>()
 const headerPins = new Map<string, HeadlessScenario>()
@@ -848,7 +860,7 @@ function verifyNoMcpServers(log: string, ptc: boolean): void {
     const names = header.tools?.map(tool => tool.name) ?? []
     expect(names.filter(name => name.includes('mcp'))).toEqual([])
     if (ptc) expect(names).toEqual(['run_code'])
-    else expect(names).toContain('bash')
+    else expect(names).toContain(SHELL_TOOL)
   }
   for (const prompt of prompts) {
     expect(prompt).not.toMatch(/\bMCP\b|mcp__/)
@@ -1349,6 +1361,8 @@ describe('headless recorded-session snapshots', () => {
   ])
   for (const { scenario, retainedToolInput } of runs) {
     const skipReason = snapshotSkipReason(scenario.manifest, host)
+      // The retained V3 input is immutable history recorded with the bash tool, which Windows does not compose.
+      ?? (retainedToolInput !== undefined && host.platform === 'windows' ? 'the retained V3 input calls bash' : undefined)
       // A read-only directory does not deny root, so the recorded refusal cannot replay.
       ?? (scenario.manifest.workspace?.setup === 'readonly-patch-directory' && process.getuid?.() === 0
         ? 'root ignores a read-only directory' : undefined)
@@ -1399,6 +1413,7 @@ describe('headless recorded-session snapshots', () => {
       const mcpDemo = scenario.name === 'plugin-manager-mcp' || scenario.name === 'mcp-template-error'
         ? await startHttpMcpFixture({ rejectToolCalls: scenario.name === 'mcp-template-error' }) : undefined
       let result: Awaited<ReturnType<typeof runLoaderSmoke>>
+      let runCwds: string[] = []
       try {
         result = await runLoaderSmoke({
           label: `${scenario.name} headless snapshot`,
@@ -1462,6 +1477,7 @@ describe('headless recorded-session snapshots', () => {
             })
           },
           inspect: async (cwd) => {
+            runCwds = [cwd, realpathSync.native(cwd)]
             actualLogs = await persistedSessions(cwd)
             if (scenario.name === 'empty-response-retry-current') {
               const events = parseSessionLog(actualLogs[0]!.content)
@@ -1579,7 +1595,7 @@ describe('headless recorded-session snapshots', () => {
       const stderrLog = mode === 'replay' ? primaryFixture : actualLogs[0]?.content
       if (stderrLog === undefined) throw new Error(`${scenario.name}: stderr projection has no primary session`)
       const expectedStderr = stderrFromSession(stderrLog)
-      const actualContext = contextOf(actualLogs.map(log => log.content))
+      const actualContext = contextOf(actualLogs.map(log => log.content), runCwds)
 
       if (writesCurrentSessionFixtures(scenario.manifest, mode)) {
         fixtures = await writeSessionFixtures(

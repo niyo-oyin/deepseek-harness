@@ -1377,7 +1377,8 @@ export function defineAcpSnapshotSuite(options: SnapshotSuiteOptions): void {
             : []
           const freshFixtures = REFRESHING
             ? result.sessionLogs.map((log, index) => scrubSessionSnapshot(portableFixture(stabilizeRefreshLog(
-              log.content,
+              // Tokenized first, so alias cwd spellings are still recognizable after stabilization.
+              portableFixture(log.content),
               existingFixtures[index] as string,
               refreshReplacements,
               ctx,
