@@ -22,4 +22,4 @@ A historical set of providers wrongly cancels a turn after it switches to an API
 
 Model selection exposes both routes, and choosing an account route requires login even when an API key exists. The `llm-deepseek-account` and `llm-deepseek-api-key` plugins independently own catalogs, connection settings, and credentials; both use the `llm-deepseek` protocol library. Cancellation preserves queued input without waking it automatically. The recorded hook reason produces a localized conversation notice without changing durable event types.
 
-Behavior tests cover credential separation, first preparation, tool-stage cancellation, and route replacement. The SDK account-provider-signout scenario boots the shipped profile and records interrupted output plus the cancellation cause.
+Behavior tests cover credential separation, first preparation, tool-stage cancellation, and route replacement. This distribution disables the account route, so it carries no SDK snapshot scenario for it.
