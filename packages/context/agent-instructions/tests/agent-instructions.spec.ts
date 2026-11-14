@@ -108,6 +108,37 @@ function deepProjectMarker(maxBytes: number): string {
     + 'truncated aaaaaaaaaa/bbbbbbbbbb/cccccccccc/dddddddddd/AGENTS.md from 5000 to 0 bytes'
 }
 
+/** The default harness-home instruction file as discovery labels it; budget fixtures below are sized from its rendering. */
+const userGlobalPath = `${DEFAULT_DSH_HOME_DISPLAY}/AGENTS.md`
+
+/** A default-home instruction file holding `content`. */
+function userGlobalFile(content: string): { absolutePath: string; displayPath: string; content: string } {
+  return { absolutePath: `/home/user/${DSH_HOME_DIR_NAME}/AGENTS.md`, displayPath: userGlobalPath, content }
+}
+
+/** Expected rendering of a lone default-home file holding `content`, with the full intro and no budget notice. */
+function userGlobalAlone(content: string): string {
+  return ['<system-reminder>', baselineIntro, '', `Instructions from: ${userGlobalPath}`, '', content, '</system-reminder>'].join('\n')
+}
+
+/**
+ * The content length at which `render` is exactly `budget` UTF-8 bytes. A rendering that names its own
+ * content length changes size with that number's digits, so the length is settled by iteration.
+ * @param budget - the exact rendered size to reach.
+ * @param render - the expected rendering carrying `contentBytes` bytes of single-byte content.
+ * @returns the content length; a budget the frame alone exceeds fails the fixture.
+ */
+function exactFit(budget: number, render: (contentBytes: number) => string): number {
+  let bytes = 0
+  for (let step = 0; step < 8; step += 1) {
+    const size = Buffer.byteLength(render(bytes), 'utf8')
+    if (size === budget) return bytes
+    bytes += budget - size
+    if (bytes < 0) throw new Error(`the rendered frame alone exceeds ${String(budget)} bytes`)
+  }
+  throw new Error(`no content length renders exactly ${String(budget)} bytes`)
+}
+
 /** A plain ASCII instruction file of `kib` KiB at a `~/` user-global or project display path. */
 function kibInstruction(displayPath: string, kib: number): { absolutePath: string; displayPath: string; content: string } {
   return {
@@ -1335,20 +1366,31 @@ describe('workspace context rendering', () => {
       { absolutePath: '/repo/AGENTS.md', displayPath: 'AGENTS.md', content: 'root rule' },
       { absolutePath: '/repo/pkg/AGENTS.md', displayPath: 'pkg/AGENTS.md', content: 'package rule' },
     ]
-    const truncated = [{ displayPath: `${DEFAULT_DSH_HOME_DISPLAY}/AGENTS.md`, originalBytes: 71680, includedBytes: 65129 }]
+    const kept = exactFit(65536, bytes => [
+      '<system-reminder>',
+      `Workspace instruction budget 65536 bytes: truncated ${userGlobalPath} from 71680 to ${String(bytes)} bytes`,
+      '',
+      baselineIntro,
+      '',
+      `Instructions from: ${userGlobalPath}`,
+      '',
+      'g'.repeat(bytes),
+      '</system-reminder>',
+    ].join('\n'))
+    const truncated = [{ displayPath: userGlobalPath, originalBytes: 71680, includedBytes: kept }]
 
     const { rendered, included } = renderAgentInstructionSet(files, { maxBytes: 65536 })
 
     expect(rendered).toEqual({
       text: [
         '<system-reminder>',
-        `Workspace instruction budget 65536 bytes: truncated ${DEFAULT_DSH_HOME_DISPLAY}/AGENTS.md from 71680 to 65129 bytes`,
+        `Workspace instruction budget 65536 bytes: truncated ${userGlobalPath} from 71680 to ${String(kept)} bytes`,
         '',
         baselineIntro,
         '',
         `Instructions from: ${DEFAULT_DSH_HOME_DISPLAY}/AGENTS.md`,
         '',
-        userGlobal.content.slice(0, 65129),
+        userGlobal.content.slice(0, kept),
         '',
         'Instructions from: AGENTS.md',
         '',
@@ -1401,7 +1443,7 @@ describe('workspace context rendering', () => {
   })
 
   it('keeps a user-global file that fills its budget exactly while the project chain fits only its notice and empty heading', () => {
-    const userGlobal = { absolutePath: `/home/user/${DSH_HOME_DIR_NAME}/AGENTS.md`, displayPath: `${DEFAULT_DSH_HOME_DISPLAY}/AGENTS.md`, content: 'Use pnpm.' }
+    const userGlobal = userGlobalFile('g'.repeat(exactFit(320, bytes => userGlobalAlone('g'.repeat(bytes)))))
     const project = [
       { absolutePath: '/repo/AGENTS.md', displayPath: 'AGENTS.md', content: 'r'.repeat(1000) },
       { absolutePath: '/repo/packages/app/AGENTS.md', displayPath: 'packages/app/AGENTS.md', content: 'a'.repeat(1000) },
@@ -1423,9 +1465,9 @@ describe('workspace context rendering', () => {
       '',
       baselineIntro,
       '',
-      `Instructions from: ${DEFAULT_DSH_HOME_DISPLAY}/AGENTS.md`,
+      `Instructions from: ${userGlobalPath}`,
       '',
-      'Use pnpm.',
+      userGlobal.content,
       '',
       'Instructions from: packages/app/src/feature/AGENTS.md',
       '',
@@ -1438,7 +1480,7 @@ describe('workspace context rendering', () => {
   })
 
   it('keeps a user-global file that fills its budget exactly while the project chain fits only its bare notice', () => {
-    const userGlobal = { absolutePath: `/home/user/${DSH_HOME_DIR_NAME}/AGENTS.md`, displayPath: `${DEFAULT_DSH_HOME_DISPLAY}/AGENTS.md`, content: 'g'.repeat(5) }
+    const userGlobal = userGlobalFile('g'.repeat(exactFit(316, bytes => userGlobalAlone('g'.repeat(bytes)))))
     expect(Buffer.byteLength(renderAgentInstructions([userGlobal], { maxBytes: 316 }).text, 'utf8')).toBe(316)
     expect(renderAgentInstructions(deepProjectFiles, { maxBytes: 316 }).text).toBe(deepProjectMarker(316))
 
@@ -1450,9 +1492,9 @@ describe('workspace context rendering', () => {
       '',
       baselineIntro,
       '',
-      `Instructions from: ${DEFAULT_DSH_HOME_DISPLAY}/AGENTS.md`,
+      `Instructions from: ${userGlobalPath}`,
       '',
-      'g'.repeat(5),
+      userGlobal.content,
       '</system-reminder>',
     ].join('\n'))
     expect(included).toEqual([userGlobal])
@@ -1460,33 +1502,33 @@ describe('workspace context rendering', () => {
   })
 
   it('merges a frameless project chain at exactly twice the budget and falls back to one budget one byte above', () => {
-    const userGlobal = (bytes: number): { absolutePath: string; displayPath: string; content: string } => (
-      { absolutePath: `/home/user/${DSH_HOME_DIR_NAME}/AGENTS.md`, displayPath: `${DEFAULT_DSH_HOME_DISPLAY}/AGENTS.md`, content: 'g'.repeat(bytes) }
-    )
+    const userGlobal = (bytes: number): { absolutePath: string; displayPath: string; content: string } => userGlobalFile('g'.repeat(bytes))
     const deepestHeading = 'Instructions from: aaaaaaaaaa/bbbbbbbbbb/cccccccccc/dddddddddd/AGENTS.md'
-    expect(renderAgentInstructions(deepProjectFiles, { maxBytes: 318 }).text).toBe(`${deepProjectMarker(318)}\n\n${deepestHeading}\n\n`)
-    expect(renderAgentInstructions([userGlobal(6)], { maxBytes: 318 })).toMatchObject({ omitted: [], truncated: [] })
-
-    const atBound = renderAgentInstructionSet([userGlobal(5), ...deepProjectFiles], { maxBytes: 318 })
-    const overBound = renderAgentInstructionSet([userGlobal(6), ...deepProjectFiles], { maxBytes: 318 })
-
-    expect(atBound.rendered.text).toBe([
+    const merged = (bytes: number): string => [
       '<system-reminder>',
       deepProjectMarker(318),
       '',
       baselineIntro,
       '',
-      `Instructions from: ${DEFAULT_DSH_HOME_DISPLAY}/AGENTS.md`,
+      `Instructions from: ${userGlobalPath}`,
       '',
-      'g'.repeat(5),
+      'g'.repeat(bytes),
       '',
       deepestHeading,
       '',
       '',
       '</system-reminder>',
-    ].join('\n'))
+    ].join('\n')
+    const bound = exactFit(2 * 318, merged)
+    expect(renderAgentInstructions(deepProjectFiles, { maxBytes: 318 }).text).toBe(`${deepProjectMarker(318)}\n\n${deepestHeading}\n\n`)
+    expect(renderAgentInstructions([userGlobal(bound + 1)], { maxBytes: 318 })).toMatchObject({ omitted: [], truncated: [] })
+
+    const atBound = renderAgentInstructionSet([userGlobal(bound), ...deepProjectFiles], { maxBytes: 318 })
+    const overBound = renderAgentInstructionSet([userGlobal(bound + 1), ...deepProjectFiles], { maxBytes: 318 })
+
+    expect(atBound.rendered.text).toBe(merged(bound))
     expect(Buffer.byteLength(atBound.rendered.text, 'utf8')).toBe(2 * 318)
-    expect(atBound.included).toEqual([userGlobal(5)])
+    expect(atBound.included).toEqual([userGlobal(bound)])
     expect(overBound.rendered.text).toBe(`Workspace instruction budget 318 bytes: omitted ${DEFAULT_DSH_HOME_DISPLAY}/AGENTS.md, AGENTS.md, aaaaaaaaaa/AGENTS.md, `
       + 'aaaaaaaaaa/bbbbbbbbbb/AGENTS.md, aaaaaaaaaa/bbbbbbbbbb/cccccccccc/AGENTS.md; '
       + 'truncated aaaaaaaaaa/bbbbbbbbbb/cccccccccc/dddddddddd/AGENTS.md from 5000 to 0 bytes')
@@ -1495,8 +1537,20 @@ describe('workspace context rendering', () => {
   })
 
   it('keeps both chains whole when each fills its budget exactly and truncates both one byte lower', () => {
+    const whole = exactFit(600, bytes => userGlobalAlone('g'.repeat(bytes)))
+    const kept = exactFit(599, bytes => [
+      '<system-reminder>',
+      `Workspace instruction budget 599 bytes: truncated ${userGlobalPath} from ${String(whole)} to ${String(bytes)} bytes`,
+      '',
+      baselineIntro,
+      '',
+      `Instructions from: ${userGlobalPath}`,
+      '',
+      'g'.repeat(bytes),
+      '</system-reminder>',
+    ].join('\n'))
     const files = [
-      { absolutePath: `/home/user/${DSH_HOME_DIR_NAME}/AGENTS.md`, displayPath: `${DEFAULT_DSH_HOME_DISPLAY}/AGENTS.md`, content: 'g'.repeat(289) },
+      userGlobalFile('g'.repeat(whole)),
       { absolutePath: '/repo/AGENTS.md', displayPath: 'AGENTS.md', content: 'p'.repeat(296) },
     ]
     for (const file of files) {
@@ -1510,7 +1564,7 @@ describe('workspace context rendering', () => {
     expect(Buffer.byteLength(exact.rendered.text, 'utf8')).toBe(928)
     expect(exact.included).toEqual(files)
     expect(below.rendered.text.split('\n')[1]).toBe(
-      `Workspace instruction budget 599 bytes: truncated ${DEFAULT_DSH_HOME_DISPLAY}/AGENTS.md from 289 to 198 bytes, AGENTS.md from 296 to 212 bytes`,
+      `Workspace instruction budget 599 bytes: truncated ${userGlobalPath} from ${String(whole)} to ${String(kept)} bytes, AGENTS.md from 296 to 212 bytes`,
     )
     expect(below.rendered.omitted).toEqual([])
     expect(below.included).toEqual(files)
@@ -1518,6 +1572,18 @@ describe('workspace context rendering', () => {
   })
 
   it('frames both chains under the compact intro when neither chain fits the full intro', () => {
+    const compactIntro = 'Workspace instructions were omitted or truncated to fit the configured byte budget.'
+    const kept = exactFit(300, bytes => [
+      '<system-reminder>',
+      `Workspace instruction budget 300 bytes: truncated ${userGlobalPath} from 1000 to ${String(bytes)} bytes`,
+      '',
+      compactIntro,
+      '',
+      `Instructions from: ${userGlobalPath}`,
+      '',
+      'g'.repeat(bytes),
+      '</system-reminder>',
+    ].join('\n'))
     const rendered = renderAgentInstructions([
       { absolutePath: `/home/user/${DSH_HOME_DIR_NAME}/AGENTS.md`, displayPath: `${DEFAULT_DSH_HOME_DISPLAY}/AGENTS.md`, content: 'g'.repeat(1000) },
       { absolutePath: '/repo/pkg/AGENTS.md', displayPath: 'pkg/AGENTS.md', content: 'p'.repeat(1000) },
@@ -1525,13 +1591,13 @@ describe('workspace context rendering', () => {
 
     expect(rendered.text).toBe([
       '<system-reminder>',
-      `Workspace instruction budget 300 bytes: truncated ${DEFAULT_DSH_HOME_DISPLAY}/AGENTS.md from 1000 to 51 bytes, pkg/AGENTS.md from 1000 to 57 bytes`,
+      `Workspace instruction budget 300 bytes: truncated ${userGlobalPath} from 1000 to ${String(kept)} bytes, pkg/AGENTS.md from 1000 to 57 bytes`,
       '',
-      'Workspace instructions were omitted or truncated to fit the configured byte budget.',
+      compactIntro,
       '',
-      `Instructions from: ${DEFAULT_DSH_HOME_DISPLAY}/AGENTS.md`,
+      `Instructions from: ${userGlobalPath}`,
       '',
-      'g'.repeat(51),
+      'g'.repeat(kept),
       '',
       'Instructions from: pkg/AGENTS.md',
       '',
@@ -1603,15 +1669,28 @@ describe('workspace context rendering', () => {
     ]
 
     const rendered = renderAgentInstructions(files, { maxBytes: 700 })
+    // The single-byte fit, cut back to the last whole three-byte code point.
+    const fit = exactFit(700, bytes => [
+      '<system-reminder>',
+      `Workspace instruction budget 700 bytes: truncated ${userGlobalPath} from 1200 to ${String(bytes)} bytes`,
+      '',
+      baselineIntro,
+      '',
+      `Instructions from: ${userGlobalPath}`,
+      '',
+      'g'.repeat(bytes),
+      '</system-reminder>',
+    ].join('\n'))
+    const kept = fit - fit % 3
 
     expect(rendered.truncated).toEqual([
-      { displayPath: `${DEFAULT_DSH_HOME_DISPLAY}/AGENTS.md`, originalBytes: 1200, includedBytes: 297 },
+      { displayPath: userGlobalPath, originalBytes: 1200, includedBytes: kept },
       { displayPath: 'AGENTS.md', originalBytes: 1200, includedBytes: 312 },
     ])
     expect(rendered.text).toContain([
       `Instructions from: ${DEFAULT_DSH_HOME_DISPLAY}/AGENTS.md`,
       '',
-      '规'.repeat(99),
+      '规'.repeat(kept / 3),
       '',
       'Instructions from: AGENTS.md',
       '',
@@ -1748,6 +1827,17 @@ describe('workspace context rendering', () => {
     ].join('\n')
     const small = items(10)
     const large = items(1000)
+    const keptGlobal = exactFit(400, bytes => [
+      '<system-reminder>',
+      `Workspace instruction budget 400 bytes: truncated ${userGlobalPath} from 1000 to ${String(bytes)} bytes`,
+      '',
+      `Additional instructions from: ${userGlobalPath}`,
+      '',
+      `These user-global instructions apply to all work. ${additionalGuidance}`,
+      '',
+      'g'.repeat(bytes),
+      '</system-reminder>',
+    ].join('\n'))
 
     const fits = renderInstructionChanges(small, 65536)
     const split = renderInstructionChanges(small, 400)
@@ -1757,7 +1847,7 @@ describe('workspace context rendering', () => {
     expect(split).toEqual(fits)
     expect(Buffer.byteLength(split.text, 'utf8')).toBeGreaterThan(400)
     expect(truncated).toEqual({
-      text: batchText([`Workspace instruction budget 400 bytes: truncated a/AGENTS.md from 1000 to 41 bytes, ${DEFAULT_DSH_HOME_DISPLAY}/AGENTS.md from 1000 to 25 bytes`, ''], 41, 25),
+      text: batchText([`Workspace instruction budget 400 bytes: truncated a/AGENTS.md from 1000 to 41 bytes, ${userGlobalPath} from 1000 to ${String(keptGlobal)} bytes`, ''], 41, keptGlobal),
       changes: large.map(item => item.change),
     })
   })
@@ -1773,22 +1863,15 @@ describe('workspace context rendering', () => {
         file: { absolutePath: '/repo/a/AGENTS.md', displayPath: 'a/AGENTS.md', content: 'p'.repeat(5000) },
       },
     ]
-    const atBoundItems = items(34)
-    expect(renderInstructionChanges(items(35).slice(0, 1), 321).changes).toHaveLength(1)
-
-    const atBound = renderInstructionChanges(atBoundItems, 321)
-    const overBound = renderInstructionChanges(items(35), 321)
-
-    expect(atBound.changes).toEqual([atBoundItems[0]!.change])
-    expect(atBound.text).toBe([
+    const merged = (bytes: number): string => [
       '<system-reminder>',
       'Workspace instruction budget 321 bytes: truncated a/AGENTS.md from 5000 to 0 bytes',
       '',
-      `Additional instructions from: ${DEFAULT_DSH_HOME_DISPLAY}/AGENTS.md`,
+      `Additional instructions from: ${userGlobalPath}`,
       '',
       `These user-global instructions apply to all work. ${additionalGuidance}`,
       '',
-      'g'.repeat(34),
+      'g'.repeat(bytes),
       '',
       'Additional instructions from: a/AGENTS.md',
       '',
@@ -1796,7 +1879,16 @@ describe('workspace context rendering', () => {
       '',
       '',
       '</system-reminder>',
-    ].join('\n'))
+    ].join('\n')
+    const bound = exactFit(2 * 321, merged)
+    const atBoundItems = items(bound)
+    expect(renderInstructionChanges(items(bound + 1).slice(0, 1), 321).changes).toHaveLength(1)
+
+    const atBound = renderInstructionChanges(atBoundItems, 321)
+    const overBound = renderInstructionChanges(items(bound + 1), 321)
+
+    expect(atBound.changes).toEqual([atBoundItems[0]!.change])
+    expect(atBound.text).toBe(merged(bound))
     expect(Buffer.byteLength(atBound.text, 'utf8')).toBe(2 * 321)
     expect(overBound).toEqual({
       text: `Workspace instruction budget 321 bytes: omitted ${DEFAULT_DSH_HOME_DISPLAY}/AGENTS.md; truncated a/AGENTS.md from 5000 to 0 bytes`,
