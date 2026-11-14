@@ -29,6 +29,7 @@
 
 import { createRequire } from 'node:module'
 import { networkInterfaces } from 'node:os'
+import { join } from 'node:path'
 
 /** Switch that exempts an opt-in live run; any other value, or absence, keeps the guard on. */
 export const LIVE_NETWORK_ENV = 'DSH_TEST_LIVE_NETWORK'
@@ -38,8 +39,9 @@ export const NETWORK_GUARD_IMPORT = `--import=${import.meta.url}`
 
 // The repository's own undici, resolved from this file so a child in any working directory loads the
 // same copy. undici 8 also publishes its dispatcher under the symbol Node's built-in `fetch` reads.
+// A path, not a relative URL: under a jsdom environment the global `URL` is jsdom's and resolves elsewhere.
 const { MockAgent, getGlobalDispatcher, setGlobalDispatcher } = createRequire(
-  new URL('../packages/util/http-proxy/package.json', import.meta.url),
+  join(import.meta.dirname, '..', 'packages', 'util', 'http-proxy', 'package.json'),
 )('undici')
 
 /**
