@@ -10,6 +10,7 @@
  */
 
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
+import type {} from '@deepseek-ai/cordis'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotMap {
@@ -154,6 +155,22 @@ export interface SettingsOnboardingOwnerProps {
   complete: () => void
   /** Open the settings panel directly on one registered section. */
   openSection: (id: string) => void
+}
+
+/** Cross-plugin navigation into the settings panel, provided while the settings shell is mounted. */
+export interface SettingsNavigation {
+  /**
+   * Open the settings panel on one registered section.
+   * @param id - section id, such as `models`.
+   */
+  openSection(id: string): void
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Optional: present only while the settings shell is mounted; read it with `ctx.get`. */
+    settingsNavigation: SettingsNavigation
+  }
 }
 
 /** Sidebar launcher geometry and settings navigation. */

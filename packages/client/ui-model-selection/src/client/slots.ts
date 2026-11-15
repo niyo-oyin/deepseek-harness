@@ -106,4 +106,11 @@ export interface ModelSelectInjected {
    * @returns the Host outcome, or undefined when this Session cannot select a model.
    */
   select: (selection: ModelSelection) => Promise<RemoteResult<void> | undefined>
+  /**
+   * Make this Session's composer inert with a reason, or clear it.
+   * @param reason - localized reason, or undefined to clear the block.
+   */
+  block: (reason: string | undefined) => void
+  /** Open the place to add a model provider; absent when the settings shell is not mounted. */
+  openProviders?: (() => void) | undefined
 }

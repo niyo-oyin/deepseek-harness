@@ -73,7 +73,7 @@ interface EffortChoice {
  * @returns the trigger and, while open, the two-level menu.
  */
 export function ModelSelect(
-  { locked, available, directory, load, select, resolveText, t, renderSlot }:
+  { locked, available, directory, load, select, resolveText, t, renderSlot, block, openProviders }:
   ModelSelectInjected & Pick<PropsRuntime<'conversation.input.model'>, 'locked'> & PropsLocale<'model'>
     & Omit<PropsRenderSlots<'conversation.input.model.label' | 'conversation.input.model.options' | 'conversation.input.model.pane'>, 'SessionProvider'>,
 ) {
@@ -83,6 +83,15 @@ export function ModelSelect(
   )
   const [open, setOpen] = useState(false)
   const [pane, setPane] = useState<Pane>(ROOT_PANE)
+  // Neither a Session selection nor a default: sending would have no model, so the composer
+  // waits for a pick. A saved route the catalog does not list still sends; the request reports it.
+  const noProvider = available && state.status === 'ready' && state.groups.length === 0
+  const noRoute = available && state.status === 'ready' && state.current === null
+  const blockReason = noRoute ? t(noProvider ? 'block.noProvider' : 'block.noModel') : undefined
+  useEffect(() => {
+    block(blockReason)
+    return () => { block(undefined) }
+  }, [block, blockReason])
   const [query, setQuery] = useState('')
   const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null)
   const [selectionFocus, setSelectionFocus] = useState(false)
@@ -506,6 +515,9 @@ export function ModelSelect(
         onClick={() => {
           if (open) {
             close(true)
+          } else if (noProvider && openProviders !== undefined) {
+            // No provider to pick from: lead to adding one instead of an empty picker.
+            openProviders()
           } else {
             show()
           }
@@ -656,7 +668,12 @@ export function ModelSelect(
                 })}
               </div>
               {state.status === 'ready' && filteredGroups.length === 0 && (
-                <div className={css.empty} role="status">{t(choices.length === 0 ? 'empty.models' : 'search.empty')}</div>
+                <div className={css.empty} role="status">
+                  {t(choices.length === 0 ? 'empty.models' : 'search.empty')}
+                  {choices.length === 0 && openProviders !== undefined
+                    ? <button type="button" className={css.retry} onClick={() => { close(false); openProviders() }}>{t('empty.addProvider')}</button>
+                    : null}
+                </div>
               )}
             </>
           )}

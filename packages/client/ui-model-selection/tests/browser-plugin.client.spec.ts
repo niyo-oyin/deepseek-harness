@@ -250,7 +250,7 @@ describe('ui-model-selection dual entry', () => {
       : { placeholder: 'Search models…', empty: 'No models available.', noResults: 'No matching models.' })
   })
 
-  it('orders popup provider groups account-first while retaining third-party catalog order', async () => {
+  it('orders popup provider groups by display name, with no vendor pinned first', async () => {
     const b = await bench()
     try {
       b.setGroups([
@@ -261,7 +261,7 @@ describe('ui-model-selection dual entry', () => {
       b.mint('s1')
       const options = await b.popup().options(projection('s1'), new AbortController().signal)
       expect([...new Set(options.map(option => option.group?.name))])
-        .toEqual(['deepseek-account', 'deepseek-official', 'external', 'last-provider'])
+        .toEqual(['deepseek-official', 'deepseek-account', 'external', 'last-provider'])
     } finally {
       await b.ctx.fiber.dispose()
     }

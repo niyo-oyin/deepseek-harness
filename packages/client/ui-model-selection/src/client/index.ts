@@ -23,7 +23,9 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { IconDataOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { ModelDirectoryState } from './directory.ts'
+import type { ModelDirectory, ModelDirectoryState } from './directory.ts'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import { ModelDirectoryResolver } from './service.ts'
 import type { ModelSelectInjected } from './slots.ts'
 import { ModelSelect } from './ModelSelect.tsx'
@@ -171,6 +173,17 @@ export function apply(ctx: ClientContext): void {
   ctx.inject(['slots', 'modelDirectories'], (scope: ClientContext) => {
     const models = scope.modelDirectories
     const sessions = scope.sessions
+    // One stable blocker per Session directory, so the seat's effect does not re-run on every render.
+    const blockers = new WeakMap<ModelDirectory, (reason: string | undefined) => void>()
+    const blockerFor = (sessionId: SessionId, directory: ModelDirectory) => {
+      let blocker = blockers.get(directory)
+      if (blocker === undefined) {
+        blocker = (reason) => { scope.get('conversation')?.blocks.set(sessionId, reason === undefined ? undefined : { reason }) }
+        blockers.set(directory, blocker)
+      }
+      return blocker
+    }
+    const openProviders = (): void => { scope.get('settingsNavigation')?.openSection('models') }
     scope.slots.inject('conversation.input.model', () => scope.slots.register({
       name: 'conversation.input.model',
       locale: NS,
@@ -192,6 +205,8 @@ export function apply(ctx: ClientContext): void {
           select: (selection: ModelSelection) => available
             ? directory.select(selection)
             : Promise.resolve(undefined),
+          block: blockerFor(sessionId, directory),
+          openProviders: scope.get('settingsNavigation') === undefined ? undefined : openProviders,
         }
       },
     }, ModelSelect))
