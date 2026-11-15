@@ -18,6 +18,7 @@ import LlmRuntime, {
   type ToolCallId,
   type ContentBlock,
   type GenerateOptions,
+  type LlmModelInfo,
   type LlmResolvedModelInfo,
   type ReasoningEffortId,
   type StreamChunk,
@@ -134,7 +135,12 @@ function reasoningDecisionChunks(text: string): StreamChunk[] {
 }
 
 /** A second route whose model offers reasoning levels, for a configured reviewer. */
+/** Lists one model but, like an adapter that passes ids through, describes any id it is asked about. */
 class ReasoningAdapter extends RecordingAdapter {
+  override listModels(provider: string): Promise<readonly LlmModelInfo[]> {
+    return Promise.resolve([{ provider, id: 'small', name: 'Small' }])
+  }
+
   override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
     return Promise.resolve({
       provider, id: model, name: model, context: { contextWindow: 8_000 },
@@ -2150,6 +2156,7 @@ describe('configured reviewer route', () => {
     { name: 'a provider no adapter serves', reviewer: { provider: 'gone', model: 'small' }, cause: 'gone/small' },
     { name: 'an effort the model does not offer', reviewer: { provider: 'cheap', model: 'small', reasoningEffort: 'max' }, cause: 'effort "max"' },
     { name: 'a provider without a model', reviewer: { provider: 'cheap' }, cause: 'only together' },
+    { name: 'a model the route no longer lists', reviewer: { provider: 'cheap', model: 'removed' }, cause: 'provider "cheap" does not list model "removed"' },
   ])('fails closed on $name, naming the setting, without falling back to the session route', async ({ reviewer, cause }) => {
     const { ctx, adapter, cheap } = await harness([decisionChunks(ALLOW)], undefined, { reviewer, script: [decisionChunks(ALLOW)] })
     const probe = registerProbe(ctx)

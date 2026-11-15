@@ -708,6 +708,16 @@ async function reviewerRoute(
     + ' Choose another model for Auto review in Plugins, or clear the setting to review with the session\'s model',
   )
   if (provider === '' || model === '') throw unusable('it names a provider and a model only together')
+  // Some adapters describe any id they are asked about, so only the route's
+  // listing tells whether the owner still offers this model.
+  let listed: readonly { readonly id: string }[]
+  try {
+    listed = await ctx.llm.listModels(provider)
+  } catch (error) {
+    if (signal.aborted) throw signal.reason
+    throw unusable(error instanceof Error ? error.message : String(error))
+  }
+  if (!listed.some(entry => entry.id === model)) throw unusable(`provider "${provider}" does not list model "${model}"`)
   let info: Awaited<ReturnType<Context['llm']['resolveModelInfo']>>
   try {
     info = await ctx.llm.resolveModelInfo(provider, model, signal)

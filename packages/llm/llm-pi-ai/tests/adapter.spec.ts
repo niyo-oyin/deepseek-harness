@@ -605,6 +605,19 @@ describe('provider profile lifecycle', () => {
     expect(typeof info.context?.contextWindow).toBe('number')
   })
 
+  it('does not describe a catalog model that the route configuration leaves out', async () => {
+    const whole = new Context()
+    await whole.plugin(LlmRuntime)
+    await whole.plugin(LlmPiAi, { providers: { openai: {} } })
+    await expect(whole.llm.resolveModelInfo('openai', 'gpt-4.1-mini')).resolves.toMatchObject({ id: 'gpt-4.1-mini' })
+
+    const narrowed = new Context()
+    await narrowed.plugin(LlmRuntime)
+    await narrowed.plugin(LlmPiAi, { providers: { openai: { models: [{ id: 'gpt-4.1' }] } } })
+    await expect(narrowed.llm.resolveModelInfo('openai', 'gpt-4.1-mini'))
+      .rejects.toMatchObject({ code: 'UNKNOWN_MODEL', message: 'pi-ai provider "openai" has no configured model "gpt-4.1-mini"' })
+  })
+
   it('exposes pi-ai model thinking levels verbatim without inventing a provider default', async () => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)

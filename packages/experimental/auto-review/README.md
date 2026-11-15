@@ -61,7 +61,7 @@ Resume with the same worktree and `--session-id`. Omit both policy flags to reta
 
 ### Choose the review model
 
-Reviews use the Session's current model unless the `reviewer` setting names another. In Web, open **Plugins**, then Auto review's row, and use **Configure**: the `reviewer` field lists the models the composer offers, grouped by provider, with a first entry meaning the Session's model, and an effort select when the chosen model offers levels. A configured model the provider no longer offers stays listed and marked unavailable. The help under the field states the cost and where the content goes: every tool call in Auto costs one extra request to this model, and each review sends the Session's action history — tool calls with their arguments, and the prompts that started delegated work — to this model's provider.
+Reviews use the Session's current model unless the `reviewer` setting names another. In Web, open **Plugins**, then Auto review's row, and use **Configure**: the **Model** field for the `reviewer` setting lists the models the composer offers, grouped by provider, with a first entry meaning the Session's model, an effort select when the chosen model offers levels, and the chosen model's context window. A configured model the provider no longer offers stays listed and marked unavailable. The help under the field states the cost and where the content goes: every tool call in Auto costs one extra request to this model, and each review sends the Session's action history — tool calls with their arguments, and the prompts that started delegated work — to this model's provider.
 
 Elsewhere, set the same field in the profile's `cordis.patch.yml`:
 
@@ -74,7 +74,7 @@ Elsewhere, set the same field in the profile's `cordis.patch.yml`:
       reasoningEffort: low
 ```
 
-`provider` and `model` go together; `reasoningEffort` is optional and must be a level the model offers. The setting applies to every review in an Auto Session, the main agent's and its in-process children's, from the next review on: it is read at each review, so changing it does not reload the plugin and running Auto Sessions stay in Auto. A configured route that cannot be used — its provider gone, the model no longer served, or the effort no longer offered — fails the review, naming the setting; reviews never fall back to the Session's model.
+`provider` and `model` go together; `reasoningEffort` is optional and must be a level the model offers. The setting applies to every review in an Auto Session, the main agent's and its in-process children's, from the next review on: it is read at each review, so changing it does not reload the plugin and running Auto Sessions stay in Auto. A configured route that cannot be used — its provider gone, the model no longer in its provider's list, or the effort no longer offered — fails the review, naming the setting; reviews never fall back to the Session's model.
 
 ### What you get
 
@@ -121,7 +121,7 @@ The reviewer uses the configured `reviewer` route and its optional reasoning eff
 
 #### Token effect
 
-One additional model request per supported call, to the configured reviewer model when one is set, without retries, truncation, compaction, or a separate small output budget. An oversized request fails the call with the provider error; a reviewer with a smaller context window than the Session's model reaches that limit sooner, though a review carries only user text, tool calls, and schemas, not assistant text or tool results. Review requests are not recorded in the Session log, so no usage display in the app counts them; the provider's own billing does.
+One additional model request per supported call, to the configured reviewer model when one is set, without retries, truncation, compaction, or a separate small output budget. An oversized request fails the call with the provider error, and for a configured reviewer the message adds that model's context window and how to change the setting; a reviewer with a smaller context window than the Session's model reaches that limit sooner, though a review carries only user text, tool calls, and schemas, not assistant text or tool results. Review requests are not recorded in the Session log, so no usage display in the app counts them; the provider's own billing does.
 
 #### KV Cache effect
 

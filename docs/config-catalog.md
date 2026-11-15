@@ -972,7 +972,7 @@ export interface Config {
 
 - `inject`: `approval` · `llm` · `permissionPresets` · `sessions` · `tools` · `workingDirectory`
 - `refs`: `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/experimental/auto-review/src/index.ts:808`](../packages/experimental/auto-review/src/index.ts)
+- `source`: [`packages/experimental/auto-review/src/index.ts:818`](../packages/experimental/auto-review/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
