@@ -63,4 +63,4 @@ The seam's suite pins the lifecycle it owns: single-flight refusal and release, 
 
 `llm-pi-ai` covers the three translations against a real `$DSH_HOME` document — an api-key credential field by field, an OAuth credential verbatim including its refresh half, a foreign plugin's record skipped by scope, and the write refusal without a credentials service — plus every `AuthEvent` and `AuthPrompt` member restated, with `Models.login()` mocked at the collection boundary since a real one opens a browser. Two real-composition tests boot the plugin with and without the authorization seam.
 
-The `models-settings` and `onboarding-usable-provider` web e2e goldens regain exactly the `openai-codex` option line they lost when it was withheld — the only assembled-application difference this decision records, because the Models page has no login control yet to record.
+The `models-settings` web e2e golden regains exactly the `openai-codex` option line it lost when it was withheld — the only assembled-application difference this decision records, because the Models page has no login control yet to record.
