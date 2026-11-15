@@ -13,6 +13,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SessionPersistenceNotFoundError } from '@deepseek-ai/dsh-session-persistence'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
+import type {} from '@deepseek-ai/dsh-agent-default-model'
 import type {} from '@deepseek-ai/dsh-api-session-controller'
 import type {} from '@deepseek-ai/dsh-session-title'
 import type {} from '@deepseek-ai/dsh-workspace'
@@ -471,6 +472,8 @@ export class ScheduleRuntime {
   private async createAgent(sessionId: SessionIdType, create: ScheduleSessionCreateSpec): Promise<Agent> {
     const controller = this.ctx.get('sessionController')
     if (controller === undefined) throw new Error('schedule: no Session creation provider')
+    // A new Session runs on the default model, so a missing default fails the delivery before a Session exists.
+    this.ctx.get('agentDefaultModel')?.requireSelection()
     await controller.create({
       sessionId,
       ...(create.cwd === undefined ? {} : { cwd: create.cwd }),

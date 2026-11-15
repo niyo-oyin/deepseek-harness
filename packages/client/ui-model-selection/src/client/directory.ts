@@ -161,11 +161,12 @@ export class ModelDirectory {
       })
       return
     }
+    // Neither a Session selection nor a default: there is no route to judge.
     const selection = projected.next ?? catalog.value.default
-    const routable = catalog.value.groups.some(group => group.id === selection.provider
+    const routable = selection === undefined ? null : catalog.value.groups.some(group => group.id === selection.provider
       && group.models.some(model => model.id === selection.model))
     this.store.set({
-      current: selection,
+      current: selection ?? null,
       ...retainedEffort === undefined ? {} : { retainedEffort },
       routable,
       groups: catalog.value.groups,

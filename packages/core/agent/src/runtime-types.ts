@@ -30,10 +30,10 @@ declare module '@deepseek-ai/dsh-system-prompt' {
  * Persona belongs to system-prompt sections.
  */
 export interface AgentOptions {
-  /** Provider route (must have a registered adapter at call time). */
-  provider?: string
+  /** Provider route (must have a registered adapter at call time); a live accessor may answer undefined while none is chosen. */
+  provider?: string | undefined
   /** Model id interpreted by the selected provider adapter. */
-  model?: string
+  model?: string | undefined
   /** Adapter-owned reasoning effort for the selected provider/model route. */
   reasoningEffort?: ReasoningEffortId | undefined
   /** Maximum output tokens for each conversation-model request. */

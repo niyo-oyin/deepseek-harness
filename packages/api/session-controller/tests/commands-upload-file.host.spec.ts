@@ -380,26 +380,21 @@ describe('Session file uploads', () => {
     expect(saveImages).not.toHaveBeenCalled()
   })
 
-  it('admits an image before the Agent has a model selection', async () => {
-    const { ctx, controller, agent, followup, saveImages } = await uploadHarness()
+  it('refuses a prompt from a Session with neither its own model nor a default, before storing anything', async () => {
+    const { controller, agent, followup, saveImages } = await uploadHarness()
     delete agent.options.provider
     delete agent.options.model
     expect(agent.model.current()).toBeUndefined()
-    const resolveModel = vi.spyOn(ctx.llm, 'resolveModelInfo')
-    const image: ImageAttachmentRef = {
-      attachmentId: brandString<AttachmentId>(`sha256:${'ab'.repeat(32)}`),
-      mediaType: 'image/png', bytes: 3, width: 1, height: 1,
-    }
-    saveImages.mockResolvedValueOnce([image])
 
     await expect(controller.prompt(promptRequest([
       { type: 'image', mediaType: 'image/png', data: 'AAAA' },
-    ]), USER_SOURCE)).resolves.toEqual({ accepted: true })
+    ]), USER_SOURCE)).rejects.toMatchObject({
+      code: 'session/no-default-model',
+      message: expect.stringContaining('Choose a model in the app') as unknown,
+    })
 
-    expect(resolveModel).not.toHaveBeenCalled()
-    expect(followup).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
-      content: [{ type: 'image', attachment: image }],
-    }))
+    expect(saveImages).not.toHaveBeenCalled()
+    expect(followup).not.toHaveBeenCalled()
   })
 
   it('publishes no receipt when its exact Agent is disposed during storage', async () => {

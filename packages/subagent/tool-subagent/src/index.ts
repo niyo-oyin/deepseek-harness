@@ -66,7 +66,7 @@ export interface Config extends PresetSelectionConfig {
   /**
    * Agent options applied to every child; omitted fields use child-loop defaults.
    */
-  agentOptions?: AgentOptions
+  agentOptions?: ConfiguredChildRoute
   /**
    * Maximum child depth: a non-negative safe integer (`0` forbids delegation),
    * or `'provider-managed'` to send no cap. A numeric cap
@@ -78,6 +78,14 @@ export interface Config extends PresetSelectionConfig {
    * the current Host subagent depth setting (default `1`) at each delegation.
    */
   maxDepth?: number | 'provider-managed'
+}
+
+/** Child Agent options a profile configures; a configured route is concrete, unlike a live Agent's. */
+export interface ConfiguredChildRoute extends Omit<AgentOptions, 'provider' | 'model'> {
+  /** Provider route every child starts on. */
+  provider?: string
+  /** Model id every child starts on. */
+  model?: string
 }
 
 export const Config: z<Config> = z.object({

@@ -77,12 +77,10 @@
       name: '@deepseek-ai/dsh-agent'
 
     # The transport-independent default for Agents created by entry points.
-    # Settings may supply a saved selection; consumers read it at creation time.
+    # No vendor is preselected: the first model picked in the app becomes the
+    # default, and a profile may set provider and model here itself.
     - id: agent-default-model
       name: '@deepseek-ai/dsh-agent-default-model'
-      config:
-        provider: deepseek-official
-        model: deepseek-flash
 
     - id: jobs
       name: '@deepseek-ai/dsh-jobs-local'

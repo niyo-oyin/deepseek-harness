@@ -9,6 +9,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { Agent, ModelSelection as AgentModelSelection } from '@deepseek-ai/dsh-agent'
 import { AttachmentError } from '@deepseek-ai/dsh-attachment'
+import { NoDefaultModelError } from '@deepseek-ai/dsh-agent-default-model'
 import type {
   AttachmentAdmissionPart,
 } from '@deepseek-ai/dsh-attachment'
@@ -314,7 +315,7 @@ export class SessionCommandController {
     const childId = brandString<SessionId>(`session-${randomUUID()}`)
     const composition = await this.agents.composeAgent(this.agents.presetForObservation(source))
     try {
-      const { provider, model } = this.ctx.agentDefaultModel.currentSelection()
+      const { provider, model } = this.ctx.agentDefaultModel.requireSelection()
       await this.ctx.agents.create({
         sessionId: childId,
         seed,
@@ -375,6 +376,10 @@ export class SessionCommandController {
         if (remoteErrorOf(error) !== undefined) throw error
         throw new RemoteError('session/agent-busy', 'generation continuation was not accepted', { reason: String(error) })
       }
+    }
+    // The last line of defense behind the composer: a Session with neither its own model nor a default cannot send.
+    if (agent.model.current() === undefined) {
+      throw new RemoteError('session/no-default-model', new NoDefaultModelError().message, {})
     }
     const admission = resolvePromptFileReceipts(
       request.content,

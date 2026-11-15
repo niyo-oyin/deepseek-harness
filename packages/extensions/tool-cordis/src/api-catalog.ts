@@ -119,10 +119,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Owns the default model selection independently of any Host or transport. Each operation reads the owning Config references.',
     methods: [
       {
-        signature: 'currentSelection(): ModelSelection',
+        signature: 'currentSelection(): ModelSelection | undefined',
         description: 'Read the current default model selection.',
         parameters: [],
-        returns: 'a detached provider, model, and optional reasoning selection.',
+        returns: 'a detached provider, model, and optional reasoning selection, or `undefined` while no default is set.',
+        throws: ['Error when the configuration names a provider without a model or a model without a provider.'],
+      },
+      {
+        signature: 'requireSelection(): ModelSelection',
+        description: 'Read the default for an entry point that cannot proceed without one.',
+        parameters: [],
+        returns: 'the current default selection.',
+        throws: ['NoDefaultModelError while no default is set.'],
       },
       {
         signature: 'async saveSelection(next: ModelSelection): Promise<void>',
@@ -5926,7 +5934,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'AgentOptions',
-    declaration: 'export interface AgentOptions {\n    provider?: string;\n    model?: string;\n    reasoningEffort?: ReasoningEffortId | undefined;\n    maxTokens?: number;\n}',
+    declaration: 'export interface AgentOptions {\n    provider?: string | undefined;\n    model?: string | undefined;\n    reasoningEffort?: ReasoningEffortId | undefined;\n    maxTokens?: number;\n}',
   },
   {
     name: 'AgentPresetComposition',
@@ -6334,7 +6342,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'CompactionAgentContext',
-    declaration: 'export interface CompactionAgentContext {\n    session: Session;\n    options: {\n        provider?: string;\n        model?: string;\n    };\n}',
+    declaration: 'export interface CompactionAgentContext {\n    session: Session;\n    options: {\n        provider?: string | undefined;\n        model?: string | undefined;\n    };\n}',
   },
   {
     name: 'CompactionId',
@@ -7890,7 +7898,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ModelCatalog',
-    declaration: 'export interface ModelCatalog {\n    readonly default: ModelSelection;\n    readonly routableProviders: readonly string[];\n    readonly groups: readonly ModelProviderGroup[];\n    readonly failures: readonly ModelCatalogFailure[];\n}',
+    declaration: 'export interface ModelCatalog {\n    readonly default?: ModelSelection;\n    readonly routableProviders: readonly string[];\n    readonly groups: readonly ModelProviderGroup[];\n    readonly failures: readonly ModelCatalogFailure[];\n}',
   },
   {
     name: 'ModelCatalogFailure',

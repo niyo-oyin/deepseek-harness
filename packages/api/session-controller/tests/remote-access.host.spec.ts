@@ -88,7 +88,7 @@ async function harness(): Promise<{
   await ctx.plugin(TypertRegistry)
   await mountAgentLoopTestDependencies(ctx)
   const loop = await mountAgentLoopTestHarness(ctx)
-  const shared = await loop.create(SHARED, {}, { cwd: '/tmp' })
+  const shared = await loop.create(SHARED, { provider: 'p', model: 'm' }, { cwd: '/tmp' })
   const hidden = await loop.create(PRIVATE, {}, { cwd: '/tmp' })
   const controller = await createSessionTestController(ctx, { defaultModelSelection: () => ({ provider: 'p', model: 'm' }), cwd: '/tmp' })
   const as = (principal: Principal, method: string): Context => {

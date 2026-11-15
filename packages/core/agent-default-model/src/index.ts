@@ -21,12 +21,12 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-/** Default model selection supplied by plugin configuration. */
+/** Default model selection supplied by plugin configuration; provider and model are set together or not at all. */
 export interface Config {
-  /** Registered provider route. */
-  provider: Volatile<string>
-  /** Provider-owned model id. */
-  model: Volatile<string>
+  /** Registered provider route; absent until a default is chosen. */
+  provider: Volatile<string | undefined>
+  /** Provider-owned model id; absent until a default is chosen. */
+  model: Volatile<string | undefined>
   /** Adapter-owned reasoning effort; omission follows the provider default. */
   reasoningEffort: Volatile<string | undefined>
 }
@@ -43,6 +43,22 @@ function selection(settings: { provider: string; model: string; reasoningEffort?
 }
 
 /**
+ * The one failure every entry point raises when it needs the default and none
+ * is set. Its text says both ways to set one, since a non-interactive caller
+ * sees only the text.
+ */
+export class NoDefaultModelError extends Error {
+  /** Stable code for callers that report the failure through a protocol. */
+  readonly code = 'NO_DEFAULT_MODEL'
+
+  constructor() {
+    super('No default model is set. Choose a model in the app (the first model you pick becomes the default),'
+      + ' or set provider and model under agent-default-model in the profile.')
+    this.name = 'NoDefaultModelError'
+  }
+}
+
+/**
  * Owns the default model selection independently of any Host or transport.
  * Each operation reads the owning Config references.
  */
@@ -50,8 +66,8 @@ export class AgentDefaultModelConfig extends Service {
   private saves: Promise<void> = Promise.resolve()
 
   static Config = z.object({
-    provider: z.string().required().volatile(),
-    model: z.string().required().volatile(),
+    provider: z.string().volatile(),
+    model: z.string().volatile(),
     reasoningEffort: z.string().volatile(),
   })
 
@@ -63,14 +79,31 @@ export class AgentDefaultModelConfig extends Service {
 
   /**
    * Read the current default model selection.
-   * @returns a detached provider, model, and optional reasoning selection.
+   * @returns a detached provider, model, and optional reasoning selection, or
+   *   `undefined` while no default is set.
+   * @throws Error when the configuration names a provider without a model or a model without a provider.
    */
-  currentSelection(): ModelSelection {
+  currentSelection(): ModelSelection | undefined {
+    const provider = this.config.provider.get()
+    const model = this.config.model.get()
+    if (provider === undefined && model === undefined) return undefined
+    if (provider === undefined || model === undefined) {
+      throw new Error('agent-default-model: provider and model are set together;'
+        + ` the profile sets only ${provider === undefined ? 'model' : 'provider'}`)
+    }
     const reasoningEffort = this.config.reasoningEffort.get()
-    return selection({
-      provider: this.config.provider.get(), model: this.config.model.get(),
-      ...reasoningEffort === undefined ? {} : { reasoningEffort },
-    })
+    return selection({ provider, model, ...reasoningEffort === undefined ? {} : { reasoningEffort } })
+  }
+
+  /**
+   * Read the default for an entry point that cannot proceed without one.
+   * @returns the current default selection.
+   * @throws NoDefaultModelError while no default is set.
+   */
+  requireSelection(): ModelSelection {
+    const current = this.currentSelection()
+    if (current === undefined) throw new NoDefaultModelError()
+    return current
   }
 
   /**

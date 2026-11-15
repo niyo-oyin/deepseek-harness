@@ -3,7 +3,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { expect, it, onTestFinished, vi } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
-import DefaultModel from '../src/index.ts'
+import DefaultModel, { NoDefaultModelError } from '../src/index.ts'
 import { liveConfig } from '../../../settings/settings/tests/live-config.ts'
 
 it('reads complete selections from volatile config and clears omitted reasoning effort', async () => {
@@ -30,7 +30,7 @@ it('persists complete selections through its owning profile entry', async () => 
   onTestFinished(() => standalone.fiber.dispose())
   await standalone.plugin(DefaultModel, { provider: 'test', model: 'original' })
   await standalone.agentDefaultModel.saveSelection({ provider: 'test', model: 'ignored' })
-  expect(standalone.agentDefaultModel.currentSelection().model).toBe('original')
+  expect(standalone.agentDefaultModel.currentSelection()?.model).toBe('original')
 })
 
 it('serializes overlapping saves and continues after a rejected write', async () => {
@@ -67,4 +67,27 @@ it('serializes overlapping saves and continues after a rejected write', async ()
   await last
   expect(calls).toEqual(['rejected', 'saved'])
   expect(ctx.agentDefaultModel.currentSelection()).toEqual({ provider: 'test', model: 'final' })
+})
+
+it('answers that no default is set until a profile or a pick sets one, and names both ways to set it', async () => {
+  const ctx = new Context()
+  onTestFinished(() => ctx.fiber.dispose())
+  const live = await liveConfig(ctx, DefaultModel, {})
+  const consumer = ctx.agentDefaultModel
+  expect(consumer.currentSelection()).toBeUndefined()
+  let error: unknown
+  try { consumer.requireSelection() } catch (caught) { error = caught }
+  expect(error).toBeInstanceOf(NoDefaultModelError)
+  expect(error).toMatchObject({ code: 'NO_DEFAULT_MODEL' })
+  expect((error as Error).message).toBe('No default model is set. Choose a model in the app (the first model you pick'
+    + ' becomes the default), or set provider and model under agent-default-model in the profile.')
+  await live.update({ provider: 'p', model: 'm' })
+  expect(consumer.requireSelection()).toEqual({ provider: 'p', model: 'm' })
+})
+
+it('refuses a profile that names a provider without a model', async () => {
+  const ctx = new Context()
+  onTestFinished(() => ctx.fiber.dispose())
+  await liveConfig(ctx, DefaultModel, { provider: 'p' })
+  expect(() => ctx.agentDefaultModel.currentSelection()).toThrow('provider and model are set together; the profile sets only provider')
 })

@@ -63,7 +63,7 @@ async function fixture(origin?: 'subagent') {
   await ctx.plugin(ReadOnlySessionQuery, {})
   await mountAgentLoopTestHarness(ctx)
   ctx.provide('agentDefaultModel', {
-    currentSelection: () => ({ provider: 'unused', model: 'unused' }),
+    currentSelection: () => ({ provider: 'unused', model: 'unused' }), requireSelection: () => ({ provider: 'unused', model: 'unused' }),
     saveSelection: async () => {},
   } as never)
   ctx.provide('fileUploads', { registerAgentResolver: () => () => {} } as never)

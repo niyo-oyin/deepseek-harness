@@ -355,6 +355,8 @@ async function run(ctx: Context, config: Config, io: HeadlessIo): Promise<void> 
     }
   }
 
+  // Headless has no picker, so a missing default ends the run before it reads the task.
+  const selection = defaultModel.requireSelection()
   const task = config.task === undefined || config.task === '-'
     ? await internals.readStdin()
     : config.task
@@ -362,7 +364,6 @@ async function run(ctx: Context, config: Config, io: HeadlessIo): Promise<void> 
     throw new Error('a task is required, for example: dsh --profile headless "run the tests"')
   }
 
-  const selection = defaultModel.currentSelection()
   const agentOptions: AgentOptions = { ...selection }
   // This bundle composes no preset roster, so the model-facing rows sit in the
   // host plane and the agent reads them from the global layer. A deployment

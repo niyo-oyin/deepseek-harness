@@ -48,7 +48,7 @@ export type {
 } from './types.ts'
 
 /** Detach a route that names both provider and model; any other value is no route. */
-function completeRoute(route: { provider?: string; model?: string } | undefined): SummaryRoute | undefined {
+function completeRoute(route: { provider?: string | undefined; model?: string | undefined } | undefined): SummaryRoute | undefined {
   if (route?.provider === undefined || route.provider.length === 0
     || route.model === undefined || route.model.length === 0) return undefined
   return { provider: route.provider, model: route.model }

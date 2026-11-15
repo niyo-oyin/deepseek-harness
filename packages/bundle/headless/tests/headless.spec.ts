@@ -1266,6 +1266,32 @@ describe('headless runner', () => {
     await test.ctx.fiber.dispose()
   })
 
+  it('ends before reading the task when no default model is set, saying how to set one', async () => {
+    const ctx = new Context()
+    let err = ''
+    let read = false
+    internals.stdout = { write: () => true }
+    internals.stderr = { write: (chunk: string) => { err += chunk; return true } }
+    const exited = new Promise<number>((resolve) => {
+      ctx.provide('appExit', resolve)
+    })
+    await ctx.plugin(AgentDefaultModelConfig, {})
+    ctx.provide('sessions', { flush: () => Promise.resolve(true) } as never)
+    ctx.provide('agents', { create: () => Promise.reject(new Error('no Agent expected')) } as never)
+    const readStdin = internals.readStdin
+    internals.readStdin = () => { read = true; return Promise.resolve('task') }
+    try {
+      apply(ctx, { task: '-' })
+      expect(await exited).toBe(1)
+    } finally {
+      internals.readStdin = readStdin
+    }
+    expect(read).toBe(false)
+    expect(err).toBe('dsh: No default model is set. Choose a model in the app (the first model you pick becomes the default),'
+      + ' or set provider and model under agent-default-model in the profile.' + '\n')
+    await ctx.fiber.dispose()
+  })
+
   it('reports a direct Agent creation failure', async () => {
     const ctx = new Context()
     let err = ''
@@ -1274,7 +1300,7 @@ describe('headless runner', () => {
     const exited = new Promise<number>((resolve) => {
       ctx.provide('appExit', resolve)
     })
-    ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: 'p', model: 'm' }) } as never)
+    ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: 'p', model: 'm' }), requireSelection: () => ({ provider: 'p', model: 'm' }) } as never)
     ctx.provide('sessions', { flush: () => Promise.resolve(true) } as never)
     ctx.provide('agents', { create: () => Promise.reject(new Error('factory exploded')) } as never)
     apply(ctx, { task: 't' })
@@ -1291,7 +1317,7 @@ describe('headless runner', () => {
     const exited = new Promise<number>((resolve) => {
       ctx.provide('appExit', resolve)
     })
-    ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: 'p', model: 'm' }) } as never)
+    ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: 'p', model: 'm' }), requireSelection: () => ({ provider: 'p', model: 'm' }) } as never)
     ctx.provide('sessions', { flush: () => Promise.resolve(true) } as never)
     const rejected = {
       then(_resolve: (value: never) => void, reject: (reason: unknown) => void): void {
@@ -1312,7 +1338,7 @@ describe('headless runner', () => {
     internals.stderr = { write: () => true }
     ctx.provide('appExit', () => { exited = true })
     const services = ctx.plugin((child: Context) => {
-      child.provide('agentDefaultModel', { currentSelection: () => ({ provider: 'p', model: 'm' }) } as never)
+      child.provide('agentDefaultModel', { currentSelection: () => ({ provider: 'p', model: 'm' }), requireSelection: () => ({ provider: 'p', model: 'm' }) } as never)
       child.provide('sessions', {} as never)
       child.provide('agents', {} as never)
     })

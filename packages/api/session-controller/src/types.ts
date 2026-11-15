@@ -135,7 +135,8 @@ export interface ModelCatalogFailure {
 
 /** Host-generation model catalog and the default used by unconfigured Sessions. */
 export interface ModelCatalog {
-  readonly default: ModelSelection
+  /** The default model for Sessions that never choose; absent until one is set. */
+  readonly default?: ModelSelection
   /** Provider routes with at least one currently available catalog model. */
   readonly routableProviders: readonly string[]
   readonly groups: readonly ModelProviderGroup[]
@@ -189,6 +190,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'session/provider-credentials-unavailable': Record<string, never>
     'session/provider-models-unavailable': { readonly provider: string }
     'session/model-unavailable': { readonly provider: string; readonly model: string }
+    /** The Session names no model and no default model is set; the message says how to set one. */
+    'session/no-default-model': Record<string, never>
     'session/conflict': {
       readonly sessionId: SessionId
       readonly requestedCwd: string

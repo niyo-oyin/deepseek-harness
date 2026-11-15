@@ -454,9 +454,10 @@ export class ApiSessionAgentController {
     const defaults = this.ctx.agentDefaultModel
     // A Session that records no selection or request follows default changes.
     return {
-      get provider() { return defaults.currentSelection().provider },
-      get model() { return defaults.currentSelection().model },
-      get reasoningEffort() { return defaults.currentSelection().reasoningEffort },
+      // Without a default these stay undefined: readers treat the route as optional, and sending is refused upstream.
+      get provider() { return defaults.currentSelection()?.provider },
+      get model() { return defaults.currentSelection()?.model },
+      get reasoningEffort() { return defaults.currentSelection()?.reasoningEffort },
     }
   }
 

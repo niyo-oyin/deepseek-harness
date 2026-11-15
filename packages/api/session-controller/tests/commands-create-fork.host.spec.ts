@@ -53,7 +53,7 @@ async function baseContext(): Promise<Context> {
   await ctx.plugin(AgentRegistry)
   installSessionReadTestServices(ctx)
   ctx.provide('agentDefaultModel', {
-    currentSelection: () => ({ provider: 'fixture', model: 'fixture-model' }),
+    currentSelection: () => ({ provider: 'fixture', model: 'fixture-model' }), requireSelection: () => ({ provider: 'fixture', model: 'fixture-model' }),
     saveSelection: () => Promise.resolve(),
   } as never)
   return ctx

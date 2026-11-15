@@ -66,7 +66,7 @@ export class ManualCompactionError extends Error {
 /** Minimal agent context compaction needs without depending on the agent package. */
 export interface CompactionAgentContext {
   session: Session
-  options: { provider?: string; model?: string }
+  options: { provider?: string | undefined; model?: string | undefined }
 }
 
 /**

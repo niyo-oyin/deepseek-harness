@@ -130,9 +130,9 @@ async function harness(logged?: {
   }
   const projection = await ctx.sessionProjections.register(modelSelectionProjectionDefinition)
   const options = {
-    get provider() { return ctx.agentDefaultModel.currentSelection().provider },
-    get model() { return ctx.agentDefaultModel.currentSelection().model },
-    get reasoningEffort() { return ctx.agentDefaultModel.currentSelection().reasoningEffort },
+    get provider() { return ctx.agentDefaultModel.currentSelection()?.provider },
+    get model() { return ctx.agentDefaultModel.currentSelection()?.model },
+    get reasoningEffort() { return ctx.agentDefaultModel.currentSelection()?.reasoningEffort },
   }
   const agent = {
     id: session.id,
@@ -172,7 +172,7 @@ function currentSelection(ctx: Context, sessionId: SessionId) {
   const session = ctx.sessions.get(sessionId)
   if (session === undefined) throw new Error('expected a live test Session')
   return ctx.sessionProjections.snapshot(session).values.modelSelection?.next
-    ?? ctx.agentDefaultModel.currentSelection()
+    ?? ctx.agentDefaultModel.requireSelection()
 }
 
 describe('Web session model selection', () => {
@@ -380,7 +380,7 @@ describe('Web session model selection', () => {
     }])
     await ctx.agentDefaultModel.saveSelection({ provider: 'removed', model: 'saved' })
     const controller = await createSessionTestController(ctx, {
-      defaultModelSelection: () => ctx.agentDefaultModel.currentSelection(), cwd: '/tmp',
+      defaultModelSelection: () => ctx.agentDefaultModel.requireSelection(), cwd: '/tmp',
     })
     await controller.initializeDefaultModel()
     expect(describe).toHaveBeenCalledWith('CUSTOM_API_KEY')
@@ -919,7 +919,7 @@ it('initializes the account model without reasoning metadata and rejects an empt
     { provider: 'deepseek-account', id: 'basic', name: 'Basic' },
   ]))
   const controller = await createSessionTestController(ctx, {
-    defaultModelSelection: () => ctx.agentDefaultModel.currentSelection(), cwd: '/tmp',
+    defaultModelSelection: () => ctx.agentDefaultModel.requireSelection(), cwd: '/tmp',
   })
   await controller.initializeDefaultModel()
   expect(ctx.agentDefaultModel.currentSelection()).toEqual({ provider: 'deepseek-account', model: 'basic' })

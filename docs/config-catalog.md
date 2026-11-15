@@ -57,12 +57,12 @@ export type Config = z.infer<typeof Config>
 - `source`: [`packages/core/agent-default-model/src/index.ts:25`](../packages/core/agent-default-model/src/index.ts)
 
 ```ts config-catalog
-/** Default model selection supplied by plugin configuration. */
+/** Default model selection supplied by plugin configuration; provider and model are set together or not at all. */
 export interface Config {
-  /** Registered provider route. */
-  provider: Volatile<string>
-  /** Provider-owned model id. */
-  model: Volatile<string>
+  /** Registered provider route; absent until a default is chosen. */
+  provider: Volatile<string | undefined>
+  /** Provider-owned model id; absent until a default is chosen. */
+  model: Volatile<string | undefined>
   /** Adapter-owned reasoning effort; omission follows the provider default. */
   reasoningEffort: Volatile<string | undefined>
 }
@@ -4617,7 +4617,7 @@ export interface Config extends PresetSelectionConfig {
   /**
    * Agent options applied to every child; omitted fields use child-loop defaults.
    */
-  agentOptions?: AgentOptions
+  agentOptions?: ConfiguredChildRoute
   /**
    * Maximum child depth: a non-negative safe integer (`0` forbids delegation),
    * or `'provider-managed'` to send no cap. A numeric cap
@@ -4637,6 +4637,14 @@ export interface PresetSelectionConfig {
   agentPreset?: string
   /** Non-empty allowlist exposing agent_preset to the model; omission disables model selection. */
   allowedAgentPresets?: string[] | undefined
+}
+
+/** Child Agent options a profile configures; a configured route is concrete, unlike a live Agent's. */
+export interface ConfiguredChildRoute extends Omit<AgentOptions, 'provider' | 'model'> {
+  /** Provider route every child starts on. */
+  provider?: string
+  /** Model id every child starts on. */
+  model?: string
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-tool-subagent -->

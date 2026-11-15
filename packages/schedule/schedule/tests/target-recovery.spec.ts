@@ -8,6 +8,7 @@ import { createRRuleScheduleRecord } from '../src/domain.ts'
 import { ScheduleRuntime } from '../src/runtime.ts'
 import { agentFor, harness, seededTask } from './harness.ts'
 import { brandString } from '@deepseek-ai/dsh-brand'
+import AgentDefaultModelConfig from '@deepseek-ai/dsh-agent-default-model'
 
 const active: Awaited<ReturnType<typeof harness>>[] = []
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime('2026-09-16T00:00:00Z') })
@@ -48,6 +49,29 @@ it('retries a reserved new Session identity after creation fails', async () => {
     expect(test.createSession).toHaveBeenCalledTimes(2)
     expect(test.createSession).toHaveBeenLastCalledWith({ sessionId: reserved })
     expect(task).toMatchObject({ status: 'ended', target: { kind: 'session', sessionId: reserved } })
+  } finally {
+    await runtime.dispose()
+  }
+})
+
+it('keeps a new-Session task due without creating a Session while no default model is set', async () => {
+  const test = await harness()
+  active.push(test)
+  await test.ctx.plugin(AgentDefaultModelConfig, {})
+  const reserved = brandString<SessionId>('reserved-without-default')
+  const task = seededTask(
+    createRRuleScheduleRecord(brandString<ScheduleId>('no-default'), 'No default', 'Deliver', 'DTSTART:20260916T000001Z\nRRULE:FREQ=DAILY;COUNT=1', Date.now()),
+    { kind: 'new_once', sessionId: reserved, create: {} },
+  )
+  const runtime = new ScheduleRuntime(
+    test.ctx, () => [task], work => work(), async (next) => { Object.assign(task, next) }, () => {},
+    { retention: { days: 30, records: 200 }, newSessionIntervalMs: 3_600_000 }, test.resolveAgent,
+  )
+  try {
+    runtime.requestDrive()
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(test.createSession).not.toHaveBeenCalled()
+    expect(task.status).toBe('active')
   } finally {
     await runtime.dispose()
   }
