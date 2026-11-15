@@ -92,7 +92,7 @@ describe('workspaceWritableRoots', () => {
         .toEqual([ws, extra.long])
     })
 
-    it.each(['junction', 'dir'] as const)('still rejects a short-name spelling through a %s', (kind, context) => {
+    it.for(['junction', 'dir'] as const)('still rejects a short-name spelling through a %s', (kind, context) => {
       const ws = realpathSync.native(mkdtempSync(join(tmpdir(), 'dsh-roots-')))
       roots.push(ws)
       const target = join(ws, 'Redirect Target Directory')
