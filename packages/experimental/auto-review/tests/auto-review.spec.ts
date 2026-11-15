@@ -18,6 +18,8 @@ import LlmRuntime, {
   type ToolCallId,
   type ContentBlock,
   type GenerateOptions,
+  type LlmResolvedModelInfo,
+  type ReasoningEffortId,
   type StreamChunk,
   type ToolSchema,
 } from '@deepseek-ai/dsh-llm'
@@ -44,6 +46,7 @@ import ToolRuntime, { RUN_CODE_NAME, TOOL_ABORTED_BEFORE_DISPATCH, type PreToolD
 import { defineContentToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import ApprovalService, { setApprovalPolicy, type ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
 import * as AutoReview from '@deepseek-ai/dsh-experimental-auto-review'
+import { liveConfig } from '../../../settings/settings/tests/live-config.ts'
 
 const EXPECTED_REVIEW_POLICY = `REVIEW_POLICY
 You are the final authorization reviewer for exactly one pending tool call. Your decision replaces human approval for this call. If you allow it, the call executes immediately with full host access and no later confirmation.
@@ -130,14 +133,26 @@ function reasoningDecisionChunks(text: string): StreamChunk[] {
   ]
 }
 
+/** A second route whose model offers reasoning levels, for a configured reviewer. */
+class ReasoningAdapter extends RecordingAdapter {
+  override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+    return Promise.resolve({
+      provider, id: model, name: model,
+      reasoning: { efforts: [{ id: brandString<ReasoningEffortId>('low'), name: 'Low' }, { id: brandString<ReasoningEffortId>('high'), name: 'High' }] },
+    })
+  }
+}
+
 async function harness(
   script: ReviewScript[],
   permissionConfig: NonNullable<Parameters<typeof PermissionPresetService.Config>[0]> = { presets: PRESETS, defaultPreset: 'workspace-write' },
-): Promise<{ ctx: Context; adapter: RecordingAdapter; auto: PluginFiber }> {
+  reviewer?: { reviewer: Record<string, string>; script: ReviewScript[] },
+): Promise<{ ctx: Context; adapter: RecordingAdapter; auto: PluginFiber; cheap: RecordingAdapter }> {
   const ctx = new Context()
   provideWorkingDirectoryFixture(ctx)
   contexts.push(ctx)
   const adapter = new RecordingAdapter(script)
+  const cheap = new ReasoningAdapter(reviewer?.script ?? [])
   let auto: PluginFiber | undefined
   // Keep review dependencies alive through the drain. Shutdown tests own concurrent Session cleanup.
   await ctx.effect(async function* () {
@@ -157,11 +172,12 @@ async function harness(
     yield (await ctx.plugin(ApprovalService, { policy: 'ask' })).dispose
     yield (await ctx.plugin(PermissionPresetService, permissionConfig)).dispose
     yield ctx.llm.registerAdapter(['review'], adapter)
-    auto = await ctx.plugin(AutoReview)
+    yield ctx.llm.registerAdapter(['cheap'], cheap)
+    auto = reviewer === undefined ? await ctx.plugin(AutoReview) : await ctx.plugin(AutoReview, { reviewer: reviewer.reviewer } as never)
     yield auto.dispose
   })
   if (auto === undefined) throw new Error('Auto fixture did not activate')
-  return { ctx, adapter, auto }
+  return { ctx, adapter, auto, cheap }
 }
 
 function agentFor(session: Session): Agent {
@@ -2081,5 +2097,115 @@ describe('logged-fact failures', () => {
 
     expect(probe.runs()).toBe(0)
     expect(adapter.requests).toHaveLength(0)
+  })
+})
+
+describe('configured reviewer route', () => {
+  const ALLOW = '{"risk":"low","decision":"allow"}'
+
+  /** One Auto Session with a pending native `probe` call, reviewed on the given header route. */
+  function pendingProbe(ctx: Context, id: string): { agent: Agent; callId: ToolCallId } {
+    const { session, agent } = autoSession(ctx, id)
+    appendHeader(session, [{ name: 'probe', description: 'probe', parameters: { type: 'object' } }])
+    const callId = brandString<ToolCallId>(`${id}-call`)
+    appendAssistant(session, [{ type: 'tool-call', id: callId, name: 'probe', arguments: '{"path":"x"}' }])
+    appendNativeCall(session, callId, 'probe', '{"path":"x"}')
+    return { agent, callId }
+  }
+
+  const run = (ctx: Context, agent: Agent, callId: ToolCallId) => executeToolFixture(ctx, {
+    signal: new AbortController().signal, callId, name: 'probe', arguments: { path: 'x' }, agent,
+  })
+
+  it('reviews on the session route with the adapter default reasoning when nothing is configured', async () => {
+    const { ctx, adapter, cheap } = await harness([decisionChunks(ALLOW)])
+    registerProbe(ctx)
+    const { agent, callId } = pendingProbe(ctx, 'unset-reviewer')
+
+    expect((await run(ctx, agent, callId)).isError).toBe(false)
+    expect(adapter.requests).toHaveLength(1)
+    expect(adapter.requests[0]).toMatchObject({ provider: 'review', model: 'same-model' })
+    expect(adapter.requests[0]).not.toHaveProperty('reasoningEffort')
+    expect(cheap.requests).toHaveLength(0)
+  })
+
+  it('sends every review to the configured route and effort, leaving the main route alone', async () => {
+    const { ctx, adapter, cheap } = await harness([], undefined, {
+      reviewer: { provider: 'cheap', model: 'small', reasoningEffort: 'low' },
+      script: [decisionChunks(ALLOW)],
+    })
+    const probe = registerProbe(ctx)
+    const { agent, callId } = pendingProbe(ctx, 'configured-reviewer')
+
+    expect((await run(ctx, agent, callId)).isError).toBe(false)
+    expect(probe.runs()).toBe(1)
+    expect(adapter.requests).toHaveLength(0)
+    expect(cheap.requests).toHaveLength(1)
+    expect(cheap.requests[0]).toMatchObject({
+      provider: 'cheap', model: 'small', reasoningEffort: 'low', system: EXPECTED_REVIEW_POLICY, purpose: 'auto-review',
+    })
+  })
+
+  it.each([
+    { name: 'a provider no adapter serves', reviewer: { provider: 'gone', model: 'small' }, cause: 'gone/small' },
+    { name: 'an effort the model does not offer', reviewer: { provider: 'cheap', model: 'small', reasoningEffort: 'max' }, cause: 'effort "max"' },
+    { name: 'a provider without a model', reviewer: { provider: 'cheap' }, cause: 'only together' },
+  ])('fails closed on $name, naming the setting, without falling back to the session route', async ({ reviewer, cause }) => {
+    const { ctx, adapter, cheap } = await harness([decisionChunks(ALLOW)], undefined, { reviewer, script: [decisionChunks(ALLOW)] })
+    const probe = registerProbe(ctx)
+    const { agent, callId } = pendingProbe(ctx, 'unusable-reviewer')
+
+    const result = await run(ctx, agent, callId)
+
+    expectReviewFailure(result)
+    if (!result.isError) throw new Error('the reviewed call executed')
+    expect(result.error.message).toContain('the Auto review model setting (reviewer: ')
+    expect(result.error.message).toContain(cause)
+    expect(result.error.message).toContain('clear the setting to review with the session\'s model')
+    expect(probe.runs()).toBe(0)
+    expect(adapter.requests).toHaveLength(0)
+    expect(cheap.requests).toHaveLength(0)
+  })
+
+  it('takes a reviewer change at the next review without reloading the plugin or leaving Auto', async () => {
+    const ctx = new Context()
+    provideWorkingDirectoryFixture(ctx)
+    contexts.push(ctx)
+    const adapter = new RecordingAdapter([decisionChunks(ALLOW)])
+    const cheap = new ReasoningAdapter([decisionChunks(ALLOW)])
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(SystemPrompt, {})
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(NativeToolExecutor)
+    ctx.provide('shell', {
+      sandboxMode: 'workspace-write',
+      resolve() { throw new Error('auto-review tests do not execute shell requests') },
+      run() { throw new Error('auto-review tests do not execute shell requests') },
+      start() { throw new Error('auto-review tests do not execute shell requests') },
+    })
+    await ctx.plugin(ApprovalService, { policy: 'ask' })
+    await ctx.plugin(PermissionPresetService, { presets: PRESETS, defaultPreset: 'workspace-write' })
+    ctx.llm.registerAdapter(['review'], adapter)
+    ctx.llm.registerAdapter(['cheap'], cheap)
+    const live = await liveConfig(ctx, AutoReview as never, {})
+    registerProbe(ctx)
+    const first = pendingProbe(ctx, 'live-reviewer')
+    expect((await run(ctx, first.agent, first.callId)).isError).toBe(false)
+    expect(adapter.requests).toHaveLength(1)
+
+    await live.update({ reviewer: { provider: 'cheap', model: 'small', reasoningEffort: 'high' } })
+
+    expect(live.entry.fiber).toBe(live.fiber)
+    expect(ctx.permissionPresets.current(first.agent.session)).toBe(AUTO_PRESET)
+    const second = brandString<ToolCallId>('live-reviewer-second')
+    appendAssistant(first.agent.session, [{ type: 'tool-call', id: second, name: 'probe', arguments: '{"path":"x"}' }], 1, 2)
+    appendNativeCall(first.agent.session, second, 'probe', '{"path":"x"}', 1, 2)
+    expect((await run(ctx, first.agent, second)).isError).toBe(false)
+    expect(adapter.requests).toHaveLength(1)
+    expect(cheap.requests).toHaveLength(1)
+    expect(cheap.requests[0]).toMatchObject({ provider: 'cheap', model: 'small', reasoningEffort: 'high' })
   })
 })

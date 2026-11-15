@@ -965,6 +965,38 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-experimental-api-speech-to-text -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-experimental-auto-review -->
+<a id="deepseek-aidsh-experimental-auto-review"></a>
+
+## `@deepseek-ai/dsh-experimental-auto-review`
+
+- `inject`: `approval` · `llm` · `permissionPresets` · `sessions` · `tools` · `workingDirectory`
+- `refs`: `Volatile` (`@deepseek-ai/cordis`)
+- `source`: [`packages/experimental/auto-review/src/index.ts:783`](../packages/experimental/auto-review/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /**
+   * Model route every review uses, read at each review so a change applies to
+   * the next one without reloading the plugin; empty reviews on the Session's
+   * current route with the adapter's default reasoning.
+   */
+  reviewer: Volatile<Partial<ReviewRoute> | undefined>
+}
+
+/** The model route a review is sent to. */
+interface ReviewRoute {
+  /** Provider route that serves the reviewer model. */
+  readonly provider: string
+  /** Exact model id on that route. */
+  readonly model: string
+  /** Reasoning effort id the model offers; absent keeps the adapter's default. */
+  readonly reasoningEffort?: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-experimental-auto-review -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-experimental-browser-use-chrome-devtools-mcp -->
 <a id="deepseek-aidsh-experimental-browser-use-chrome-devtools-mcp"></a>
 
@@ -5146,7 +5178,6 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 | `@deepseek-ai/dsh-creation-recommendations` | `tools` · `pluginManager` · `agents` · `subagents` · `profileContext` · `skills` · `actionCards` | [`packages/experimental/creation-recommendations/src/index.ts`](../packages/experimental/creation-recommendations/src/index.ts) |
 | `@deepseek-ai/dsh-cua` | — | [`packages/experimental/cua/src/index.ts`](../packages/experimental/cua/src/index.ts) |
 | `@deepseek-ai/dsh-deliverable-file-references` | `systemPrompt` | [`packages/deliverables/deliverable-file-references/src/index.ts`](../packages/deliverables/deliverable-file-references/src/index.ts) |
-| `@deepseek-ai/dsh-experimental-auto-review` | `approval` · `llm` · `permissionPresets` · `sessions` · `tools` · `workingDirectory` | [`packages/experimental/auto-review/src/index.ts`](../packages/experimental/auto-review/src/index.ts) |
 | `@deepseek-ai/dsh-experimental-client-ui-claude-code-mods` | — | [`packages/experimental/client-ui-claude-code-mods/src/index.ts`](../packages/experimental/client-ui-claude-code-mods/src/index.ts) |
 | `@deepseek-ai/dsh-experimental-client-ui-stats` | — | [`packages/experimental/client-ui-stats/src/index.ts`](../packages/experimental/client-ui-stats/src/index.ts) |
 | `@deepseek-ai/dsh-experimental-client-ui-voice-input` | — | [`packages/experimental/client-ui-voice-input/src/index.ts`](../packages/experimental/client-ui-voice-input/src/index.ts) |

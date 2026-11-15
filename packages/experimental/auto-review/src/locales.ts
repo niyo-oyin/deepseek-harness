@@ -67,3 +67,19 @@ export function deniedDisplayReason(reason?: string): Record<'en' | 'zh' | 'ja' 
       pt: pt.deniedWithReason(reason),
     }
 }
+
+/**
+ * Help under the reviewer model setting, as schema descriptions by locale.
+ * Each says that Auto costs one extra request to this model per tool call, and
+ * that reviews send the session's action history to this model's provider.
+ */
+export const reviewerDescriptions: Record<'en' | 'zh' | 'ja' | 'es' | 'fr' | 'de' | 'ru' | 'pt', { $description: string }> = {
+  en: { $description: 'The model that reviews each tool call in Auto. Every tool call costs one extra request to this model. Each review sends the session\'s action history — tool calls with their arguments, and the prompts that started delegated work — to this model\'s provider, so a model from another provider receives that content too. Same as the session\'s model when not set.' },
+  zh: { $description: '在 Auto 模式下审查每次工具调用的模型。每次工具调用都会额外向此模型发送一次请求。每次审查都会把会话的操作记录（工具调用及其参数，以及发起委托任务的提示）发送给此模型的提供商；选择其他提供商的模型时，这些内容也会发送到那里。未设置时与会话的模型相同。' },
+  ja: { $description: 'Auto モードで各ツール呼び出しを審査するモデルです。ツール呼び出しのたびに、このモデルへのリクエストが 1 回増えます。審査のたびに、セッションの操作履歴（引数を含むツール呼び出しと、委任した作業を始めたプロンプト）をこのモデルのプロバイダーへ送ります。別のプロバイダーのモデルを選ぶと、その内容はそのプロバイダーにも送られます。未設定のときはセッションのモデルと同じです。' },
+  es: { $description: 'El modelo que revisa cada llamada a herramienta en Auto. Cada llamada a herramienta cuesta una solicitud adicional a este modelo. Cada revisión envía el historial de acciones de la sesión —las llamadas a herramientas con sus argumentos y las instrucciones que iniciaron trabajo delegado— al proveedor de este modelo, así que un modelo de otro proveedor también recibe ese contenido. Sin configurar, es el mismo modelo que la sesión.' },
+  fr: { $description: 'Le modèle qui examine chaque appel d’outil en Auto. Chaque appel d’outil coûte une requête supplémentaire à ce modèle. Chaque examen envoie l’historique des actions de la session — les appels d’outils avec leurs arguments et les instructions qui ont lancé un travail délégué — au fournisseur de ce modèle ; un modèle d’un autre fournisseur reçoit donc aussi ce contenu. Sans réglage, c’est le modèle de la session.' },
+  de: { $description: 'Das Modell, das in Auto jeden Werkzeugaufruf prüft. Jeder Werkzeugaufruf kostet eine zusätzliche Anfrage an dieses Modell. Jede Prüfung sendet den Aktionsverlauf der Sitzung — Werkzeugaufrufe mit ihren Argumenten und die Anweisungen, die delegierte Arbeit gestartet haben — an den Anbieter dieses Modells; ein Modell eines anderen Anbieters erhält diese Inhalte also ebenfalls. Ohne Einstellung ist es das Modell der Sitzung.' },
+  ru: { $description: 'Модель, которая проверяет каждый вызов инструмента в режиме Auto. Каждый вызов инструмента стоит одного дополнительного запроса к этой модели. Каждая проверка отправляет историю действий сессии — вызовы инструментов с аргументами и запросы, с которых началась делегированная работа, — провайдеру этой модели, поэтому модель другого провайдера тоже получает это содержимое. Если не задано, используется модель сессии.' },
+  pt: { $description: 'O modelo que revisa cada chamada de ferramenta no Auto. Cada chamada de ferramenta custa uma solicitação extra a este modelo. Cada revisão envia o histórico de ações da sessão — as chamadas de ferramentas com seus argumentos e os prompts que iniciaram trabalho delegado — ao provedor deste modelo; assim, um modelo de outro provedor também recebe esse conteúdo. Sem configuração, é o mesmo modelo da sessão.' },
+}

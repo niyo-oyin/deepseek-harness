@@ -17,10 +17,13 @@ declare module '@deepseek-ai/dsh-llm/types' {
 import type {} from '@deepseek-ai/dsh-tool-executor-ptc/types'
 import type {} from '@deepseek-ai/dsh-working-directory'
 import { Context, FiberState } from '@deepseek-ai/cordis'
+import type { Volatile } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-instructions'
 import {
   BlockAssembler,
+  ReasoningEffortId,
   type ContentBlock,
   type GenerateOptions,
   type MessageSource,
@@ -39,7 +42,7 @@ import {
   type PreToolDecision,
   type ToolExecution,
 } from '@deepseek-ai/dsh-tools'
-import { deniedDisplayReason } from './locales.ts'
+import { deniedDisplayReason, reviewerDescriptions } from './locales.ts'
 
 /** Structured error name persisted for every final reviewer denial. */
 const AUTO_REVIEW_DENIED_ERROR_NAME = 'AutoReviewDeniedError'
@@ -124,9 +127,17 @@ type HistoricalEntry = HistoricalUserMessage | HistoricalToolCall | HistoricalTo
  */
 type ShownSchemas = Map<string, HistoricalToolSchema>
 
-interface ReviewSnapshot {
+/** The model route a review is sent to. */
+interface ReviewRoute {
+  /** Provider route that serves the reviewer model. */
   readonly provider: string
+  /** Exact model id on that route. */
   readonly model: string
+  /** Reasoning effort id the model offers; absent keeps the adapter's default. */
+  readonly reasoningEffort?: string
+}
+
+interface ReviewSnapshot extends ReviewRoute {
   readonly cwd: string
   /** Retained items in Session order, ending with the pending call. */
   readonly history: readonly HistoricalEntry[]
@@ -396,6 +407,7 @@ function shownSchemaKey(mode: CallMode, scopedKey: string): string {
  * @param exec - immutable pending execution.
  * @param cwd - the Session's current working directory.
  * @param shown - schemas earlier reviews of this Session showed.
+ * @param reviewer - the configured reviewer route, or `undefined` to review on the Session's current route.
  * @returns the exact route, environment, and history ending with the pending call.
  */
 function snapshotAutoReview(
@@ -403,6 +415,7 @@ function snapshotAutoReview(
   exec: ToolExecution,
   cwd: string,
   shown: ReadonlyMap<string, HistoricalToolSchema>,
+  reviewer: ReviewRoute | undefined,
 ): ReviewSnapshot {
   const { session } = agent
   // The reviewer's risk inputs are the whole action history: earlier native calls
@@ -566,8 +579,7 @@ function snapshotAutoReview(
     pushCall('ptc-inner', pending.key, exec.name, json(currentPtcStart.event.data.arguments), pending.schema)
   }
   return deepFreeze({
-    provider: header.config.provider,
-    model: header.config.model,
+    ...reviewer ?? { provider: header.config.provider, model: header.config.model },
     cwd,
     history,
     pending,
@@ -666,22 +678,61 @@ async function readDecision(stream: AsyncIterable<StreamChunk>): Promise<AutoRev
   return parseDecision(final.text)
 }
 
-/** Review one frozen pending action with the fixed policy and current LLM route. */
+/**
+ * The configured reviewer route, checked against the models the LLM service
+ * serves now. A route that cannot be used fails the review — never a fallback
+ * to the Session's own model, which the owner did not choose for reviews — and
+ * the failure names the setting so the owner knows what to fix.
+ * @param ctx - the plugin context, for the LLM service.
+ * @param configured - the `reviewer` setting as configured; absent or empty means the Session's route.
+ * @param signal - review cancellation.
+ * @returns the route to review on, or `undefined` for the Session's current route.
+ */
+async function reviewerRoute(
+  ctx: Context, configured: Partial<ReviewRoute> | undefined, signal: AbortSignal,
+): Promise<ReviewRoute | undefined> {
+  const provider = configured?.provider ?? ''
+  const model = configured?.model ?? ''
+  const reasoningEffort = configured?.reasoningEffort === '' ? undefined : configured?.reasoningEffort
+  if (provider === '' && model === '' && reasoningEffort === undefined) return undefined
+  const unusable = (reason: string): Error => new Error(
+    `auto-review: the Auto review model setting (reviewer: ${provider === '' ? '?' : provider}/${model === '' ? '?' : model}`
+    + `${reasoningEffort === undefined ? '' : `, effort ${reasoningEffort}`}) cannot be used: ${reason}.`
+    + ' Choose another model for Auto review in Plugins, or clear the setting to review with the session\'s model',
+  )
+  if (provider === '' || model === '') throw unusable('it names a provider and a model only together')
+  let info: Awaited<ReturnType<Context['llm']['resolveModelInfo']>>
+  try {
+    info = await ctx.llm.resolveModelInfo(provider, model, signal)
+  } catch (error) {
+    if (signal.aborted) throw error
+    throw unusable(error instanceof Error ? error.message : String(error))
+  }
+  if (reasoningEffort !== undefined && info.reasoning?.efforts.some(effort => effort.id === reasoningEffort) !== true) {
+    throw unusable(`the model does not offer reasoning effort "${reasoningEffort}"`)
+  }
+  return { provider, model, ...reasoningEffort === undefined ? {} : { reasoningEffort } }
+}
+
+/** Review one frozen pending action with the fixed policy and the configured or current LLM route. */
 async function classifyRisk(
   ctx: Context,
   agent: Agent,
   exec: ToolExecution,
   signal: AbortSignal,
   shown: ShownSchemas,
+  configured: Partial<ReviewRoute> | undefined,
 ): Promise<AutoReviewDecision> {
   const cwd = await ctx.workingDirectory.ensure(agent, signal)
-  const snapshot = snapshotAutoReview(agent, exec, cwd, shown)
+  const reviewer = await reviewerRoute(ctx, configured, signal)
+  const snapshot = snapshotAutoReview(agent, exec, cwd, shown, reviewer)
   shown.set(snapshot.pending.key, snapshot.pending.schema)
   // This review prompt is sent only through ctx.llm.stream and never enters a Session log.
   // The Session id also supplies provider routing and request-extension identity.
   const options: GenerateOptions = deepFreeze({
     provider: snapshot.provider,
     model: snapshot.model,
+    ...snapshot.reasoningEffort === undefined ? {} : { reasoningEffort: ReasoningEffortId(snapshot.reasoningEffort) },
     system: REVIEW_POLICY,
     messages: reviewMessages(snapshot),
     temperature: 0,
@@ -728,8 +779,30 @@ function failed(exec: ToolExecution, error: unknown): PreToolDecision {
   }
 }
 
+/** Plugin configuration. */
+export interface Config {
+  /**
+   * Model route every review uses, read at each review so a change applies to
+   * the next one without reloading the plugin; empty reviews on the Session's
+   * current route with the adapter's default reasoning.
+   */
+  reviewer: Volatile<Partial<ReviewRoute> | undefined>
+}
+
+/**
+ * The reviewer route field. It renders as the settings model-route picker, and
+ * its description, in every app locale, is the help shown under it.
+ */
+export const Config: z<Config> = z.object({
+  reviewer: z.object({
+    provider: z.string(),
+    model: z.string(),
+    reasoningEffort: z.string(),
+  }).role('model-route').i18n(reviewerDescriptions).volatile(),
+})
+
 /** Install the Auto preset and its review gate; preserve Session selection on application shutdown. */
-export function apply(ctx: Context): void {
+export function apply(ctx: Context, config: Config): void {
   // Retain the injected service while this context drains on disposal.
   const permissionPresets = ctx.permissionPresets
   let accepting = true
@@ -759,7 +832,7 @@ export function apply(ctx: Context): void {
           shown = new Map()
           shownBySession.set(agent.session, shown)
         }
-        const review = await classifyRisk(ctx, agent, exec, signal, shown).then(
+        const review = await classifyRisk(ctx, agent, exec, signal, shown, config.reviewer.get()).then(
           decision => ({ ok: true as const, decision }),
           (error: unknown) => ({ ok: false as const, error }),
         )
