@@ -1437,6 +1437,17 @@ describe('ModelsSection', () => {
     expect(row.getByText(en.keyFromEnvironment.replace('{ref}', 'DEEPSEEK_API_KEY'))).toBeTruthy()
   })
 
+  it('starts the add card with no provider chosen and still lets it be cancelled', async () => {
+    await mountSection()
+    fireEvent.click(screen.getByRole('button', { name: en.add }))
+    const select = screen.getByLabelText<HTMLSelectElement>(en.provider)
+    expect(select.value).toBe('')
+    expect(screen.queryByLabelText(en.keyInput)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: en.cancel }))
+    expect(screen.queryByLabelText(en.provider)).toBeNull()
+    expect(screen.getByRole('button', { name: en.add })).toBeTruthy()
+  })
+
   it('asks for a provider instead of pointing at an empty list when none is listed', async () => {
     const scripted = scriptedFace()
     scripted.face.settings.describe.mockResolvedValue(remoteOk({ writable: true, hasDocument: false, namespaces: wireNamespaces().filter(ns => ns.ns !== 'llm-pi-ai') }))
