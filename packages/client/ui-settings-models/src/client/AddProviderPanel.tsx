@@ -5,7 +5,9 @@
  * declaring a custom model API (the create form). A panel mounts the first time
  * its mode is shown and stays mounted, hidden, while the panel is open, so
  * switching modes discards neither draft; the switch holds still while either
- * panel has a write or an endpoint interrogation in flight.
+ * panel has a write or an endpoint interrogation in flight. The catalog mode
+ * starts with no provider chosen, so no vendor is the default; its editor
+ * appears once the owner picks one.
  */
 
 import { useId, useState } from 'react'
@@ -77,6 +79,8 @@ export interface AddProviderPanelProps {
   t: (key: keyof typeof en) => string
   /** The provider-card seat, rendered under the catalog draft; absent where the host declares no seat. */
   renderSlot?: PropsRenderSlots<'settings.models.provider-card'>['renderSlot']
+  /** Offer each editor's own Cancel; a host with its own dismissal, such as the first-run dialog, turns it off. Defaults to true. */
+  cancelable?: boolean
   /**
    * Close the panel.
    * @param changed - whether a write landed.
@@ -90,15 +94,14 @@ export interface AddProviderPanelProps {
  * @param props - the snapshot, the write operations, and the close callback.
  * @returns the panel.
  */
-export function AddProviderPanel({ state, schema, operations, t, renderSlot, onClose }: AddProviderPanelProps): ReactNode {
+export function AddProviderPanel(
+  { state, schema, operations, t, renderSlot, onClose, cancelable = true }: AddProviderPanelProps,
+): ReactNode {
   const offers = addOffers(state, schema)
   const { addable, catalogOffered, catalogEnabled, customOffered, customEnabled } = offers
   const [addMode, setAddMode] = useState<AddMode>(catalogEnabled ? 'catalog' : 'custom')
   const [visited, setVisited] = useState<ReadonlySet<AddMode>>(() => new Set([addMode]))
-  const [target, setTarget] = useState<EditorTarget | undefined>(() => {
-    const first = addable[0]
-    return first === undefined ? undefined : targetOf(first.row)
-  })
+  const [target, setTarget] = useState<EditorTarget | undefined>(undefined)
   const [catalogBusy, setCatalogBusy] = useState(false)
   const [customBusy, setCustomBusy] = useState(false)
   const addId = useId()
@@ -110,13 +113,11 @@ export function AddProviderPanel({ state, schema, operations, t, renderSlot, onC
   const mounted = (candidate: AddMode): boolean => mode === candidate || visited.has(candidate)
   const switchLocked = catalogBusy || customBusy
   // The chosen row survives a refresh that adopts or withdraws it elsewhere, so a typed key is never discarded,
-  // for as long as its namespace can still take the write; else the first row still addable.
+  // for as long as its namespace can still take the write; until the owner picks one there is no draft.
   const draft = ((): { target: EditorTarget; namespace: SettingsNamespaceView } | undefined => {
-    if (!catalogOffered) return undefined
-    const kept = target === undefined ? undefined : state.namespaces.get(target.settingsNs)
-    if (target !== undefined && kept !== undefined) return { target, namespace: kept }
-    const first = addable[0]
-    return first === undefined ? undefined : { target: targetOf(first.row), namespace: first.namespace }
+    if (!catalogOffered || target === undefined) return undefined
+    const kept = state.namespaces.get(target.settingsNs)
+    return kept === undefined ? undefined : { target, namespace: kept }
   })()
   const addRow = draft === undefined ? undefined : state.rows.find(row => row.entry.provider === draft.target.provider)
 
@@ -160,7 +161,8 @@ export function AddProviderPanel({ state, schema, operations, t, renderSlot, onC
           {t(mode === 'catalog' ? 'addCatalogHint' : 'addCustomHint')}
         </p>
       </div>
-      {mounted('catalog') && draft !== undefined
+      {/* A chosen draft stays while a refresh withdraws its row, so a typed key is never discarded. */}
+      {mounted('catalog') && (catalogEnabled || draft !== undefined)
         ? (
           <div
             id={`${addId}-catalog-panel`}
@@ -172,7 +174,7 @@ export function AddProviderPanel({ state, schema, operations, t, renderSlot, onC
               <span className={styles['fieldLabel']}>{t('provider')}</span>
               <select
                 className={`${styles['input']} ${styles['selectInput']}`}
-                value={draft.target.provider}
+                value={draft?.target.provider ?? ''}
                 aria-label={t('provider')}
                 disabled={catalogBusy}
                 onChange={(event) => {
@@ -182,12 +184,13 @@ export function AddProviderPanel({ state, schema, operations, t, renderSlot, onC
                   setTarget(targetOf(picked.row))
                 }}
               >
+                {draft === undefined ? <option value="" disabled>{t('providerPlaceholder')}</option> : null}
                 {addable.map(({ row }) => (
                   <option key={row.entry.provider} value={row.entry.provider}>{row.entry.displayName}</option>
                 ))}
               </select>
             </div>
-            <ProviderEditor
+            {draft === undefined ? null : <ProviderEditor
               key={draft.target.provider}
               provider={draft.target.provider}
               displayName={draft.target.displayName}
@@ -205,8 +208,9 @@ export function AddProviderPanel({ state, schema, operations, t, renderSlot, onC
               t={t}
               readOnly={!state.writable}
               onClose={(changed) => { onClose(changed, draft.target) }}
+              cancelable={cancelable}
               onBusyChange={setCatalogBusy}
-            />
+            />}
             {addRow === undefined || renderSlot === undefined
               ? null
               : renderSlot(
@@ -233,6 +237,7 @@ export function AddProviderPanel({ state, schema, operations, t, renderSlot, onC
               operations={operations}
               t={t}
               readOnly={!state.writable}
+              cancelable={cancelable}
               onClose={(changed) => { onClose(changed) }}
               onBusyChange={setCustomBusy}
             />

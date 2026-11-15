@@ -245,7 +245,8 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
   return (
     <div className={styles['section']}>
       <h2 className={styles['title']}>{t('title')}</h2>
-      <p className={styles['intro']}>{t('intro')}</p>
+      {/* With no provider listed, the intro asks for one instead of pointing at an empty list. */}
+      <p className={styles['intro']}>{t(configured.length === 0 ? 'introEmpty' : 'intro')}</p>
       {!state.writable && state.status === 'ready' ? <p className={styles['notice']}>{t('readOnly')}</p> : null}
       {savedIdentity === undefined
         ? null

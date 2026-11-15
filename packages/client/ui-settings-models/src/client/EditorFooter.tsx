@@ -31,8 +31,8 @@ export interface EditorFooterProps {
   submitBusyLabelKey: keyof typeof en
   /** Dismiss label; defaults to the settings editor copy. */
   cancelLabelKey?: keyof typeof en
-  /** Dismiss the card without committing. */
-  onCancel: () => void
+  /** Dismiss the card without committing; absent where the host owns dismissal, which leaves no Cancel. */
+  onCancel?: (() => void) | undefined
   /** Run the card's commit. */
   onSubmit: () => void
 }
@@ -46,14 +46,18 @@ export function EditorFooter(props: EditorFooterProps): ReactNode {
   const { t } = props
   return (
     <div className={styles['editorActions']}>
-      <button
-        type="button"
-        className={styles['secondaryButton']}
-        disabled={props.busy}
-        onClick={props.onCancel}
-      >
-        {t(props.cancelLabelKey ?? 'cancel')}
-      </button>
+      {props.onCancel === undefined
+        ? null
+        : (
+          <button
+            type="button"
+            className={styles['secondaryButton']}
+            disabled={props.busy}
+            onClick={props.onCancel}
+          >
+            {t(props.cancelLabelKey ?? 'cancel')}
+          </button>
+        )}
       <button
         type="button"
         className={styles['primaryButton']}

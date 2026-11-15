@@ -95,6 +95,8 @@ export interface ProviderEditorProps {
    * provider that owns its whole section exists only through its key.
    */
   credentialRequired?: boolean
+  /** Offer Cancel; a host with its own dismissal turns it off. Defaults to true. */
+  cancelable?: boolean
   /** Close the editor; `changed` reports whether an Apply committed. */
   onClose: (changed: boolean) => void
   /**
@@ -694,7 +696,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
         submitLabelKey="apply"
         submitBusyLabelKey="applying"
         cancelLabelKey={keyRemoval?.removed === true ? 'close' : 'cancel'}
-        onCancel={() => { props.onClose(false) }}
+        onCancel={props.cancelable === false ? undefined : () => { props.onClose(false) }}
         onSubmit={() => { void apply() }}
       />
     </div>

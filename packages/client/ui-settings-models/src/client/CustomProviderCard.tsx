@@ -93,6 +93,8 @@ export interface CustomProviderCardProps {
   t: (key: keyof typeof en) => string
   /** Disable writes (read-only settings provider). */
   readOnly: boolean
+  /** Offer Cancel; a host with its own dismissal turns it off. Defaults to true. */
+  cancelable?: boolean
   /** Close the card; `changed` reports whether a provider was created. */
   onClose: (changed: boolean) => void
   /**
@@ -332,7 +334,7 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
         submitDisabled={disabled || !ready}
         submitLabelKey="create"
         submitBusyLabelKey="creating"
-        onCancel={() => { props.onClose(committed) }}
+        onCancel={props.cancelable === false ? undefined : () => { props.onClose(committed) }}
         onSubmit={() => { void create() }}
       />
     </div>

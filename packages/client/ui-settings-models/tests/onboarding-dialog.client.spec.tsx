@@ -178,14 +178,27 @@ describe('ProviderOnboardingDialog', () => {
     expect(await screen.findByRole('dialog', { name: en.onboardingTitle })).toBeTruthy()
   })
 
-  it('offers every provider the directory lists, by name, with DeepSeek as one choice, and inerts the product', async () => {
+  it('offers every provider the directory lists, by name, with none chosen, and inerts the product', async () => {
     const h = harness()
     render(<ProviderOnboardingDialog {...h.props} />)
     expect(await screen.findByRole('dialog', { name: en.onboardingTitle })).toBeTruthy()
     expect(document.getElementById('root')?.inert).toBe(true)
     expect(screen.getByText(en.onboardingDescription)).toBeTruthy()
     const select = screen.getByLabelText<HTMLSelectElement>(en.provider)
-    expect([...select.options].map(option => option.text)).toEqual(['Acme', 'DeepSeek'])
+    // No vendor is preselected: the key field and its environment notice wait for a choice.
+    expect([...select.options].map(option => option.text)).toEqual([en.providerPlaceholder, 'Acme', 'DeepSeek'])
+    expect(select.value).toBe('')
+    expect(screen.queryByLabelText(en.keyInput)).toBeNull()
+  })
+
+  it('leaves dismissal to Configure later, with no editor Cancel beside it', async () => {
+    const h = harness()
+    render(<ProviderOnboardingDialog {...h.props} />)
+    await screen.findByRole('dialog')
+    fireEvent.change(screen.getByLabelText(en.provider), { target: { value: 'deepseek-official' } })
+    expect(screen.getByRole('button', { name: en.apply })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: en.cancel })).toBeNull()
+    expect(screen.getByRole('button', { name: en.onboardingLater })).toBeTruthy()
   })
 
   it('cannot be dismissed implicitly and restores the previous inert state', async () => {

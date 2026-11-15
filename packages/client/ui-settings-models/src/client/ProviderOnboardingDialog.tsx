@@ -69,10 +69,11 @@ export function ProviderOnboardingDialog(props: ProviderOnboardingDialogProps): 
           schema={schema}
           operations={operations}
           t={t}
+          // The dialog's own Configure later is the one dismissal, so the panel's editors offer no Cancel.
+          cancelable={false}
           onClose={(changed) => {
-            // A saved provider ends the step once the refreshed join finds it usable; a cancel is "later".
+            // A saved provider ends the step once the refreshed join finds it usable.
             if (changed) void controller.load()
-            else complete()
           }}
         />
       </div>
