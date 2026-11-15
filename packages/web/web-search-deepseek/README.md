@@ -60,7 +60,7 @@ Every search sends the API key as both `x-api-key` and `Authorization: Bearer`, 
 
 The provider's `ready()` answers whether the next search has an API key, on any model route: a literal `apiKey` is set, or `ctx.credentials.describe` reports the `apiKeyEnv` reference configured (without that service, the process environment must carry it). A failed credential-store read answers false, because the search fails on that read. While this provider is the selected search provider, [`dsh-tool-web`](../tool-web/README.md#search-readiness) withholds `web_search` and its prompt guidance from each request for which it answers false. Only presence is checked: a wrong key, or an endpoint that does not serve the native `web_search_20250305` server tool, counts as ready and fails each call. A call that still arrives resolves credentials when it runs.
 
-Referenced keys use the [shared DeepSeek credential helpers](../../llm/llm-deepseek/README.md#account-credentials), including the same whitespace normalization and format validation as model requests. A malformed referenced key fails before dispatch; readiness remains a presence-only check.
+Referenced keys use the [shared DeepSeek credential helpers](../../llm/llm-deepseek/README.md#api-key-credentials), including the same whitespace normalization and format validation as model requests. A malformed referenced key fails before dispatch; readiness remains a presence-only check.
 
 ### What a search returns
 

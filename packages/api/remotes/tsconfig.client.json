@@ -115,9 +115,6 @@
       "path": "../../document/office-kit"
     },
     {
-      "path": "../../credentials/deepseek-account"
-    },
-    {
       "path": "../../web/web"
     }
   ]

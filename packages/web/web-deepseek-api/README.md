@@ -59,7 +59,7 @@ Search and Fetch each resolve their endpoint and credential from one settings sn
 
 Without the key, the operation fails with a diagnostic that names the Models page and the key reference.
 
-References use the [shared DeepSeek credential helpers](../../llm/llm-deepseek/README.md#account-credentials): `ctx.credentials` is authoritative, with launch-environment lookup only when that service is absent. Route and own keys receive the same whitespace normalization and format validation as model requests; malformed keys fail before dispatch.
+References use the [shared DeepSeek credential helpers](../../llm/llm-deepseek/README.md#api-key-credentials): `ctx.credentials` is authoritative, with launch-environment lookup only when that service is absent. Route and own keys receive the same whitespace normalization and format validation as model requests; malformed keys fail before dispatch.
 
 Each provider's `ready()` answers whether its next operation has a key that `ctx.credentials.describe` reports configured (without that service, the launch environment must carry it). A failed credential-store read, or a needed route entry whose settings do not resolve, answers false. While these providers are selected, [`dsh-tool-web`](../tool-web/README.md#search-readiness) withholds `web_search` and `web_fetch` with their prompt guidance from each request for which they answer false. Only presence is checked: a wrong key counts as ready and fails each call.
 

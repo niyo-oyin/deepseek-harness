@@ -1,6 +1,7 @@
 # Agent Note: Account-scoped Platform browser storage
 
 Status: implemented
+Archived: 2026-11-16
 
 ## Problem
 

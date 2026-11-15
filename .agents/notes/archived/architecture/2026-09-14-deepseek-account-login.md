@@ -1,6 +1,7 @@
 # Agent Note: DeepSeek account browser login
 
 Status: implemented
+Archived: 2026-11-16
 
 Sign-in captures the initiating UI's client metadata per attempt so browser authorization follows the Desktop or Settings language without depending on the Platform default.
 

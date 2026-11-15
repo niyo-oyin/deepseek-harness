@@ -1,6 +1,7 @@
 # Agent Note: DeepSeek account models come from the account listing and gate by client version
 
 Status: implemented
+Archived: 2026-11-16
 
 ## Problem
 

@@ -1,6 +1,7 @@
 # Agent Note: Account provider and active request cancellation
 
 Status: implemented
+Archived: 2026-11-16
 
 ## Problem
 

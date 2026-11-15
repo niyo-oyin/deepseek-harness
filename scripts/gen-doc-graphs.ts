@@ -495,15 +495,6 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Configuration carries references to secrets; providers own the values. Consumers resolve per operation, so a rotated credential reaches the very next request; the settings controller exposes value-free views and write-only storage.',
   },
   {
-    key: 'deepseekAccount',
-    pkg: 'deepseek-account',
-    title: 'DeepSeek account',
-    mode: 'service',
-    implementations: [],
-    consumers: ['llm-deepseek'],
-    note: 'The Host owns browser authorization and local credentials; UI consumers receive state without tokens.',
-  },
-  {
     key: 'authorization',
     pkg: 'authorization',
     title: 'Authorization flow registry',
