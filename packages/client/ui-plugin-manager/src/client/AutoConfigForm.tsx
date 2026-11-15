@@ -137,15 +137,12 @@ function AutoConfigFields(
     if (field.kind === 'role' && field.role !== undefined) {
       let value: unknown
       try { value = fieldState.text === '' ? undefined : JSON.parse(fieldState.text) } catch { value = undefined }
+      // The role editor draws its own localized heading; the form adds only the description below it.
       return (
         <div key={field.name} className={css.field}>
-          <div className={css.head}>
-            <label className={css.label} htmlFor={id}>{field.name}</label>
-            {overrideBadge(field, fieldState)}
-          </div>
           {renderField(field.role, {
             id,
-            label: field.name,
+            status: overrideBadge(field, fieldState),
             hint: field.description,
             value,
             disabled,

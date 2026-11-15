@@ -203,8 +203,8 @@ export function apply(ctx: ClientContext): void {
     const load = (): void => { catalog.load().catch(() => { /* surfaced on the store */ }) }
     scope.slots.inject('plugins.config.field', () => scope.slots.register(
       { name: 'plugins.config.field', key: 'model-route', locale: NS },
-      ({ id, value, disabled, onChange }) =>
-        createElement(ModelRouteField, { id, value, disabled, onChange, catalog: catalog.store, load, t }),
+      ({ id, status, value, disabled, onChange }) =>
+        createElement(ModelRouteField, { id, status, value, disabled, onChange, catalog: catalog.store, load, t }),
     ))
   })
 }

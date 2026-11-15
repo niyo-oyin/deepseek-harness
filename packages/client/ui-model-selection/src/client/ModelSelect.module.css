@@ -412,6 +412,21 @@
   gap: 8px;
 }
 
+.routeHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.routeLabel {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-primary);
+}
+
 .routeSelect {
   height: 34px;
   padding: 0 12px;

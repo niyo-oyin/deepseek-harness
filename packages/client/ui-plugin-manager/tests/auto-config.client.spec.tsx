@@ -226,6 +226,8 @@ describe('role fields', () => {
       }}
     />)
     expect(screen.getByText('model-route:unset')).toBeTruthy()
+    // The editor owns the heading: the form prints no raw field name for it.
+    expect(screen.queryByText('reviewer')).toBeNull()
     expect(screen.getByText('Reviews cost one request each.')).toBeTruthy()
     fireEvent.click(screen.getByText('model-route:unset'))
     expect(screen.getByText('model-route:{"provider":"cheap","model":"small"}')).toBeTruthy()

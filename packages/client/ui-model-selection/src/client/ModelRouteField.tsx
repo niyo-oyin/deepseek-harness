@@ -31,8 +31,10 @@ export interface ModelRouteValue {
 
 /** Props of {@link ModelRouteField}. */
 export interface ModelRouteFieldProps {
-  /** Element id the owning form's label points at. */
+  /** Element id of the model select, which the field's own heading labels. */
   readonly id: string
+  /** What the owning form shows beside the heading, such as its override status. */
+  readonly status?: ReactNode
   /** The stored value, or `undefined` while unset. */
   readonly value: unknown
   readonly disabled: boolean
@@ -72,7 +74,7 @@ function routeKey(provider: string, model: string): string {
 /**
  * Render the route picker.
  * @param props - the stored value, its edit action, and the shared catalog.
- * @returns the model select and, when the chosen model offers levels, the effort select.
+ * @returns the heading, the model select and, when the chosen model offers levels, the effort select.
  */
 export function ModelRouteField(props: ModelRouteFieldProps): ReactNode {
   const { id, disabled, onChange, t, load } = props
@@ -93,6 +95,10 @@ export function ModelRouteField(props: ModelRouteFieldProps): ReactNode {
   }
   return (
     <div className={css.routeField}>
+      <div className={css.routeHead}>
+        <label className={css.routeLabel} htmlFor={id}>{t('route.heading')}</label>
+        {props.status}
+      </div>
       <select
         id={id}
         className={css.routeSelect}

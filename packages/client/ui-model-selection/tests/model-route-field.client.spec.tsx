@@ -36,7 +36,7 @@ function renderField(value: unknown, catalog: ModelCatalogState = { value: CATAL
   const store = createSnapshotStore<ModelCatalogState>(catalog)
   const onChange = vi.fn()
   const load = vi.fn()
-  render(<ModelRouteField id="reviewer" value={value} disabled={false} onChange={onChange} catalog={store} load={load} t={t} />)
+  render(<ModelRouteField id="reviewer" status={<span>overridden</span>} value={value} disabled={false} onChange={onChange} catalog={store} load={load} t={t} />)
   return { onChange, load, store }
 }
 
@@ -46,6 +46,9 @@ const effortSelect = () => screen.queryByRole<HTMLSelectElement>('combobox', { n
 it('starts on the session model, grouped by provider, and loads the shared catalog', () => {
   const { load } = renderField(undefined)
   expect(load).toHaveBeenCalledOnce()
+  // Its own localized heading labels the model select, beside the form's status.
+  expect(screen.getByLabelText(en['route.heading'])).toBe(modelSelect())
+  expect(screen.getByText('overridden')).toBeTruthy()
   expect(modelSelect().value).toBe('')
   expect(modelSelect().options[0]?.text).toBe(en['route.session'])
   const groups = [...modelSelect().querySelectorAll('optgroup')].map(group => [group.label, [...group.querySelectorAll('option')].map(option => option.text)])

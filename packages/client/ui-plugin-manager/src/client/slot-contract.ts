@@ -18,6 +18,7 @@
  * all. The page draws the title, icon, and crumb itself.
  */
 
+import type { ReactNode } from 'react'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import type { BundleInfo } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -36,10 +37,14 @@ export interface PluginConfigViewProps {
  * it on save; the renderer only shows and edits it.
  */
 export interface PluginConfigFieldProps {
-  /** Element id for the field's label to point at. */
+  /**
+   * Element id of the field's control. The editor owns the field's
+   * presentation, including a heading in the active language that labels this
+   * control: a schema carries no localized title, only its field name.
+   */
   readonly id: string
-  /** The field name as the form labels it. */
-  readonly label: string
+  /** The form's override status and reset control, for the editor to show beside its heading; `null` while not overridden. */
+  readonly status: ReactNode
   /** The schema's description in the active language, when it declares one. */
   readonly hint?: string | undefined
   /** The staged value, or `undefined` while the field inherits its default. */
