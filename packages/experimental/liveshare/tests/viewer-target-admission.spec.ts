@@ -67,7 +67,9 @@ async function harness(mode: ViewerSessionMode = 'write') {
     const decision = await next()
     return decision.kind === 'enter' ? { ...decision, messages: [] } : decision
   })
-  const agents = await Promise.all([source, child, privateSession].map(id => driver.create(id, {}, { cwd: process.cwd() })))
+  // A Session with no model cannot accept a prompt, so every fixture Session names one.
+  const route = { provider: 'fixture', model: 'fixture-model' }
+  const agents = await Promise.all([source, child, privateSession].map(id => driver.create(id, route, { cwd: process.cwd() })))
   const privateAgent = agents[2]!
   const image: ImageAttachmentRef = { attachmentId: brandString<AttachmentId>('private-image'),
     mediaType: 'image/png', bytes: 1, width: 1, height: 1 }

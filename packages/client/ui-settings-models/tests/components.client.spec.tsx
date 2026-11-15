@@ -246,7 +246,6 @@ function ctxWith(face: object): PageContext {
   const existing = contexts.get(face)
   if (existing !== undefined) return existing
   const ctx = Object.assign(new Context(), { remote: { ...face,
-    session: { initializeDefaultModel: async () => ({ ok: true, value: undefined }) },
   } })
   contexts.set(face, ctx)
   return ctx
@@ -1157,13 +1156,11 @@ describe('ModelsSection', () => {
   })
 
   it('saves credentials without changing the default model', async () => {
-    const { ctx, set } = await mountDeepSeekCard()
-    const initialize = vi.spyOn(ctx.remote.session, 'initializeDefaultModel')
+    const { set } = await mountDeepSeekCard()
     fireEvent.change(await screen.findByLabelText(en.keyInput), { target: { value: 'test-key' } })
     fireEvent.click(screen.getByText(en.apply))
     await waitFor(() => { expect(screen.queryByText(en.apply)).toBeNull() })
     expect(set).toHaveBeenCalledOnce()
-    expect(initialize).not.toHaveBeenCalled()
   })
 
   it('reveals only the current key draft and masks it again on change', async () => {

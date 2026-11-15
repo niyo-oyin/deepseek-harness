@@ -2922,12 +2922,6 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the normalized selection installed for the Session, without waiting for default persistence.',
       },
       {
-        signature: '@Remote async initializeDefaultModel(): Promise<void>',
-        description: 'Select the first available account model after login when no provider API key is configured.',
-        parameters: [],
-        returns: 'after saving the first available model or retaining the existing default.',
-      },
-      {
         signature: '@Remote(\'modelCatalog\') modelCatalog(): Promise<ModelCatalog>',
         description: 'Describe every currently routable model for Host-generation selectors.',
         parameters: [],
