@@ -42,6 +42,8 @@ A page that edits a namespace another plugin owns registers through `ctx.configF
 
 A settings surface registers into the slot types this package declares. The shell (`sidebar.settings` occupant, navigation, chrome) lives in ui-settings-general; feature pages register `settings.section` contributions; the Plugins section hosts `settings.plugins.tab` pages; onboarding steps register `settings.onboarding`. Cross-namespace surfaces (schema introspection, the served-namespace directory, `hasDocument`) read the same mirror through `ctx.configForms.describe()`.
 
+Another plugin opens Settings on a section through the optional `settingsNavigation` service, which the shell provides while it is mounted: `ctx.get('settingsNavigation')?.openSection('models')`. The model picker uses it to lead a user with no provider to **Models**.
+
 To customize a page's navigation icon, use `ctx.slots.inject('settings.section.icon', ...)` and register an icon component with the same `id` as its `settings.section` contribution. Unmatched ids never render, and the icon's `label` option is not displayed. The component receives `size` in pixels and `active`; the shell owns the button, label, and decorative icon wrapper. Without a matching icon registration, the shell renders its default glyph. Disposing the icon contribution restores that glyph.
 
 ### Observable success and failures

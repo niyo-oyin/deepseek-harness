@@ -4,9 +4,9 @@ Start the Web UI through the [root README](../../../README.md#run); the command 
 
 ## Configure a model
 
-Open **Settings → Models**, enter a [DeepSeek API key](https://platform.deepseek.com/), and save it. The model route becomes usable immediately without restarting the server.
+A fresh install has no model provider and no default model. The first start opens **Add a model provider to get started**: choose a provider, such as DeepSeek, OpenAI, or Anthropic, enter its API key, and save it; **Configure later** closes it, and **Settings → Models** offers the same flow at any time. The route becomes usable immediately without restarting the server.
 
-The [model configuration guide](./providers.md) covers other providers and custom OpenAI-compatible endpoints.
+Until you pick a model, the composer reads **Choose a model to start the conversation.** Pick one from the model control beside it; that first pick becomes the default for new sessions. The [model configuration guide](./providers.md) covers every provider and custom OpenAI-compatible endpoints.
 
 ## Choose a workspace
 

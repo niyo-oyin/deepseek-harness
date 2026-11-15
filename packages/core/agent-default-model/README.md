@@ -7,7 +7,7 @@ kind: "package-reference"
 
 ## Summary
 
-Give newly created agents a shared default provider and model when their sessions do not specify one. Provider, model, and reasoning effort are live Config fields. Saved selections update the active profile patch and apply to subsequent reads; per-session selection belongs to the [Agent model API](../agent/README.md).
+Give newly created agents a shared default provider and model when their sessions do not specify one, or answer that none is set yet. Provider, model, and reasoning effort are live Config fields. Saved selections update the active profile patch and apply to subsequent reads; per-session selection belongs to the [Agent model API](../agent/README.md).
 
 ## Table of Contents
 
@@ -27,7 +27,7 @@ Mount this package wherever agents are created without an explicit model route. 
 
 ### Configure the default
 
-The composition requires a provider and model. Consumers read the live references even when no configuration editor is mounted.
+No default ships: the base bundle mounts the service without a provider or model, and the first model picked in the app saves one. A profile may set both itself. Consumers read the live references even when no configuration editor is mounted.
 
 ```yaml
 - name: '@deepseek-ai/dsh-agent-default-model'
@@ -38,17 +38,17 @@ The composition requires a provider and model. Consumers read the live reference
 
 | Field | Default | Meaning |
 |---|---|---|
-| `provider` | required | Registered provider route for fresh agents |
-| `model` | required | Provider-owned model id for fresh agents |
+| `provider` | unset | Registered provider route for fresh agents; set together with `model` |
+| `model` | unset | Provider-owned model id for fresh agents; set together with `provider` |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-agent-default-model) lists every accepted field. `reasoningEffort` is optional; saving a selection without it removes that field from the profile’s complete config override.
 
 ### Read and change the default
 
-`currentSelection()` returns a detached `{ provider, model, reasoningEffort? }` for a newly created agent; `saveSelection()` stores the complete selection for later agents.
+`currentSelection()` returns a detached `{ provider, model, reasoningEffort? }` for a newly created agent, or `undefined` while no default is set; a profile that sets only one of `provider` and `model` makes it throw. An entry point that cannot proceed without a model calls `requireSelection()`, which throws `NoDefaultModelError` (code `NO_DEFAULT_MODEL`) whose message names both ways to set a default: pick a model in the app, or set `provider` and `model` under `agent-default-model` in the profile. Headless runs, webhook Sessions, Session forks, and scheduled deliveries into a new Session raise it; `session.prompt` refuses a Session with neither its own model nor a default with the same text. `saveSelection()` stores the complete selection for later agents.
 
 ```text
-const selection = ctx.agentDefaultModel.currentSelection()
+const selection = ctx.agentDefaultModel.requireSelection()
 await ctx.agentDefaultModel.saveSelection({ provider, model, reasoningEffort: 'high' })
 ```
 
