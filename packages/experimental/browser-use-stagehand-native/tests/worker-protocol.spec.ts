@@ -4,6 +4,7 @@ import { once } from 'node:events'
 import { Worker } from 'node:worker_threads'
 import { finished } from 'node:stream/promises'
 import { expect, it } from 'vitest'
+import { workerEnvironment } from '../src/worker-client.ts'
 import { request } from '../src/worker-rpc.ts'
 
 it('reports malformed requests before exiting its real Worker', async () => {
@@ -16,7 +17,8 @@ it('reports malformed requests before exiting its real Worker', async () => {
   ].join('\n')
   const worker = new Worker(new URL(`data:text/javascript,${encodeURIComponent(bootstrap)}`), {
     workerData: { model: { modelName: 'openai/gpt-5.4-mini', apiKey: 'fixture-model-key' }, mode: 'attach', cdpEndpoint: 'http://fixture', headless: true, operationTimeoutMs: 30000, shutdownGraceMs: 1000 },
-    env: {}, execArgv: [], stderr: true,
+    // The production environment: no ambient credentials, but a temp location on Windows.
+    env: workerEnvironment(), execArgv: [], stderr: true,
   })
   let diagnostics = ''
   worker.stderr.setEncoding('utf8')
