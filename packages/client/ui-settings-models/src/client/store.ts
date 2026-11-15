@@ -13,6 +13,7 @@ import type {
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import { compareDisplayNames } from '@deepseek-ai/dsh-util-values'
 import type { SettingsDescribeFace } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { SettingsSchemaOperations } from './schema-operations.ts'
 
@@ -41,7 +42,7 @@ export interface ProviderDirectoryEntry {
  * Join declared configurable providers with the currently registered routes.
  * @param registered - live provider routes in registration order.
  * @param directory - declared configurable providers in declaration order.
- * @returns account and official routes first, then other routes in their original order.
+ * @returns every route ordered by display name, then route id, the same on every machine.
  */
 export function joinProviderDirectory(
   registered: readonly LlmProviderInfo[],
@@ -73,8 +74,31 @@ export function joinProviderDirectory(
     })
   }
   return rows.toSorted((left, right) =>
-    (left.provider === 'deepseek-account' ? 0 : left.provider === 'deepseek-official' ? 1 : 2)
-      - (right.provider === 'deepseek-account' ? 0 : right.provider === 'deepseek-official' ? 1 : 2))
+    compareDisplayNames(left.displayName, right.displayName) || compareDisplayNames(left.provider, right.provider))
+}
+
+/**
+ * Whether a row's provider owns its whole settings section (DeepSeek's
+ * `llm-deepseek`): its route is always registered, so the page lists it only
+ * once it has a key, like any provider the user added.
+ * @param row - one joined row.
+ * @returns whether the row is a whole-section provider.
+ */
+export function wholeSection(row: Pick<ProviderRow, 'entry' | 'apiKeyEnv'>): boolean {
+  return row.entry.settingsPath.length === 0 && row.entry.settingsNs !== '' && row.apiKeyEnv !== undefined
+}
+
+/**
+ * Presence of a whole-section provider from its key: listed while the key
+ * resolves, removable when the page stored that key, and listed but not
+ * removable when the launch environment supplies it.
+ * @param credential - the described key, when described.
+ * @returns the row's configured, removable, and environment facts.
+ */
+function wholeSectionPresence(credential: CredentialInfo | undefined): Pick<ProviderRow, 'configured' | 'removable' | 'keyFromEnvironment'> {
+  if (credential?.configured !== true) return { configured: false, removable: false, keyFromEnvironment: false }
+  const fromEnvironment = credential.source === 'env'
+  return { configured: true, removable: !fromEnvironment, keyFromEnvironment: fromEnvironment }
 }
 
 /** One provider row the page renders. */
@@ -87,6 +111,11 @@ export interface ProviderRow {
   configured: boolean
   /** Whether the user layer alone carries the profile (removal restores the base). */
   removable: boolean
+  /**
+   * A whole-section provider whose key comes from the launch environment: it is
+   * listed, but the page cannot remove a key it did not store.
+   */
+  keyFromEnvironment?: boolean
   /** The credential reference the resolved profile names, when one does. */
   apiKeyEnv: string | undefined
   /** Credential state for {@link apiKeyEnv}, once described. */
@@ -298,6 +327,7 @@ export class ModelsSettingsStore {
         const derived = row.apiKeyEnv !== undefined ? undefined : credentials[deriveKeyRef(row.entry.provider)]
         return {
           ...row,
+          ...wholeSection(row) ? wholeSectionPresence(named) : {},
           ...named === undefined ? {} : { credential: named },
           ...derived === undefined ? {} : { derivedCredential: derived },
           ...credentialError === null ? { credentialChecks: Object.fromEntries(
