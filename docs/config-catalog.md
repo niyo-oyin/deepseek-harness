@@ -1497,8 +1497,8 @@ export type TranslationProvider = AnonymousTranslationProvider | PaidTranslation
 /** Anonymous browser endpoint selected for one translation. */
 export type AnonymousTranslationProvider = 'google' | 'bing'
 
-/** Explicit native DeepSeek credential route selected for paid translation. */
-export type PaidTranslationProvider = 'deepseek-account' | 'deepseek-official'
+/** Native DeepSeek API-key route selected for paid translation. */
+export type PaidTranslationProvider = 'deepseek-official'
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-experimental-translator -->
 
