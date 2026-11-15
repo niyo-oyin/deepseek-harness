@@ -260,8 +260,10 @@ describe('models outside the installed catalog', () => {
     const template = getBuiltinModels('anthropic').find(model => model.id === 'claude-opus-5-5')
 
     const { models } = await ctx.llm.discoverModels('llm-pi-ai', {
-      provider: 'anthropic', describe: ['claude-opus-5-5-20261201', 'acme-house-model', 'claude-opus-5-5'],
+      provider: 'anthropic', describe: ['claude-opus-5-5-20261201', 'acme-house-model', 'claude-opus-5-5', 'claude-opus-5-7'],
     })
+    // A later point release belongs with the nearest earlier one, not with the family's first release.
+    expect(models.find(model => model.id === 'claude-opus-5-7')?.template).toBe('claude-opus-5-5')
 
     expect(server.paths).toEqual([])
     const dated = models.find(model => model.id === 'claude-opus-5-5-20261201')

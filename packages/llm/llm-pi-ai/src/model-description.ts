@@ -131,11 +131,11 @@ function candidatesFor(api: string, provider: string | undefined): Candidate[] {
  * The same family spelled differently is a match. Otherwise the longest shared
  * run of leading tokens decides, and it must name more than a vendor: two
  * tokens at least (`claude-opus-5` for `claude-opus-5-7`, `gpt-5` for
- * `gpt-5-codex`). Among equally long matches the route's own models win, then
- * a template whose whole id is the shared run; then, where the ids next differ
- * in a version number, the nearest release below the described one, and the
- * one whose variant name agrees. Matches that still disagree about reasoning
- * are no answer at all.
+ * `gpt-5-codex`). Among equally long matches the route's own models win; then,
+ * where the ids next differ in a version number, the nearest release below the
+ * described one and the one whose variant name agrees, or otherwise a template
+ * whose whole id is the shared run. Matches that still disagree about
+ * reasoning are no answer at all.
  * @param id - the described model id.
  * @param api - wire protocol it speaks.
  * @param provider - route being described, whose own models win a tie.
@@ -152,21 +152,22 @@ export function matchTemplate(id: string, api: string, provider?: string): Model
   if (best < 2) return undefined
   let tied = candidates.filter(candidate => sharedPrefix(tokens, candidate.tokens) === best)
   if (tied.some(candidate => candidate.home)) tied = tied.filter(candidate => candidate.home)
+  const version = Number(tokens[best])
+  const versioned = /^\d+$/u.test(tokens[best] ?? '')
+    ? tied.filter(candidate => /^\d+$/u.test(candidate.tokens[best] ?? '') && Number(candidate.tokens[best]) <= version)
+    : []
   const whole = tied.filter(candidate => candidate.tokens.length === best)
-  if (whole.length > 0) tied = whole
-  else {
-    const version = Number(tokens[best])
-    const versioned = tied.filter(candidate => /^\d+$/u.test(candidate.tokens[best] ?? '')
-      && Number(candidate.tokens[best]) <= version)
-    if (/^\d+$/u.test(tokens[best] ?? '') && versioned.length > 0) {
-      const nearest = Math.max(...versioned.map(candidate => Number(candidate.tokens[best])))
-      tied = versioned.filter(candidate => Number(candidate.tokens[best]) === nearest)
-    }
+  if (versioned.length > 0) {
+    // A later point release belongs with the nearest earlier one: `claude-opus-5-7` with `claude-opus-5-5`.
+    const nearest = Math.max(...versioned.map(candidate => Number(candidate.tokens[best])))
+    tied = versioned.filter(candidate => Number(candidate.tokens[best]) === nearest)
     // Past the differing version, the variant name decides: `gpt-6.2-sol` belongs with `gpt-6.1-sol`.
     const variant = (candidate: Candidate): number =>
       tokens.slice(best + 1).filter((token, at) => candidate.tokens[best + 1 + at] === token).length
     const closest = Math.max(...tied.map(variant))
     tied = tied.filter(candidate => variant(candidate) === closest)
+  } else if (whole.length > 0) {
+    tied = whole
   }
   const proposals = new Set(tied.map(candidate => JSON.stringify(catalogProposal(candidate.model))))
   if (proposals.size !== 1) return undefined
