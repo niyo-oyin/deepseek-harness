@@ -24,6 +24,7 @@ import {
   rawSessionLog,
   renderSeedFixture,
   seedSession,
+  selectedSessionFixture,
   watchConsole,
   webSnapshotMode,
   type WebScaffold,
@@ -34,7 +35,33 @@ const SNAPSHOT_DIR = fileURLToPath(new URL('../../../snapshots/web/minimal-prese
 const FIXTURE = join(SNAPSHOT_DIR, 'session.v3.jsonl')
 const UI_EXPECTED = join(SNAPSHOT_DIR, 'ui.expected.md')
 const MODE = webSnapshotMode()
-const PROMPT = "Use the bash tool to run exactly: printf 'MINIMAL_BASH_CARD_OK\\n'. Then reply exactly MINIMAL_PRESET_REQUEST_OK and stop."
+/**
+ * The minimal preset's persistent shell: bash on POSIX, pwsh on Windows, each driven with its own syntax.
+ * Persistent bash appends the RL-format completion line to every settled command, while persistent pwsh
+ * reports an exit code only when it is non-zero. The Web conversation renders bash with its keyed shell
+ * card and pwsh with the generic tool card.
+ */
+const SHELL = process.platform === 'win32'
+  ? {
+    tool: 'pwsh',
+    prompt: "Use the pwsh tool to run exactly: Write-Output 'MINIMAL_BASH_CARD_OK'. Then reply exactly MINIMAL_PRESET_REQUEST_OK and stop.",
+    cardCommand: /"command": "Write-Output 'MINIMAL_BASH_CARD_OK'/,
+    succeeded: '',
+    row: '[data-tool="pwsh"] [data-disclosure-row]',
+    callOf: (row: Locator): Locator => row.locator('xpath=ancestor::*[@data-tool="pwsh"][1]'),
+    enterState: (dir: string): string => `Set-Location -LiteralPath '${dir.replaceAll("'", "''")}'; $env:DSH_MINIMAL_STATE = 'PERSISTED'`,
+    readState: 'Write-Output "$($env:DSH_MINIMAL_STATE):$($PWD.Path)"',
+  }
+  : {
+    tool: 'bash',
+    prompt: "Use the bash tool to run exactly: printf 'MINIMAL_BASH_CARD_OK\\n'. Then reply exactly MINIMAL_PRESET_REQUEST_OK and stop.",
+    cardCommand: /"command": "printf 'MINIMAL_BASH_CARD_OK/,
+    succeeded: '\n[Command finished with exit code 0]',
+    row: '[data-sample="bash"]',
+    callOf: (row: Locator): Locator => row.locator('xpath=..'),
+    enterState: (dir: string): string => `cd ${JSON.stringify(dir)} && export DSH_MINIMAL_STATE=PERSISTED`,
+    readState: 'printf \'%s:%s\n\' "$DSH_MINIMAL_STATE" "$PWD"',
+  }
 
 /** Rendered text of the system prompt surface node, or undefined when the surface carries none. */
 function systemPromptText(session: Session): string | undefined {
@@ -64,7 +91,7 @@ describe('minimal agent preset', () => {
       setup: agentCtx => scaffold.ctx.agentPresets.mount(agentCtx, 'minimal').then(() => undefined),
     })
     agentHandle.agent.followup(createUserMessage({
-      content: [{ type: 'text', text: PROMPT }],
+      content: [{ type: 'text', text: SHELL.prompt }],
       source: { kind: 'user' },
     }))
     await agentHandle.agent.whenIdle()
@@ -106,43 +133,37 @@ describe('minimal agent preset', () => {
     const signal = new AbortController().signal
     await executeToolFixture(scaffold.ctx, {
       signal,
-      callId: brandString<ToolCallId>('minimal-bash-state-setup'),
-      name: 'bash',
-      arguments: { command: `cd ${JSON.stringify(stateDir)} && export DSH_MINIMAL_STATE=PERSISTED` },
+      callId: brandString<ToolCallId>('minimal-shell-state-setup'),
+      name: SHELL.tool,
+      arguments: { command: SHELL.enterState(stateDir) },
       agent: agentHandle.agent,
     })
-    const bash = await executeToolFixture(scaffold.ctx, {
+    const shell = await executeToolFixture(scaffold.ctx, {
       signal,
-      callId: brandString<ToolCallId>('minimal-bash-state-read'),
-      name: 'bash',
-      arguments: { command: 'printf \'%s:%s\n\' "$DSH_MINIMAL_STATE" "$PWD"' },
+      callId: brandString<ToolCallId>('minimal-shell-state-read'),
+      name: SHELL.tool,
+      arguments: { command: SHELL.readState },
       agent: agentHandle.agent,
     })
-    const text = (result: typeof bash): string => result.content
+    const text = (result: typeof shell): string => result.content
       .filter(block => block.type === 'text')
       .map(block => block.text)
       .join('')
-      .replaceAll(scaffold.workspaceCwd, '{{cwd}}')
+      .replaceAll(stateDir, '{{stateDir}}')
       .trimEnd()
 
+    // The second call sees the directory and variable the first one set: the shell persists.
     expect({
       prompt: systemPrompt,
       tools: requestHeader.tools?.map(tool => tool.name),
       goalCommand: scaffold.ctx.commands.find(agentHandle.agent, 'goal') !== undefined,
-      bash: text(bash),
-    }).toMatchInlineSnapshot(`
-      {
-        "bash": "PERSISTED:{{cwd}}/persistent-state
-      [Command finished with exit code 0]",
-        "goalCommand": false,
-        "prompt": "You are a helpful software engineer assistant.",
-        "tools": [
-          "bash",
-          "read_image",
-          "working_directory",
-        ],
-      }
-    `)
+      shell: text(shell),
+    }).toEqual({
+      prompt: 'You are a helpful software engineer assistant.',
+      tools: [SHELL.tool, 'read_image', 'working_directory'],
+      goalCommand: false,
+      shell: `PERSISTED:{{stateDir}}${SHELL.succeeded}`,
+    })
     const requestedTools = new Set(requestHeader.tools?.map(tool => tool.name))
     expect(requestHeader.tools?.toSorted((left, right) => left.name.localeCompare(right.name)))
       .toEqual(scaffold.ctx.tools.schemas(agentHandle.agent)
@@ -150,7 +171,7 @@ describe('minimal agent preset', () => {
         .toSorted((left, right) => left.name.localeCompare(right.name)))
   })
 
-  it.skipIf(MODE === 'record')('expands the completed persistent Bash call in the Web conversation', async () => {
+  it.skipIf(MODE === 'record')('expands the completed persistent shell call in the Web conversation', async () => {
     onTestFailed(() => { if (page !== undefined) void saveFailureShot(page, 'web-minimal-persistent-bash-card') })
     browser = await chromium.launch()
     page = await newEnglishPage(browser)
@@ -172,11 +193,11 @@ describe('minimal agent preset', () => {
     await process.click()
     await expect.poll(() => process.getAttribute('aria-expanded')).toBe('true')
 
-    const group = page.locator('[data-chat-group-key]').filter({ has: page.locator('[data-sample="bash"]') }).first()
+    const group = page.locator('[data-chat-group-key]').filter({ has: page.locator(SHELL.row) }).first()
     const groupControl = group.locator('[data-process-activity]')
     await groupControl.waitFor({ timeout: 15_000 })
     await expect.poll(() => groupControl.getAttribute('aria-expanded')).toBe('false')
-    const row = group.locator('[data-sample="bash"]').first()
+    const row = group.locator(SHELL.row).first()
     expect(await row.isVisible()).toBe(false)
     await groupControl.click()
     await expect.poll(() => groupControl.getAttribute('aria-expanded')).toBe('true')
@@ -185,11 +206,11 @@ describe('minimal agent preset', () => {
     await row.click()
 
     await expect.poll(() => row.getAttribute('aria-expanded')).toBe('true')
-    const call = row.locator('xpath=..')
+    const call = SHELL.callOf(row)
     await call.getByText('IN', { exact: true }).waitFor()
     await call.getByText('OUT', { exact: true }).waitFor()
-    await call.getByText('MINIMAL_BASH_CARD_OK\n[Command finished with exit code 0]', { exact: true }).waitFor()
-    await call.getByText(/"command": "printf 'MINIMAL_BASH_CARD_OK/).waitFor()
+    await call.getByText(`MINIMAL_BASH_CARD_OK${SHELL.succeeded}`, { exact: true }).waitFor()
+    await call.getByText(SHELL.cardCommand).waitFor()
 
     const snapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(UI_EXPECTED, snapshot, MODE)
@@ -217,7 +238,7 @@ describe('minimal manual compaction', () => {
 
   beforeAll(async () => {
     const fixture = join(snapshotDir, 'session.v4.jsonl')
-    const prompts = fixtureUserPrompts(await readFile(fixture, 'utf8'))
+    const prompts = fixtureUserPrompts(await readFile(await selectedSessionFixture(fixture), 'utf8'))
     expect(prompts).toHaveLength(2)
     const [initial, continuation] = prompts
     if (initial === undefined || continuation === undefined) throw new Error('minimal compaction fixture requires two user prompts')
@@ -393,7 +414,7 @@ describe('minimal image reading', () => {
 
   it('logs a durable image with the minimal tool roster', async () => {
     const session = handle.agent.session
-    expect(session.requestHeader()?.tools?.map(tool => tool.name)).toEqual(['bash', 'read_image', 'working_directory'])
+    expect(session.requestHeader()?.tools?.map(tool => tool.name)).toEqual([SHELL.tool, 'read_image', 'working_directory'])
     const result = session.snapshotEvents().find(event => event.type === 'tool/result')
     expect(result?.data.message.isError).toBe(false)
     expect(result?.data.meta).toEqual({ path: join(scaffold.workspaceCwd, 'red.png') })

@@ -1,6 +1,6 @@
 /** Forked Web agents inherit the standard preset and refuse every reminder tool. */
-import { readFile, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { readFile } from 'node:fs/promises'
+import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, it } from 'vitest'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -8,8 +8,9 @@ import { parseSessionLog, prepareSessionSnapshotFixtureForComparison } from '@de
 import type { Session } from '@deepseek-ai/dsh-session'
 import {
   fixtureContext, normalizeSessionSnapshots, normalizedSystemPrompts, normalizedToolSchemas,
-  formatSystemPromptSnapshot, parseToolSchemasSnapshot, redactSessionSnapshotIds, refreshFixtureReplacements,
-  scrubSessionSnapshot, stabilizeFixtureMessageIds, stabilizeRefreshLog, tokenizeSessionFixtureCwd,
+  formatSystemPromptSnapshot, formatToolSchemasSnapshot, parseToolSchemasSnapshot, redactSessionSnapshotIds,
+  refreshFixtureReplacements, resolveScenarioFile, scrubSessionSnapshot, stabilizeFixtureMessageIds,
+  stabilizeRefreshLog, tokenizeSessionFixtureCwd, writeScenarioFile,
 } from '@deepseek-ai/dsh-session-snapshot'
 import type {} from '@deepseek-ai/dsh-api-session-controller'
 import type {} from '@deepseek-ai/dsh-schedule'
@@ -67,16 +68,20 @@ it.skipIf(MODE === 'record')('replays inherited schedule tools and refusals in a
     }
     const raw = sessions.map(session => normalizeWebSessionVolatiles(rawSessionLog(session), scaffold.workspaceCwd))
     const context = { sessionIds: sessions.map(session => String(session.id)), cwd: scaffold.workspaceCwd }
-    const schemas = parseToolSchemasSnapshot(await readFile(join(PIN, 'tool-schemas.expected.json'), 'utf8'))
-    const promptPin = await readFile(join(PIN, 'system-prompt.expected.md'), 'utf8')
+    const pinnedPrompt = (prompt: string): string => formatSystemPromptSnapshot(prompt.split(REPO_ROOT).join('{{sourceRoot}}')
+      .split(scaffold.baseUrl).join('{{webUrl}}'))
+    if (MODE === 'refresh') {
+      // The fork inherits the web-default composition, whose single unchanged header fresh-round-trip pins.
+      writeScenarioFile(PIN, 'tool-schemas.expected.json', formatToolSchemasSnapshot(normalizedToolSchemas(raw[0]!, context)[0]!, []))
+      writeScenarioFile(PIN, 'system-prompt.expected.md', pinnedPrompt(normalizedSystemPrompts(raw[0]!, context)[0]!))
+    }
+    const schemas = parseToolSchemasSnapshot(await readFile(resolveScenarioFile(PIN, 'tool-schemas.expected.json'), 'utf8'))
+    const promptPin = await readFile(resolveScenarioFile(PIN, 'system-prompt.expected.md'), 'utf8')
     for (const log of raw) {
       const headers = normalizedToolSchemas(log, context)
       expect(headers.length).toBeGreaterThan(0)
       for (const tools of headers) expect(tools).toEqual(schemas.initial)
-      for (const prompt of normalizedSystemPrompts(log, context)) {
-        expect(formatSystemPromptSnapshot(prompt.split(REPO_ROOT).join('{{sourceRoot}}')
-          .split(scaffold.baseUrl).join('{{webUrl}}'))).toBe(promptPin)
-      }
+      for (const prompt of normalizedSystemPrompts(log, context)) expect(pinnedPrompt(prompt)).toBe(promptPin)
     }
     const results = child.snapshotEvents().slice(child.inheritedEventCount)
       .filter(event => event.type === 'tool/result')
@@ -93,9 +98,9 @@ it.skipIf(MODE === 'record')('replays inherited schedule tools and refusals in a
         tokenizeSessionFixtureCwd(scrubSessionSnapshot(stabilizeRefreshLog(
           prepareSessionSnapshotFixtureForComparison(log), expected[index]!, replacements, context,
         ))).split(scaffold.harnessHome).join('{{harnessHome}}')), expected))
-      await Promise.all(expected.map((log, index) => writeFile(
-        recordedSessionFixturePath(paths[index]!, sessions[index]!.header.version), log,
-      )))
+      for (const [index, log] of expected.entries()) {
+        writeScenarioFile(DIR, basename(recordedSessionFixturePath(paths[index]!, sessions[index]!.header.version)), log)
+      }
     }
     expect(normalizeSessionSnapshots(raw, context))
       .toEqual(normalizeSessionSnapshots(expected, fixtureContext(expected[0]!)))
