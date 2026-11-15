@@ -231,13 +231,13 @@ it.each(SNAPSHOT_PLATFORMS)('keeps every recorded session owned, pinned, redacte
 
 it.each(SNAPSHOT_PLATFORMS)('keeps V3 replay input plus bounded declared historical migration coverage on %s', async (platform) => {
   const owners = (await scenarios()).filter(scenario => scenario.manifest.session === undefined)
-  const inventory = await Promise.all(owners.map(async scenario => ({
+  const inventory = owners.map(scenario => ({
     key: scenario.key,
     selectedVersions: sessionFixtureFiles(scenarioFileNames(scenario.dir, platform)).map(file => file.version),
     ...(scenario.manifest.sessionFormat === undefined
       ? {}
       : { retained: scenario.manifest.sessionFormat }),
-  })))
+  }))
 
   const summary = assertSnapshotCorpusPolicy(inventory)
   expect(summary.baselineRoles).toBeGreaterThan(0)
