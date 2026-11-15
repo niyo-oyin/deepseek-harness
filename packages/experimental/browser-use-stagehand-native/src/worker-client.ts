@@ -10,7 +10,7 @@ const WINDOWS_SYSTEM_ENV = ['SystemRoot', 'windir', 'TEMP', 'TMP'] as const
 
 /**
  * The environment a Stagehand Worker receives. Ambient credentials and proxy settings stay outside; on Windows the
- * system and temp locations cross, because without them `os.tmpdir()` resolves to the relative `undefined	emp` and
+ * system and temp locations cross, because without them `os.tmpdir()` resolves to the relative `undefined\temp` and
  * temporary files land in the process working directory, the user's workspace.
  * @param environment - the host process environment.
  * @param platform - the host platform.
