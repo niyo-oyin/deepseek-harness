@@ -113,6 +113,8 @@ export interface ModelCatalogModel {
   readonly name: string
   readonly description?: string
   readonly reasoning?: ModelReasoning
+  /** Maximum combined request and response context in tokens, when the adapter knows it. */
+  readonly contextWindow?: number
   /** Provider-authored label shown beside the name; display data only. */
   readonly badge?: LlmModelBadge
 }

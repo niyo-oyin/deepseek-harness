@@ -23,6 +23,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-instructions'
 import {
   BlockAssembler,
+  CONTEXT_WINDOW_EXCEEDED_CODE,
   ReasoningEffortId,
   type ContentBlock,
   type GenerateOptions,
@@ -126,6 +127,12 @@ type HistoricalEntry = HistoricalUserMessage | HistoricalToolCall | HistoricalTo
  * messages extend the previous review's messages.
  */
 type ShownSchemas = Map<string, HistoricalToolSchema>
+
+/** The configured reviewer route, with the context window its adapter reports. */
+interface ConfiguredReviewer extends ReviewRoute {
+  /** Maximum combined request and response context in tokens, when known. */
+  readonly contextWindow?: number
+}
 
 /** The model route a review is sent to. */
 interface ReviewRoute {
@@ -662,7 +669,7 @@ async function readDecision(stream: AsyncIterable<StreamChunk>): Promise<AutoRev
       finished = true
       if (chunk.reason.kind === 'error' || chunk.reason.kind === 'aborted') {
         const { code, message } = chunk.reason.failure
-        throw new Error(`auto-review: reviewer ended with ${chunk.reason.kind} ${code}: ${message}`)
+        throw new Error(`auto-review: reviewer ended with ${chunk.reason.kind} ${code}: ${message}`, { cause: chunk.reason.failure })
       }
       if (chunk.reason.kind !== 'stop') {
         throw new Error(`auto-review: reviewer ended with ${chunk.reason.kind}`)
@@ -690,7 +697,7 @@ async function readDecision(stream: AsyncIterable<StreamChunk>): Promise<AutoRev
  */
 async function reviewerRoute(
   ctx: Context, configured: Partial<ReviewRoute> | undefined, signal: AbortSignal,
-): Promise<ReviewRoute | undefined> {
+): Promise<ConfiguredReviewer | undefined> {
   const provider = configured?.provider ?? ''
   const model = configured?.model ?? ''
   const reasoningEffort = configured?.reasoningEffort === '' ? undefined : configured?.reasoningEffort
@@ -711,7 +718,12 @@ async function reviewerRoute(
   if (reasoningEffort !== undefined && info.reasoning?.efforts.some(effort => effort.id === reasoningEffort) !== true) {
     throw unusable(`the model does not offer reasoning effort "${reasoningEffort}"`)
   }
-  return { provider, model, ...reasoningEffort === undefined ? {} : { reasoningEffort } }
+  return {
+    provider,
+    model,
+    ...reasoningEffort === undefined ? {} : { reasoningEffort },
+    ...info.context === undefined ? {} : { contextWindow: info.context.contextWindow },
+  }
 }
 
 /** Review one frozen pending action with the fixed policy and the configured or current LLM route. */
@@ -740,7 +752,20 @@ async function classifyRisk(
     purpose: 'auto-review',
     signal,
   })
-  return readDecision(ctx.llm.stream(options))
+  try {
+    return await readDecision(ctx.llm.stream(options))
+  } catch (error) {
+    // A configured reviewer with a smaller window than the Session's model is the owner's to change; say so.
+    const failure = error instanceof Error ? error.cause as { code?: unknown } | undefined : undefined
+    if (reviewer === undefined || failure?.code !== CONTEXT_WINDOW_EXCEEDED_CODE) throw error
+    const window = reviewer.contextWindow === undefined ? '' : ` has a context window of ${String(reviewer.contextWindow)} tokens and`
+    throw new Error(
+      `${(error as Error).message}. The Auto review model ${reviewer.provider}/${reviewer.model}${window} cannot hold this`
+      + ' session\'s review; choose a model with a larger context window for Auto review in Plugins, or clear the setting'
+      + ' to review with the session\'s model',
+      { cause: error },
+    )
+  }
 }
 
 /** Materialize the fixed model-facing final Auto denial plus optional UI detail. */

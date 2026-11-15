@@ -435,7 +435,11 @@ describe('Web session model selection', () => {
       { provider: 'plain', id: 'plain-model', name: 'Plain Model' },
       { provider: 'plain', id: 'badged-model', name: 'Badged Model', badge: { text: { en: 'New', zh: '新' }, tone: 'info' } },
     ]))
-    ctx.llm.registerAdapter(['described-reasoning'], new CatalogAdapter('Described Reasoning', [
+    ctx.llm.registerAdapter(['described-reasoning'], new class extends CatalogAdapter {
+      override async resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+        return { ...await super.resolveModel(provider, model), context: { contextWindow: 200_000 } }
+      }
+    }('Described Reasoning', [
       { provider: 'described-reasoning', id: 'reasoning-model', name: 'Reasoning Model' },
     ], {
       efforts: [{ id: brandString<ReasoningEffortId>('high'), name: 'High', description: 'More thinking' }],
@@ -466,6 +470,7 @@ describe('Web session model selection', () => {
           reasoning: {
             efforts: [{ id: 'high', name: 'High', description: 'More thinking' }],
           },
+          contextWindow: 200_000,
         }],
       },
     ]))

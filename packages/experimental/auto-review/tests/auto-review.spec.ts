@@ -137,7 +137,7 @@ function reasoningDecisionChunks(text: string): StreamChunk[] {
 class ReasoningAdapter extends RecordingAdapter {
   override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
     return Promise.resolve({
-      provider, id: model, name: model,
+      provider, id: model, name: model, context: { contextWindow: 8_000 },
       reasoning: { efforts: [{ id: brandString<ReasoningEffortId>('low'), name: 'Low' }, { id: brandString<ReasoningEffortId>('high'), name: 'High' }] },
     })
   }
@@ -2165,6 +2165,25 @@ describe('configured reviewer route', () => {
     expect(probe.runs()).toBe(0)
     expect(adapter.requests).toHaveLength(0)
     expect(cheap.requests).toHaveLength(0)
+  })
+
+  it('names the configured model and its context window when the review does not fit', async () => {
+    const tooLarge: StreamChunk[] = [{
+      type: 'finish',
+      reason: { kind: 'error', failure: { code: 'CONTEXT_WINDOW_EXCEEDED', message: 'prompt is too long' } },
+    }]
+    const { ctx } = await harness([], undefined, { reviewer: { provider: 'cheap', model: 'small' }, script: [tooLarge] })
+    const probe = registerProbe(ctx)
+    const { agent, callId } = pendingProbe(ctx, 'oversized-reviewer')
+
+    const result = await run(ctx, agent, callId)
+
+    expectReviewFailure(result)
+    if (!result.isError) throw new Error('the reviewed call executed')
+    expect(result.error.message).toContain('CONTEXT_WINDOW_EXCEEDED: prompt is too long')
+    expect(result.error.message).toContain('The Auto review model cheap/small has a context window of 8000 tokens')
+    expect(result.error.message).toContain('choose a model with a larger context window for Auto review in Plugins')
+    expect(probe.runs()).toBe(0)
   })
 
   it('takes a reviewer change at the next review without reloading the plugin or leaving Auto', async () => {

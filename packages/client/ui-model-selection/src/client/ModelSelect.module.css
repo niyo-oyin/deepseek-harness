@@ -449,3 +449,10 @@
   line-height: 1.5;
   color: var(--dsw-alias-state-warn-label);
 }
+
+.routeNote {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-tertiary);
+}

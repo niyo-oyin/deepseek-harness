@@ -20,7 +20,10 @@ const CATALOG: ModelCatalog = {
       id: 'anthropic',
       name: 'Anthropic',
       models: [
-        { id: 'claude-opus-5-5', name: 'Claude Opus 5.5', reasoning: { efforts: [{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }] } },
+        {
+          id: 'claude-opus-5-5', name: 'Claude Opus 5.5', contextWindow: 1_000_000,
+          reasoning: { efforts: [{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }] },
+        },
         { id: 'claude-haiku-5-5', name: 'Claude Haiku 5.5' },
       ],
     },
@@ -57,6 +60,7 @@ it('writes the chosen route, then the effort the model offers, and unsets on the
   cleanup()
 
   const second = renderField({ provider: 'anthropic', model: 'claude-opus-5-5' })
+  expect(screen.getByText(en['route.contextWindow'].replace('{tokens}', '1M'))).toBeTruthy()
   expect([...effortSelect()!.options].map(option => [option.value, option.text])).toEqual([['', en['effort.providerDefault']], ['low', 'Low'], ['high', 'High']])
   fireEvent.change(effortSelect()!, { target: { value: 'high' } })
   expect(second.onChange).toHaveBeenLastCalledWith({ provider: 'anthropic', model: 'claude-opus-5-5', reasoningEffort: 'high' })

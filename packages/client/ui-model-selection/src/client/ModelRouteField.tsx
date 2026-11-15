@@ -5,7 +5,8 @@
  * owning setting reads as "the session's model". A configured route the
  * catalog no longer offers stays listed and marked unavailable, so the stored
  * value never disappears from view. The effort select appears only when the
- * chosen model offers levels.
+ * chosen model offers levels, and the chosen model's context window is shown
+ * when its adapter knows it.
  *
  * It renders as the `plugins.config.field` editor of the `model-route` schema
  * role: any plugin whose Config declares an object field
@@ -50,6 +51,17 @@ export function modelRouteOf(value: unknown): ModelRouteValue | undefined {
   const { provider, model, reasoningEffort } = value as Record<string, unknown>
   if (typeof provider !== 'string' || provider === '' || typeof model !== 'string' || model === '') return undefined
   return { provider, model, ...typeof reasoningEffort === 'string' && reasoningEffort !== '' ? { reasoningEffort } : {} }
+}
+
+/**
+ * A token count in the K/M spelling the Models page uses.
+ * @param tokens - a positive count.
+ * @returns the count, such as `200K` or `1M`.
+ */
+function tokenCount(tokens: number): string {
+  if (tokens >= 1_000_000 && tokens % 100_000 === 0) return `${String(tokens / 1_000_000)}M`
+  if (tokens >= 1_000 && tokens % 1_000 === 0) return `${String(tokens / 1_000)}K`
+  return String(tokens)
 }
 
 /** The select value of one route: provider and model, which cannot contain a NUL. */
@@ -125,6 +137,9 @@ export function ModelRouteField(props: ModelRouteFieldProps): ReactNode {
           </label>
         )
         : null}
+      {chosen?.contextWindow === undefined
+        ? null
+        : <p className={css.routeNote}>{t('route.contextWindow').replace('{tokens}', () => tokenCount(chosen.contextWindow ?? 0))}</p>}
       {unavailable ? <p className={css.routeWarning}>{t('route.unavailableHint')}</p> : null}
       {catalog.status === 'error' && catalog.error !== null
         ? <p className={css.routeWarning}>{t('option.loadError').replace('{message}', () => catalog.error ?? '')}</p>

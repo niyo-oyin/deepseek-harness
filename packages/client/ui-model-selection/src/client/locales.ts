@@ -36,6 +36,7 @@ export const zh = {
   'route.session': '与会话的模型相同',
   'route.unavailable': '{model}（不可用）',
   'route.unavailableHint': '此模型已不在可用列表中。使用它的功能会失败，直到选择其他模型或改回与会话的模型相同。',
+  'route.contextWindow': '上下文窗口：{tokens} tokens',
 } satisfies Record<string, string>
 
 /** The model namespace key union. */
@@ -69,6 +70,7 @@ export const en = {
   'route.session': 'Same as the session\'s model',
   'route.unavailable': '{model} (unavailable)',
   'route.unavailableHint': 'This model is no longer available. Features that use it fail until you choose another model or go back to the session\'s model.',
+  'route.contextWindow': 'Context window: {tokens} tokens',
 } satisfies Record<ModelKey, string>
 
 /** Japanese copy, checked against the English keys. */
@@ -99,6 +101,7 @@ export const ja = {
   'route.session': 'セッションのモデルと同じ',
   'route.unavailable': '{model}（利用できません）',
   'route.unavailableHint': 'このモデルは現在利用できません。別のモデルを選ぶか、セッションのモデルと同じに戻すまで、これを使う機能は失敗します。',
+  'route.contextWindow': 'コンテキストウィンドウ：{tokens} トークン',
 } satisfies Record<keyof typeof en, string>
 
 /** Spanish dictionary, checked against the English keys. */
@@ -129,6 +132,7 @@ export const es = {
   'route.session': 'Igual que el modelo de la sesión',
   'route.unavailable': '{model} (no disponible)',
   'route.unavailableHint': 'Este modelo ya no está disponible. Las funciones que lo usan fallan hasta que elija otro modelo o vuelva al modelo de la sesión.',
+  'route.contextWindow': 'Ventana de contexto: {tokens} tokens',
 } satisfies Record<keyof typeof en, string>
 
 /** French dictionary, checked against the English keys. */
@@ -159,6 +163,7 @@ export const fr = {
   'route.session': 'Identique au modèle de la session',
   'route.unavailable': '{model} (indisponible)',
   'route.unavailableHint': 'Ce modèle n’est plus disponible. Les fonctions qui l’utilisent échouent tant que vous ne choisissez pas un autre modèle ou ne revenez pas au modèle de la session.',
+  'route.contextWindow': 'Fenêtre de contexte : {tokens} jetons',
 } satisfies Record<keyof typeof en, string>
 
 /** German dictionary, checked against the English keys. */
@@ -189,6 +194,7 @@ export const de = {
   'route.session': 'Wie das Modell der Sitzung',
   'route.unavailable': '{model} (nicht verfügbar)',
   'route.unavailableHint': 'Dieses Modell ist nicht mehr verfügbar. Funktionen, die es verwenden, schlagen fehl, bis Sie ein anderes Modell wählen oder zum Modell der Sitzung zurückkehren.',
+  'route.contextWindow': 'Kontextfenster: {tokens} Tokens',
 } satisfies Record<keyof typeof en, string>
 
 /** Russian dictionary, checked against the English keys. */
@@ -219,6 +225,7 @@ export const ru = {
   'route.session': 'Как модель сессии',
   'route.unavailable': '{model} (недоступна)',
   'route.unavailableHint': 'Эта модель больше недоступна. Функции, которые её используют, будут завершаться ошибкой, пока вы не выберете другую модель или не вернётесь к модели сессии.',
+  'route.contextWindow': 'Контекстное окно: {tokens} токенов',
 } satisfies Record<keyof typeof en, string>
 
 /** Portuguese dictionary, checked against the English keys. */
@@ -249,4 +256,5 @@ export const pt = {
   'route.session': 'Igual ao modelo da sessão',
   'route.unavailable': '{model} (indisponível)',
   'route.unavailableHint': 'Este modelo não está mais disponível. Os recursos que o usam falham até você escolher outro modelo ou voltar ao modelo da sessão.',
+  'route.contextWindow': 'Janela de contexto: {tokens} tokens',
 } satisfies Record<keyof typeof en, string>
