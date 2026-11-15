@@ -1,6 +1,7 @@
 /** Shared model fields and actions for both adapter catalog editors. */
 
 import type { DragEvent, ReactNode } from 'react'
+import type { LlmDiscoveredReasoning } from '@deepseek-ai/dsh-api-remotes/client'
 import {
   IconChevronDownOutlineRegular, IconChevronRightOutlineRegular, IconDragHandleOutlineRegular,
   IconTrashOutlineRegular, Tooltip, useRowDragPreview,
@@ -20,6 +21,16 @@ interface CapacityInput {
   onBlur?: () => void
 }
 
+/** The collapsed row's one-line account of its reasoning, with the one action that settles it. */
+export interface EffortSummary {
+  /** What the row states, or that it states nothing yet. */
+  text: string
+  /** Whether the row still needs a decision. */
+  pending: boolean
+  /** The one-click resolution, when one is on offer. */
+  action?: { label: string; run: () => void }
+}
+
 /** Adapter-owned data and actions for one model row. */
 interface ModelRowProps {
   model: DeepSeekModelDraft
@@ -33,6 +44,14 @@ interface ModelRowProps {
   reasoningLevels?: readonly string[] | undefined
   /** Whether the route's protocol accepts only {@link reasoningLevels}, each sent under its own name. */
   reasoningLevelsOnly?: boolean | undefined
+  /** Reasoning choices the adapter describes for this row's id. */
+  reasoning?: LlmDiscoveredReasoning | undefined
+  /** How the suggested reasoning choice reads. */
+  suggestionLabel?: string | undefined
+  /** The row's reasoning at a glance, shown while it is folded too. */
+  effortSummary?: EffortSummary | undefined
+  /** Where the row's described values came from, shown with them. */
+  sourceNote?: string | undefined
   expanded: boolean
   disabled: boolean
   t: (key: ModelsKey) => string
@@ -150,9 +169,29 @@ export function ModelRow(props: ModelRowProps): ReactNode {
           <IconTrashOutlineRegular size={14} />
         </button>
         {modelField('name')}
+        {props.effortSummary === undefined
+          ? null
+          : (
+            <p className={styles['modelEffortSummary']} data-pending={props.effortSummary.pending || undefined}>
+              <span>{props.effortSummary.text}</span>
+              {props.effortSummary.action === undefined
+                ? null
+                : (
+                  <button
+                    type="button"
+                    className={styles['linkButton']}
+                    disabled={disabled}
+                    onClick={props.effortSummary.action.run}
+                  >
+                    {props.effortSummary.action.label}
+                  </button>
+                )}
+            </p>
+          )}
         {props.expanded
           ? (
             <div className={styles['modelAdvanced']}>
+              {props.sourceNote === undefined ? null : <p className={styles['modelSourceNote']}>{props.sourceNote}</p>}
               {(['contextWindow', 'maxTokens'] as const).map(field => (
                 <label className={styles['modelField']} key={field}>
                   <span className={styles['modelFieldLabel']}>{t(field)}</span>
@@ -177,6 +216,7 @@ export function ModelRow(props: ModelRowProps): ReactNode {
                 ? (
                   <ModelReasoningEfforts
                     model={model} levels={props.reasoningLevels} levelsOnly={props.reasoningLevelsOnly === true}
+                    reasoning={props.reasoning} suggestionLabel={props.suggestionLabel}
                     position={position} disabled={disabled} t={t} onChange={props.onChange}
                   />
                 )

@@ -209,7 +209,7 @@ function scriptedFace(overrides: {
         { provider: 'broken', displayName: 'broken', settingsNs: 'llm-pi-ai', settingsPath: ['nope', 'x'], active: false },
         { provider: 'plain', displayName: 'plain', settingsNs: 'llm-plain', settingsPath: ['profiles', 'plain'], active: false },
       ].map(({ active: _active, ...entry }) => entry)))),
-      discoverModels: vi.fn(() => Promise.resolve(remoteOk([]))),
+      discoverModels: vi.fn(() => Promise.resolve(remoteOk({ models: [] }))),
     },
     settings: {
       describe: vi.fn(() => Promise.resolve(remoteOk({ writable: true, hasDocument: false, namespaces: wireNamespaces() }))),
@@ -1949,7 +1949,7 @@ describe('ModelsSection', () => {
     const scripted = scriptedFace()
     let settle: (() => void) | undefined
     const pending = new Promise<void>((resolve) => { settle = resolve })
-    scripted.face.llm.discoverModels.mockImplementation(() => pending.then(() => remoteOk([])))
+    scripted.face.llm.discoverModels.mockImplementation(() => pending.then(() => remoteOk({ models: [] })))
     await mountFace(scripted)
     fireEvent.click(screen.getByRole('button', { name: en.add }))
     fireEvent.click(screen.getByRole('tab', { name: en.addCustom }))

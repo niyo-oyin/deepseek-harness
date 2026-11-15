@@ -777,14 +777,27 @@ interface LlmModelDiscoveryRequest {
   api?: string
   /** Credential for this interrogation alone; the harness never stores it. */
   apiKey?: string
+  /**
+   * Whether to ask the endpoint. Without it the adapter answers from what it
+   * already knows and makes no network call, so a surface can describe a
+   * route on open and contact the provider only when the user asks.
+   */
+  listEndpoint?: boolean
+  /**
+   * Model ids the surface already holds. Each comes back described from the
+   * adapter's own knowledge even when no listing names it, so saved models the
+   * catalog does not know can be offered their capacities and reasoning.
+   */
+  describe?: readonly string[]
 }
 ```
 
 ```ts type-equiv
 /**
- * One model an endpoint reports about itself. Every field but the id is
- * optional because most provider listings disclose an id and nothing else;
- * a surface adopting one of these still owes the capacities its adapter needs.
+ * One model an endpoint reports about itself or the adapter describes. Every
+ * field but the id is optional because most provider listings disclose an id
+ * and nothing else; a surface adopting one of these still owes the capacities
+ * its adapter needs.
  */
 interface LlmDiscoveredModel {
   /** Model id the endpoint accepts. */
@@ -797,6 +810,76 @@ interface LlmDiscoveredModel {
   maxTokens?: number
   /** Accepted input types when disclosed by the catalog or endpoint; absent means unknown. */
   inputModalities?: readonly ModelModality[]
+  /** Whether the adapter's installed catalog describes this id, so it needs nothing from the surface. */
+  inCatalog?: boolean
+  /** Catalog model whose fields stand in for the ones the endpoint did not report. */
+  template?: string
+  /** Where each disclosed field of a model outside the catalog came from. */
+  sources?: Readonly<Partial<Record<LlmDiscoveredField, LlmDiscoveredSource>>>
+  /** Reasoning choices, for a model outside the catalog. */
+  reasoning?: LlmDiscoveredReasoning
+}
+```
+
+A model outside the adapter's catalog says so and carries what stands in for the fields its endpoint did not report: the catalog model the adapter matched it to, where each described field came from, and the reasoning choices a surface may write into its model entry. Values are proposals to copy, never references the adapter resolves later.
+
+```ts type-equiv
+/** A described model field whose value may come from the endpoint or from a matched catalog model. */
+type LlmDiscoveredField = 'contextWindow' | 'maxTokens' | 'inputModalities' | 'reasoning'
+```
+
+```ts type-equiv
+/** Where one field of a model outside the adapter's catalog came from. */
+type LlmDiscoveredSource = 'endpoint' | 'template'
+```
+
+```ts type-equiv
+/** One selectable reasoning level and the value sent for it; `null` only for an Off that sends nothing. */
+interface LlmDiscoveredEffort {
+  /** Level a selector offers. */
+  level: string
+  /** Provider-facing spelling of the level. */
+  value: string | null
+}
+```
+
+```ts type-equiv
+/** Reasoning levels an adapter proposes writing into a model entry. */
+interface LlmReasoningProposal {
+  /** Offered levels in escalation order. */
+  efforts: readonly LlmDiscoveredEffort[]
+  /** Adapter compatibility switches the levels depend on, written beside them on the model entry. */
+  compat?: Readonly<Record<string, boolean>>
+}
+```
+
+```ts type-equiv
+/** Reasoning choices for a model the adapter's catalog does not describe. */
+interface LlmDiscoveredReasoning {
+  /**
+   * What the endpoint or a matched catalog model says: `false` for a model
+   * that does not reason, a proposal for one that does, and absent when
+   * nothing gives a confident answer.
+   */
+  suggested?: false | LlmReasoningProposal
+  /** The protocol's ordinary levels, offered when nothing better is known. */
+  standard: LlmReasoningProposal
+}
+```
+
+One answer carries the described models and, when the request asked for the endpoint and the adapter answered alone, the reason why.
+
+```ts type-equiv
+/** One discovery answer: the models, and why the endpoint was not asked or did not answer. */
+interface LlmModelDiscovery {
+  /** Described models, deduplicated in answer order. */
+  models: readonly LlmDiscoveredModel[]
+  /**
+   * Set when the request asked for the endpoint and the answer comes from the
+   * adapter's own knowledge alone: the route has no stored key, the protocol
+   * has no readable listing, or the endpoint failed.
+   */
+  notice?: string
 }
 ```
 
@@ -1040,29 +1123,31 @@ registerConfigurableProviders(entries: readonly LlmConfigurableProvider[]): Dire
  * @param discover - interrogates one endpoint and must honor the supplied signal.
  * @returns the disposer that withdraws the offer.
  */
-registerModelDiscovery( settingsNs: string, discover: ( request: LlmModelDiscoveryRequest, signal?: AbortSignal, ) => Promise<readonly LlmDiscoveredModel[]>, ): () => void
+registerModelDiscovery( settingsNs: string, discover: ( request: LlmModelDiscoveryRequest, signal?: AbortSignal, ) => Promise<LlmModelDiscovery>, ): () => void
 
 /**
- * Interrogate one provider endpoint for the models it advertises. The
- * request describes a draft, not a stored route, so nothing here reads or
- * writes settings or credentials — the caller owns both, and the reply is
- * candidate metadata a surface may offer for adoption.
+ * Describe the models one draft provider serves: what its adapter already
+ * knows, the ids the surface holds, and — when the request asks for it —
+ * what the endpoint advertises. The request describes a draft, not a stored
+ * route, so nothing here reads or writes settings or credentials; the caller
+ * owns both, and the reply is candidate metadata a surface may offer for
+ * adoption.
  * @param settingsNs - namespace whose registered discovery serves this draft.
- * @param request - the endpoint, protocol, and one-shot credential to use.
+ * @param request - the endpoint, protocol, one-shot credential, and held ids.
  * @param signal - caller cancellation.
- * @returns the advertised models, deduplicated in endpoint order.
+ * @returns the described models, deduplicated in answer order, and why the endpoint was skipped when it was.
  */
-async discoverModels( settingsNs: string, request: LlmModelDiscoveryRequest, signal?: AbortSignal, ): Promise<LlmDiscoveredModel[]>
+async discoverModels( settingsNs: string, request: LlmModelDiscoveryRequest, signal?: AbortSignal, ): Promise<LlmModelDiscovery>
 
 /**
  * Remote adapter for one draft provider interrogation.
  * @param settingsNs - namespace whose registered discovery serves this draft.
  * @param request - endpoint, protocol, and one-shot credential to use.
  * @param signal - caller cancellation supplied by the Remote carrier.
- * @returns advertised models in endpoint order.
+ * @returns the described models and the endpoint notice, as {@link discoverModels} answers.
  * @throws RemoteError with `llm/model-discovery-rejected` when discovery refuses or fails.
  */
-@Remote('discoverModels') async remoteDiscoverModels( settingsNs: string, request: LlmModelDiscoveryRequest, signal: AbortSignal, ): Promise<LlmDiscoveredModel[]>
+@Remote('discoverModels') async remoteDiscoverModels( settingsNs: string, request: LlmModelDiscoveryRequest, signal: AbortSignal, ): Promise<LlmModelDiscovery>
 
 /**
  * Resolve the retry policy captured when one provider route was registered.

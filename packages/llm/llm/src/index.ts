@@ -14,6 +14,7 @@ import type {
   RequestMessage,
   LlmConfigurableProvider,
   LlmDiscoveredModel,
+  LlmModelDiscovery,
   LlmFailure,
   LlmImageRequestPricing,
   LlmModelContext,
@@ -371,7 +372,7 @@ export class LlmRuntime extends TypertRemoteService {
   private directory = new Map<string, LlmConfigurableProvider>()
   private discoveries = new Map<
     string,
-    (request: LlmModelDiscoveryRequest, signal?: AbortSignal) => Promise<readonly LlmDiscoveredModel[]>
+    (request: LlmModelDiscoveryRequest, signal?: AbortSignal) => Promise<LlmModelDiscovery>
   >()
 
   constructor(ctx: Context) {
@@ -586,7 +587,7 @@ export class LlmRuntime extends TypertRemoteService {
     discover: (
       request: LlmModelDiscoveryRequest,
       signal?: AbortSignal,
-    ) => Promise<readonly LlmDiscoveredModel[]>,
+    ) => Promise<LlmModelDiscovery>,
   ): () => void {
     const dispose = this.ctx.effect(function* (this: LlmRuntime) {
       if (settingsNs.length === 0) {
@@ -604,20 +605,22 @@ export class LlmRuntime extends TypertRemoteService {
   }
 
   /**
-   * Interrogate one provider endpoint for the models it advertises. The
-   * request describes a draft, not a stored route, so nothing here reads or
-   * writes settings or credentials — the caller owns both, and the reply is
-   * candidate metadata a surface may offer for adoption.
+   * Describe the models one draft provider serves: what its adapter already
+   * knows, the ids the surface holds, and — when the request asks for it —
+   * what the endpoint advertises. The request describes a draft, not a stored
+   * route, so nothing here reads or writes settings or credentials; the caller
+   * owns both, and the reply is candidate metadata a surface may offer for
+   * adoption.
    * @param settingsNs - namespace whose registered discovery serves this draft.
-   * @param request - the endpoint, protocol, and one-shot credential to use.
+   * @param request - the endpoint, protocol, one-shot credential, and held ids.
    * @param signal - caller cancellation.
-   * @returns the advertised models, deduplicated in endpoint order.
+   * @returns the described models, deduplicated in answer order, and why the endpoint was skipped when it was.
    */
   async discoverModels(
     settingsNs: string,
     request: LlmModelDiscoveryRequest,
     signal?: AbortSignal,
-  ): Promise<LlmDiscoveredModel[]> {
+  ): Promise<LlmModelDiscovery> {
     const discover = this.discoveries.get(settingsNs)
     if (discover === undefined) {
       throw new LlmError(`no model discovery is registered for "${settingsNs}"`, 'NO_DISCOVERY')
@@ -632,7 +635,7 @@ export class LlmRuntime extends TypertRemoteService {
       : await discover(request, signal)
     const seen = new Set<string>()
     const models: LlmDiscoveredModel[] = []
-    for (const model of discovered) {
+    for (const model of discovered.models) {
       if (typeof model.id !== 'string' || model.id.length === 0 || seen.has(model.id)) continue
       seen.add(model.id)
       models.push({
@@ -641,9 +644,13 @@ export class LlmRuntime extends TypertRemoteService {
         ...model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow },
         ...model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens },
         ...model.inputModalities === undefined ? {} : { inputModalities: [...model.inputModalities] },
+        ...model.inCatalog === undefined ? {} : { inCatalog: model.inCatalog },
+        ...model.template === undefined ? {} : { template: model.template },
+        ...model.sources === undefined ? {} : { sources: { ...model.sources } },
+        ...model.reasoning === undefined ? {} : { reasoning: model.reasoning },
       })
     }
-    return models
+    return { models, ...discovered.notice === undefined ? {} : { notice: discovered.notice } }
   }
 
   /**
@@ -651,7 +658,7 @@ export class LlmRuntime extends TypertRemoteService {
    * @param settingsNs - namespace whose registered discovery serves this draft.
    * @param request - endpoint, protocol, and one-shot credential to use.
    * @param signal - caller cancellation supplied by the Remote carrier.
-   * @returns advertised models in endpoint order.
+   * @returns the described models and the endpoint notice, as {@link discoverModels} answers.
    * @throws RemoteError with `llm/model-discovery-rejected` when discovery refuses or fails.
    */
   @Remote('discoverModels')
@@ -659,7 +666,7 @@ export class LlmRuntime extends TypertRemoteService {
     settingsNs: string,
     request: LlmModelDiscoveryRequest,
     signal: AbortSignal,
-  ): Promise<LlmDiscoveredModel[]> {
+  ): Promise<LlmModelDiscovery> {
     try {
       return await this.discoverModels(settingsNs, request, signal)
     } catch (error: unknown) {

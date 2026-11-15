@@ -210,11 +210,11 @@ describe('configurable-provider directory', () => {
 describe('model discovery registry', () => {
   it('offers one interrogation per settings namespace and disposes with its fiber', async () => {
     const ctx = await setup()
-    const discover = vi.fn(() => Promise.resolve([{ id: 'from-endpoint' }]))
+    const discover = vi.fn(() => Promise.resolve({ models: [{ id: 'from-endpoint' }] }))
 
     const dispose = ctx.llm.registerModelDiscovery('llm-example', discover)
     await expect(ctx.llm.discoverModels('llm-example', { baseURL: 'https://gateway.example/v1' }))
-      .resolves.toEqual([{ id: 'from-endpoint' }])
+      .resolves.toEqual({ models: [{ id: 'from-endpoint' }] })
     expect(discover).toHaveBeenCalledWith({ baseURL: 'https://gateway.example/v1' })
 
     // Disposal is observed through the offer itself, which is the only thing
@@ -226,40 +226,46 @@ describe('model discovery registry', () => {
 
   it('rejects an unnamed namespace and a second registration of the same one', async () => {
     const ctx = await setup()
-    const discover = (): Promise<never[]> => Promise.resolve([])
+    const discover = (): Promise<{ models: never[] }> => Promise.resolve({ models: [] })
 
     expect(() => ctx.llm.registerModelDiscovery('', discover)).toThrow(/non-empty settings namespace/)
     ctx.llm.registerModelDiscovery('llm-example', discover)
     expect(() => ctx.llm.registerModelDiscovery('llm-example', discover)).toThrow(/already registered/)
     // The refused second registration left the first one serving.
     await expect(ctx.llm.discoverModels('llm-example', { baseURL: 'https://gateway.example/v1' }))
-      .resolves.toEqual([])
+      .resolves.toEqual({ models: [] })
   })
 
-  it('preserves discovered input types without inventing missing metadata', async () => {
+  it('preserves discovered metadata and the endpoint notice without inventing missing fields', async () => {
     const ctx = await setup()
-    ctx.llm.registerModelDiscovery('llm-example', () => Promise.resolve([
+    const reasoning = {
+      suggested: { efforts: [{ level: 'high', value: 'high' }], compat: { forceAdaptiveThinking: true } },
+      standard: { efforts: [{ level: 'off', value: null }, { level: 'high', value: 'high' }] },
+    }
+    ctx.llm.registerModelDiscovery('llm-example', () => Promise.resolve({ models: [
       { id: 'keep', name: 'Keep', contextWindow: 1024, maxTokens: 256, inputModalities: ['text', 'image'] },
       { id: '' },
       { id: 'keep' },
+      { id: 'new', inCatalog: false, template: 'known', sources: { maxTokens: 'endpoint', reasoning: 'template' }, reasoning },
       { id: 'bare' },
-    ] as never))
+    ], notice: 'listing skipped' } as never))
 
-    expect(await ctx.llm.discoverModels('llm-example', { baseURL: 'https://gateway.example/v1' })).toEqual([
+    expect(await ctx.llm.discoverModels('llm-example', { baseURL: 'https://gateway.example/v1' })).toEqual({ models: [
       { id: 'keep', name: 'Keep', contextWindow: 1024, maxTokens: 256, inputModalities: ['text', 'image'] },
+      { id: 'new', inCatalog: false, template: 'known', sources: { maxTokens: 'endpoint', reasoning: 'template' }, reasoning },
       { id: 'bare' },
-    ])
+    ], notice: 'listing skipped' })
   })
 
   it('carries cancellation into Remote discovery and maps provider failures', async () => {
     const ctx = await setup()
     const discover = vi.fn()
-      .mockResolvedValueOnce([
+      .mockResolvedValueOnce({ models: [
         { id: 'keep', name: 'Keep', contextWindow: 1024, maxTokens: 256 },
         { id: '' },
         { id: 'keep' },
         { id: 'bare' },
-      ])
+      ] })
       .mockRejectedValueOnce(new Error('endpoint offline'))
       .mockRejectedValueOnce('provider refused')
     ctx.llm.registerModelDiscovery('llm-example', discover)
@@ -269,10 +275,10 @@ describe('model discovery registry', () => {
       'llm-example',
       { baseURL: 'https://gateway.example/v1' },
       signal,
-    )).resolves.toEqual([
+    )).resolves.toEqual({ models: [
       { id: 'keep', name: 'Keep', contextWindow: 1024, maxTokens: 256 },
       { id: 'bare' },
-    ])
+    ] })
     expect(discover).toHaveBeenNthCalledWith(
       1,
       { baseURL: 'https://gateway.example/v1' },
@@ -301,7 +307,7 @@ describe('model discovery registry', () => {
 
   it('refuses a namespace nothing serves and a draft with no endpoint', async () => {
     const ctx = await setup()
-    ctx.llm.registerModelDiscovery('llm-example', () => Promise.resolve([]))
+    ctx.llm.registerModelDiscovery('llm-example', () => Promise.resolve({ models: [] }))
 
     await expect(ctx.llm.discoverModels('llm-absent', { baseURL: 'https://gateway.example/v1' }))
       .rejects.toMatchObject({ code: 'NO_DISCOVERY' })
@@ -312,7 +318,7 @@ describe('model discovery registry', () => {
     await expect(ctx.llm.discoverModels('llm-example', {}))
       .rejects.toMatchObject({ code: 'INVALID_DISCOVERY' })
     // Naming a route alone is enough: the adapter may know it without an endpoint.
-    await expect(ctx.llm.discoverModels('llm-example', { provider: 'known-route' })).resolves.toEqual([])
+    await expect(ctx.llm.discoverModels('llm-example', { provider: 'known-route' })).resolves.toEqual({ models: [] })
   })
 })
 

@@ -111,7 +111,7 @@ function harness(options: {
             settingsPath: [],
           }],
       )),
-      discoverModels: () => Promise.resolve(remoteOk([])),
+      discoverModels: () => Promise.resolve(remoteOk({ models: [] })),
     },
     settings: {
       describe: () => Promise.resolve(remoteOk({

@@ -114,7 +114,7 @@ function scriptedFace(options: {
     openai: { apiKeyEnv: 'OPENAI_API_KEY', baseURL: 'https://proxy.example/v1' },
   }
   const namespace = piAiNamespace(providers, options.userProviders ?? providers, options.baseProviders ?? {})
-  const discover = options.discover ?? vi.fn(() => Promise.resolve(ok([])))
+  const discover = options.discover ?? vi.fn(() => Promise.resolve(ok({ models: [] })))
   const mutate = options.mutate ?? vi.fn(() => Promise.resolve(remoteOk(namespace)))
   const set = options.set ?? vi.fn(() => Promise.resolve(remoteOk(undefined)))
   const face = {
@@ -539,9 +539,9 @@ describe('capacity spellings', () => {
 
 describe('endpoint interrogation', () => {
   it.each([[undefined], [[]], [['text']]])('renders catalog input inheritance for a stored declaration of %j', async (input) => {
-    const discover = vi.fn(() => Promise.resolve(ok([
+    const discover = vi.fn(() => Promise.resolve(ok({ models: [
       { id: 'vision', inputModalities: ['text', 'image'] },
-    ])))
+    ] })))
     const model = { id: 'vision', ...input === undefined ? {} : { input } }
     const { mutate } = await mountSection({ discover, providers: { openai: { models: [model] } } })
     openEditor('openai')
@@ -549,7 +549,8 @@ describe('endpoint interrogation', () => {
     const types = within(screen.getByRole('group', { name: `${en.modelInputTypes} 1` }))
     await waitFor(() => { expect(types.getByRole<HTMLInputElement>('checkbox', { name: en.modelInputImage }).disabled).toBe(false) })
     expect(types.getByRole<HTMLInputElement>('checkbox', { name: en.modelInputImage }).checked).toBe(input?.length !== 1)
-    expect(discover).toHaveBeenCalledExactlyOnceWith('llm-pi-ai', { provider: 'openai' })
+    // Opening the card describes the saved ids from the adapter's own knowledge, without the endpoint.
+    expect(discover).toHaveBeenCalledExactlyOnceWith('llm-pi-ai', { provider: 'openai', describe: ['vision'] })
     fireEvent.click(screen.getByText(en.apply))
     await waitFor(() => { expect(screen.queryByRole('button', { name: en.apply })).toBeNull() })
     expect(mutate).not.toHaveBeenCalled()
@@ -572,7 +573,10 @@ describe('endpoint interrogation', () => {
     const image = types.getByRole<HTMLInputElement>('checkbox', { name: en.modelInputImage })
     expect(image.checked).toBe(true)
     expect(image.disabled).toBe(false)
-    expect(discover).not.toHaveBeenCalled()
+    // A hand-declared route's saved ids are described by the protocol it names; nothing reaches the endpoint.
+    expect(discover).toHaveBeenCalledExactlyOnceWith('llm-pi-ai', {
+      provider: 'acme-gateway', baseURL: 'https://gateway.acme.example/v1', api: 'openai-completions', describe: ['custom'],
+    })
     expect(mutate).not.toHaveBeenCalled()
 
     fireEvent.click(image)
@@ -585,7 +589,7 @@ describe('endpoint interrogation', () => {
   })
 
   it('asks the endpoint the form shows, with a key that is not yet stored', async () => {
-    const discover = vi.fn(() => Promise.resolve(ok([{ id: 'acme-large', contextWindow: 65_536 }])))
+    const discover = vi.fn(() => Promise.resolve(ok({ models: [{ id: 'acme-large', contextWindow: 65_536 }] })))
     await mountSection({ discover })
     openEditor('openai')
 
@@ -601,11 +605,13 @@ describe('endpoint interrogation', () => {
       provider: 'openai',
       baseURL: 'https://edited.example/v1',
       apiKey: 'typed-not-saved',
+      describe: [],
+      listEndpoint: true,
     })
   })
 
   it('carries the protocol the profile already names', async () => {
-    const discover = vi.fn(() => Promise.resolve(ok([])))
+    const discover = vi.fn(() => Promise.resolve(ok({ models: [] })))
     await mountSection({
       discover,
       providers: { openai: { baseURL: 'https://proxy.example/v1', api: 'openai-responses' } },
@@ -620,14 +626,16 @@ describe('endpoint interrogation', () => {
       provider: 'openai',
       baseURL: 'https://proxy.example/v1',
       api: 'openai-responses',
+      describe: [],
+      listEndpoint: true,
     })
   })
 
   it('opens on the configured models and appends a newly checked one, keeping a row the user already tuned', async () => {
-    const discover = vi.fn(() => Promise.resolve(ok([
+    const discover = vi.fn(() => Promise.resolve(ok({ models: [
       { id: 'kept', contextWindow: 999, inputModalities: ['text', 'image'] },
       { id: 'fresh', contextWindow: 4096, maxTokens: 2048, name: 'Fresh', inputModalities: ['text', 'image'] },
-    ])))
+    ] })))
     const { mutate } = await mountSection({
       discover,
       providers: { openai: { baseURL: 'https://proxy.example/v1', models: [{ id: 'kept', contextWindow: 111 }] } },
@@ -658,7 +666,7 @@ describe('endpoint interrogation', () => {
   })
 
   it('removes an unchecked configured model and keeps one the provider does not list', async () => {
-    const discover = vi.fn(() => Promise.resolve(ok([{ id: 'gone' }, { id: 'stays' }, { id: 'new' }])))
+    const discover = vi.fn(() => Promise.resolve(ok({ models: [{ id: 'gone' }, { id: 'stays' }, { id: 'new' }] })))
     const { mutate } = await mountSection({
       discover,
       providers: { openai: { baseURL: 'https://proxy.example/v1', models: [
@@ -694,7 +702,7 @@ describe('endpoint interrogation', () => {
     fireEvent.click(screen.getByText(en.fetchModels))
     fireEvent.click(screen.getByRole('button', { name: en.addModel }))
     fireEvent.change(screen.getByLabelText(`${en.modelId} 2`), { target: { value: 'b' } })
-    await act(async () => { reply.resolve(ok([{ id: 'a' }, { id: 'b' }, { id: 'c' }])) })
+    await act(async () => { reply.resolve(ok({ models: [{ id: 'a' }, { id: 'b' }, { id: 'c' }] })) })
     const boxes = [...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
     expect(boxes.map(box => box.checked)).toEqual([true, true, false])
     fireEvent.click(screen.getByText(en.fetchAdopt))
@@ -705,7 +713,7 @@ describe('endpoint interrogation', () => {
   })
 
   it('refuses to empty the list, since an empty list serves the whole catalog', async () => {
-    const discover = vi.fn(() => Promise.resolve(ok([{ id: 'a' }, { id: 'b' }, { id: 'c' }])))
+    const discover = vi.fn(() => Promise.resolve(ok({ models: [{ id: 'a' }, { id: 'b' }, { id: 'c' }] })))
     await mountSection({
       discover,
       providers: { openai: { baseURL: 'https://proxy.example/v1', models: [{ id: 'a' }, { id: 'b' }] } },
@@ -729,7 +737,7 @@ describe('endpoint interrogation', () => {
   })
 
   it('lists a repeated candidate id once and starts it checked beside a blank row', async () => {
-    const discover = vi.fn(() => Promise.resolve(ok([{ id: 'x' }, { id: 'x', maxTokens: 64 }])))
+    const discover = vi.fn(() => Promise.resolve(ok({ models: [{ id: 'x' }, { id: 'x', maxTokens: 64 }] })))
     await mountSection({ discover, providers: { openai: { baseURL: 'https://proxy.example/v1' } } })
     openEditor('openai')
     fireEvent.click(screen.getByRole('button', { name: en.addModel }))
@@ -758,7 +766,7 @@ describe('endpoint interrogation', () => {
   })
 
   it('reports an empty listing', async () => {
-    const empty = vi.fn(() => Promise.resolve(ok([])))
+    const empty = vi.fn(() => Promise.resolve(ok({ models: [] })))
     await mountSection({ discover: empty })
     openEditor('openai')
     fireEvent.click(screen.getByText(en.fetchModels))
@@ -766,7 +774,7 @@ describe('endpoint interrogation', () => {
   })
 
   it('can be asked for a configured route even with no endpoint', async () => {
-    const discover = vi.fn(() => Promise.resolve(ok([{ id: 'from-registry' }])))
+    const discover = vi.fn(() => Promise.resolve(ok({ models: [{ id: 'from-registry' }] })))
     await mountSection({ discover, providers: { openai: {} } })
     openEditor('openai')
 
@@ -775,7 +783,7 @@ describe('endpoint interrogation', () => {
     fireEvent.click(screen.getByText(en.fetchModels))
 
     await waitFor(() => { expect(discover).toHaveBeenCalled() })
-    expect(lastProbe(discover)).toEqual({ settingsNs: 'llm-pi-ai', provider: 'openai' })
+    expect(lastProbe(discover)).toEqual({ settingsNs: 'llm-pi-ai', provider: 'openai', describe: [], listEndpoint: true })
   })
 
   it('keeps the create card asking only once it has an endpoint', () => {
@@ -800,6 +808,8 @@ describe('endpoint interrogation', () => {
       settingsNs: 'llm-pi-ai',
       baseURL: 'https://acme.test/v1',
       api: 'openai-completions',
+      describe: [],
+      listEndpoint: true,
     })
   })
 
@@ -818,7 +828,7 @@ describe('endpoint interrogation', () => {
   })
 
   it('closes the picker without adopting anything on cancel', async () => {
-    const discover = vi.fn(() => Promise.resolve(ok([{ id: 'fresh' }])))
+    const discover = vi.fn(() => Promise.resolve(ok({ models: [{ id: 'fresh' }] })))
     const { mutate } = await mountSection({ discover })
     openEditor('openai')
 
@@ -832,9 +842,9 @@ describe('endpoint interrogation', () => {
   })
 
   it('toggles a candidate off and back on before adopting', async () => {
-    const discover = vi.fn(() => Promise.resolve(ok([
+    const discover = vi.fn(() => Promise.resolve(ok({ models: [
       { id: 'a' }, { id: 'b', maxTokens: 2048 },
-    ])))
+    ] })))
     const { mutate } = await mountSection({ discover })
     openEditor('openai')
 
@@ -853,9 +863,9 @@ describe('endpoint interrogation', () => {
   })
 
   it('filters by model id or name and selects or deselects only visible candidates', async () => {
-    const discover = vi.fn(() => Promise.resolve(ok([
+    const discover = vi.fn(() => Promise.resolve(ok({ models: [
       { id: 'alpha' }, { id: 'opaque-id', name: 'Beta Display' }, { id: 'gamma' },
-    ])))
+    ] })))
     await mountSection({ discover })
     openEditor('openai')
 
@@ -1228,11 +1238,11 @@ describe('hand-declared providers', () => {
   })
 
   it.each([
-    ['blocks a hand-declared route', true],
-    ['leaves a catalog route to the adapter', false],
-  ])('%s whose stored reasoning levels the adapter refuses', async (_label, declared) => {
-    // Only a hand-declared route's rows edit reasoning levels, so only there
-    // can the card name the row and offer the switch that repairs it.
+    ['a hand-declared route', true],
+    ['a catalog route', false],
+  ])('blocks %s whose stored reasoning levels the adapter refuses', async (_label, declared) => {
+    // A row outside the installed catalog edits its reasoning levels on either
+    // kind of route, so the card names the row the adapter would refuse.
     await mountSection({
       providers: {
         'acme-gateway': {
@@ -1244,9 +1254,8 @@ describe('hand-declared providers', () => {
     })
     openEditor('acme-gateway')
 
-    const refusal = `${en.model} 1: ${en.modelReasoningNeedsLevel}`
-    expect(screen.queryByText(refusal) !== null).toBe(declared)
-    expect(buttonNamed(en.apply).disabled).toBe(declared)
+    expect(screen.getByText(`${en.model} 1: ${en.modelReasoningNeedsLevel}`)).toBeTruthy()
+    expect(buttonNamed(en.apply).disabled).toBe(true)
   })
 
   it('retries only the key after the profile landed, and reports the provider on cancel', async () => {
@@ -1392,7 +1401,7 @@ describe('hand-declared providers', () => {
   })
 
   it('normalizes surrounding whitespace before interrogating and storing a base URL', async () => {
-    const discover = vi.fn(() => Promise.resolve(ok([{ id: 'm' }])))
+    const discover = vi.fn(() => Promise.resolve(ok({ models: [{ id: 'm' }] })))
     const { mutate, onClose } = mountCard({}, { discover })
     fireEvent.change(screen.getByLabelText(en.customRoute), { target: { value: 'acme' } })
     fireEvent.change(screen.getByLabelText(en.baseUrl), {
@@ -1698,7 +1707,8 @@ describe('hand-declared providers', () => {
     fireEvent.change(screen.getByLabelText(en.customApi), { target: { value: 'google-generative-ai' } })
     fireEvent.click(screen.getByRole('button', { name: en.addModel }))
     fireEvent.click(screen.getByRole('button', { name: `${en.modelAdvanced} 1` }))
-    fireEvent.click(screen.getByRole('switch', { name: `${en.modelReasoning} 1` }))
+    fireEvent.click(screen.getByRole('radio', { name: en.modelEffortStandard }))
+    fireEvent.click(screen.getByRole('button', { name: en.modelEffortDetails }))
 
     const level = screen.getByRole<HTMLSelectElement>('combobox', { name: `${en.modelReasoningLevel} 1` })
     expect(level.value).toBe('low')
@@ -1856,7 +1866,8 @@ describe('API key field', () => {
     // a round trip to be told what the field already says.
     expect(buttonNamed(en.fetchModels).disabled).toBe(true)
     expect(buttonNamed(en.fetchModels).title).toBe(en.keyIllegalCharacters)
-    expect(discover).toHaveBeenCalledExactlyOnceWith('llm-pi-ai', { provider: 'openai' })
+    // Only the describe on open went out; it never reaches the endpoint.
+    expect(discover).toHaveBeenCalledExactlyOnceWith('llm-pi-ai', { provider: 'openai', baseURL: 'https://proxy.example/v1', describe: [] })
   })
 
   it('carries the trimmed key into an interrogation, not the padded draft', async () => {

@@ -1001,3 +1001,73 @@ select.input {
   line-height: 20px;
   text-align: center;
 }
+
+/* None / as a catalog model / standard levels, one line where they fit. */
+.modelEffortChoices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  min-height: 28px;
+  align-items: center;
+}
+
+.modelEffortChoice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.modelEffortNote,
+.modelSourceNote {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* The folded row's reasoning line, under the id and name. */
+.modelEffortSummary {
+  grid-column: 2 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  margin: 0;
+  padding: 0 4px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.modelEffortSummary[data-pending] {
+  color: var(--dsw-alias-state-warn-label);
+}
+
+/* Settling every suggested row at once, above the list. */
+.modelEffortPending {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-state-warn-tertiary);
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.candidateBadge {
+  flex: none;
+  padding: 0 6px;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-state-business-tertiary);
+  color: var(--dsw-alias-state-business-primary);
+  font-size: 11px;
+  line-height: 18px;
+}

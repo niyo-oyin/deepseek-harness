@@ -321,6 +321,18 @@ export interface LlmModelDiscoveryRequest {
   api?: string
   /** Credential for this interrogation alone; the harness never stores it. */
   apiKey?: string
+  /**
+   * Whether to ask the endpoint. Without it the adapter answers from what it
+   * already knows and makes no network call, so a surface can describe a
+   * route on open and contact the provider only when the user asks.
+   */
+  listEndpoint?: boolean
+  /**
+   * Model ids the surface already holds. Each comes back described from the
+   * adapter's own knowledge even when no listing names it, so saved models the
+   * catalog does not know can be offered their capacities and reasoning.
+   */
+  describe?: readonly string[]
 }
 
 /** Provider-side discovery request with operation-local cancellation attached. */
@@ -339,10 +351,45 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
   }
 }
 
+/** A described model field whose value may come from the endpoint or from a matched catalog model. */
+export type LlmDiscoveredField = 'contextWindow' | 'maxTokens' | 'inputModalities' | 'reasoning'
+
+/** Where one field of a model outside the adapter's catalog came from. */
+export type LlmDiscoveredSource = 'endpoint' | 'template'
+
+/** One selectable reasoning level and the value sent for it; `null` only for an Off that sends nothing. */
+export interface LlmDiscoveredEffort {
+  /** Level a selector offers. */
+  level: string
+  /** Provider-facing spelling of the level. */
+  value: string | null
+}
+
+/** Reasoning levels an adapter proposes writing into a model entry. */
+export interface LlmReasoningProposal {
+  /** Offered levels in escalation order. */
+  efforts: readonly LlmDiscoveredEffort[]
+  /** Adapter compatibility switches the levels depend on, written beside them on the model entry. */
+  compat?: Readonly<Record<string, boolean>>
+}
+
+/** Reasoning choices for a model the adapter's catalog does not describe. */
+export interface LlmDiscoveredReasoning {
+  /**
+   * What the endpoint or a matched catalog model says: `false` for a model
+   * that does not reason, a proposal for one that does, and absent when
+   * nothing gives a confident answer.
+   */
+  suggested?: false | LlmReasoningProposal
+  /** The protocol's ordinary levels, offered when nothing better is known. */
+  standard: LlmReasoningProposal
+}
+
 /**
- * One model an endpoint reports about itself. Every field but the id is
- * optional because most provider listings disclose an id and nothing else;
- * a surface adopting one of these still owes the capacities its adapter needs.
+ * One model an endpoint reports about itself or the adapter describes. Every
+ * field but the id is optional because most provider listings disclose an id
+ * and nothing else; a surface adopting one of these still owes the capacities
+ * its adapter needs.
  */
 export interface LlmDiscoveredModel {
   /** Model id the endpoint accepts. */
@@ -355,6 +402,26 @@ export interface LlmDiscoveredModel {
   maxTokens?: number
   /** Accepted input types when disclosed by the catalog or endpoint; absent means unknown. */
   inputModalities?: readonly ModelModality[]
+  /** Whether the adapter's installed catalog describes this id, so it needs nothing from the surface. */
+  inCatalog?: boolean
+  /** Catalog model whose fields stand in for the ones the endpoint did not report. */
+  template?: string
+  /** Where each disclosed field of a model outside the catalog came from. */
+  sources?: Readonly<Partial<Record<LlmDiscoveredField, LlmDiscoveredSource>>>
+  /** Reasoning choices, for a model outside the catalog. */
+  reasoning?: LlmDiscoveredReasoning
+}
+
+/** One discovery answer: the models, and why the endpoint was not asked or did not answer. */
+export interface LlmModelDiscovery {
+  /** Described models, deduplicated in answer order. */
+  models: readonly LlmDiscoveredModel[]
+  /**
+   * Set when the request asked for the endpoint and the answer comes from the
+   * adapter's own knowledge alone: the route has no stored key, the protocol
+   * has no readable listing, or the endpoint failed.
+   */
+  notice?: string
 }
 
 /**

@@ -4,6 +4,7 @@ import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import LlmRuntime, { userAgent } from '@deepseek-ai/dsh-llm'
+import type { LlmDiscoveredModel, LlmModelDiscoveryRequest } from '@deepseek-ai/dsh-llm'
 import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { discoverModels } from '../src/discovery.ts'
@@ -65,6 +66,32 @@ async function listingServer(behavior: {
   return { url: `http://127.0.0.1:${address.port}`, paths, headers }
 }
 
+/** The fields a test of the endpoint's own reply compares: the id and name, plus what the endpoint reported or the catalog holds. */
+function reportedFields(model: LlmDiscoveredModel): LlmDiscoveredModel {
+  if (model.inCatalog === true) {
+    const { inCatalog: _inCatalog, ...catalog } = model
+    return catalog
+  }
+  const fields = (['contextWindow', 'maxTokens'] as const).filter(field => model.sources?.[field] === 'endpoint')
+  return {
+    id: model.id,
+    ...model.name === undefined ? {} : { name: model.name },
+    ...Object.fromEntries(fields.map(field => [field, model[field]])),
+  }
+}
+
+/**
+ * Discover through the registry as the Models page's fetch action does —
+ * asking the endpoint unless the request says otherwise — and keep the fields
+ * {@link reportedFields} compares.
+ */
+async function discover(
+  ctx: Context, settingsNs: string, request: LlmModelDiscoveryRequest, signal?: AbortSignal,
+): Promise<LlmDiscoveredModel[]> {
+  const answer = await ctx.llm.discoverModels(settingsNs, { listEndpoint: true, ...request }, signal)
+  return answer.models.map(reportedFields)
+}
+
 /** A bare dormant mount: discovery is offered whether or not a route exists. */
 async function harness(): Promise<Context> {
   const ctx = new Context()
@@ -76,7 +103,7 @@ async function harness(): Promise<Context> {
 describe('catalog-route model discovery', () => {
   it('includes the installed model input types for vision models', async () => {
     const ctx = await harness()
-    const models = await ctx.llm.discoverModels('llm-pi-ai', { provider: 'openai' })
+    const models = await discover(ctx, 'llm-pi-ai', { provider: 'openai' })
     const installed = getBuiltinModels('openai').find(model => model.id === 'gpt-6-astra')
     expect(installed?.input).toContain('image')
     expect(models.find(model => model.id === 'gpt-6-astra')).toMatchObject({ inputModalities: installed?.input })
@@ -86,7 +113,7 @@ describe('catalog-route model discovery', () => {
     const server = await listingServer({ body: JSON.stringify({ data: [{ id: 'from-the-endpoint' }] }) })
     const ctx = await harness()
 
-    const models = await ctx.llm.discoverModels('llm-pi-ai', { provider: 'deepseek', baseURL: server.url })
+    const models = await discover(ctx, 'llm-pi-ai', { provider: 'deepseek', baseURL: server.url, listEndpoint: false })
 
     // pi-ai's own registry is the authority for its own providers, and it
     // carries what a listing endpoint would not disclose.
@@ -98,19 +125,232 @@ describe('catalog-route model discovery', () => {
 
   it('needs no endpoint for a route the catalog describes', async () => {
     const ctx = await harness()
-    await expect(ctx.llm.discoverModels('llm-pi-ai', { provider: 'deepseek' })).resolves.not.toHaveLength(0)
+    await expect(discover(ctx, 'llm-pi-ai', { provider: 'deepseek' })).resolves.not.toHaveLength(0)
   })
 
   it('says where a route the catalog does not describe must get its models', async () => {
     const ctx = await harness()
-    await expect(ctx.llm.discoverModels('llm-pi-ai', { provider: 'acme-gateway' }))
+    await expect(discover(ctx, 'llm-pi-ai', { provider: 'acme-gateway' }))
       .rejects.toThrow(/ships no catalog for provider "acme-gateway".*set a baseURL/s)
     // A form that cleared the field says the same thing as one that never had it.
-    await expect(ctx.llm.discoverModels('llm-pi-ai', { provider: 'acme-gateway', baseURL: '' }))
+    await expect(discover(ctx, 'llm-pi-ai', { provider: 'acme-gateway', baseURL: '' }))
       .rejects.toThrow(/set a baseURL/)
     // The seam refuses a request naming neither, so the module's own guard for
     // that shape is only reachable by calling it directly.
-    await expect(discoverModels({})).rejects.toThrow(/set a baseURL/)
+    await expect(discoverModels({ listEndpoint: true })).rejects.toThrow(/set a baseURL/)
+  })
+})
+
+/** A catalog route whose stored key and endpoint point at a local listing. */
+async function storedCatalogRoute(provider: string, baseURL: string, apiKeyEnv?: string): Promise<Context> {
+  const ctx = new Context()
+  await ctx.plugin(LlmRuntime)
+  if (apiKeyEnv !== undefined) {
+    process.env[apiKeyEnv] = 'stored-key'
+    touchedEnv.push(apiKeyEnv)
+  }
+  await ctx.plugin(LlmPiAi, { providers: { [provider]: { baseURL, ...apiKeyEnv === undefined ? {} : { apiKeyEnv } } } })
+  return ctx
+}
+
+/** Anthropic's documented capability flags for a model, with the given support. */
+function anthropicEntry(id: string, flags: { adaptive: boolean; enabled: boolean; disabled: boolean; efforts: string[]; image: boolean }) {
+  const flag = (supported: boolean) => ({ supported })
+  return {
+    id,
+    display_name: id,
+    max_input_tokens: 1_000_000,
+    max_tokens: 128_000,
+    capabilities: {
+      image_input: flag(flags.image),
+      thinking: {
+        supported: true,
+        types: { adaptive: flag(flags.adaptive), enabled: flag(flags.enabled), disabled: flag(flags.disabled) },
+      },
+      effort: {
+        supported: flags.efforts.length > 0,
+        ...Object.fromEntries(['low', 'medium', 'high', 'xhigh', 'max'].map(level => [level, flag(flags.efforts.includes(level))])),
+      },
+    },
+  }
+}
+
+describe('models outside the installed catalog', () => {
+  it('adds the endpoint listing of a catalog route to its catalog when the route has a stored key', async () => {
+    const server = await listingServer({ body: JSON.stringify({ data: [
+      anthropicEntry('claude-opus-5-7', { adaptive: true, enabled: false, disabled: false, efforts: ['low', 'medium', 'high', 'max'], image: true }),
+      { id: 'claude-opus-5-5', display_name: 'Listed name' },
+    ] }) })
+    const ctx = await storedCatalogRoute('anthropic', server.url, 'ANTHROPIC_DISCOVERY_KEY')
+
+    const { models, notice } = await ctx.llm.discoverModels('llm-pi-ai', { provider: 'anthropic', listEndpoint: true })
+
+    expect(notice).toBeUndefined()
+    expect(server.headers[0]?.['x-api-key']).toBe('stored-key')
+    // The endpoint's order first; a model the catalog knows keeps the catalog's description.
+    expect(models.slice(0, 2).map(model => [model.id, model.inCatalog])).toEqual([['claude-opus-5-7', false], ['claude-opus-5-5', true]])
+    expect(models.find(model => model.id === 'claude-opus-5-5')?.name).not.toBe('Listed name')
+    expect(models.filter(model => model.inCatalog === true).map(model => model.id).sort())
+      .toEqual(getBuiltinModels('anthropic').map(model => model.id).sort())
+    expect(models[0]).toMatchObject({
+      contextWindow: 1_000_000,
+      maxTokens: 128_000,
+      inputModalities: ['text', 'image'],
+      sources: { contextWindow: 'endpoint', maxTokens: 'endpoint', inputModalities: 'endpoint', reasoning: 'endpoint' },
+      reasoning: {
+        suggested: {
+          efforts: ['low', 'medium', 'high', 'max'].map(level => ({ level, value: level })),
+          compat: { forceAdaptiveThinking: true },
+        },
+        standard: { compat: { forceAdaptiveThinking: false } },
+      },
+    })
+  })
+
+  it('reads budget thinking and a disabled Off from Anthropic capabilities', async () => {
+    const server = await listingServer({ body: JSON.stringify({ data: [
+      anthropicEntry('acme-claude', { adaptive: false, enabled: true, disabled: true, efforts: [], image: false }),
+      { id: 'acme-plain', capabilities: { thinking: { supported: false } } },
+    ] }) })
+    const ctx = await harness()
+
+    const { models } = await ctx.llm.discoverModels('llm-pi-ai', {
+      baseURL: server.url, api: 'anthropic-messages', apiKey: 'key', listEndpoint: true,
+    })
+
+    expect(models[0]).toMatchObject({
+      inputModalities: ['text'],
+      reasoning: { suggested: {
+        efforts: [{ level: 'off', value: null }, ...['low', 'medium', 'high'].map(level => ({ level, value: level }))],
+        compat: { forceAdaptiveThinking: false },
+      } },
+    })
+    expect(models[1]?.reasoning?.suggested).toBe(false)
+  })
+
+  it.each([
+    { name: 'without a stored key', provider: 'anthropic', key: undefined, notice: /signs in without an API key/ },
+    { name: 'on a protocol with no readable listing', provider: 'openai-codex', key: 'CODEX_DISCOVERY_KEY', notice: /no model listing/ },
+  ])('answers a catalog route $name from its catalog, saying why', async ({ provider, key, notice }) => {
+    const server = await listingServer({ body: JSON.stringify({ data: [{ id: 'unseen' }] }) })
+    const ctx = await storedCatalogRoute(provider, server.url, key)
+
+    const answer = await ctx.llm.discoverModels('llm-pi-ai', { provider, listEndpoint: true })
+
+    expect(answer.notice).toMatch(notice)
+    expect(answer.notice).toMatch(/installed catalog only$/)
+    expect(answer.models.length).toBeGreaterThan(0)
+    expect(answer.models.every(model => model.inCatalog === true)).toBe(true)
+    expect(server.paths).toEqual([])
+  })
+
+  it('keeps the catalog when the endpoint fails', async () => {
+    const server = await listingServer({ status: 500, body: '{}' })
+    const ctx = await storedCatalogRoute('anthropic', server.url, 'ANTHROPIC_DISCOVERY_KEY')
+
+    const answer = await ctx.llm.discoverModels('llm-pi-ai', { provider: 'anthropic', listEndpoint: true })
+
+    expect(answer.notice).toMatch(/answered 500; the list shows the installed catalog only/)
+    expect(answer.models.length).toBe(getBuiltinModels('anthropic').length)
+  })
+
+  it('describes held ids without contacting anyone', async () => {
+    const server = await listingServer({ body: JSON.stringify({ data: [] }) })
+    const ctx = await storedCatalogRoute('anthropic', server.url, 'ANTHROPIC_DISCOVERY_KEY')
+    const template = getBuiltinModels('anthropic').find(model => model.id === 'claude-opus-5-5')
+
+    const { models } = await ctx.llm.discoverModels('llm-pi-ai', {
+      provider: 'anthropic', describe: ['claude-opus-5-5-20261201', 'acme-house-model', 'claude-opus-5-5'],
+    })
+
+    expect(server.paths).toEqual([])
+    const dated = models.find(model => model.id === 'claude-opus-5-5-20261201')
+    expect(dated).toMatchObject({
+      inCatalog: false,
+      template: 'claude-opus-5-5',
+      contextWindow: template?.contextWindow,
+      maxTokens: template?.maxTokens,
+      sources: { contextWindow: 'template', maxTokens: 'template', inputModalities: 'template', reasoning: 'template' },
+      reasoning: { suggested: { compat: { forceAdaptiveThinking: true } } },
+    })
+    // Nothing names the house model's family, so only the protocol's ordinary levels are offered.
+    expect(models.find(model => model.id === 'acme-house-model')).toEqual({
+      id: 'acme-house-model',
+      inCatalog: false,
+      reasoning: { standard: {
+        efforts: [{ level: 'off', value: null }, ...['low', 'medium', 'high'].map(level => ({ level, value: level }))],
+        compat: { forceAdaptiveThinking: false },
+      } },
+    })
+    expect(models.filter(model => model.id === 'claude-opus-5-5')).toEqual([expect.objectContaining({ inCatalog: true })])
+  })
+
+  it('describes the held ids of a hand-declared route by the protocol it names', async () => {
+    const ctx = await harness()
+
+    const { models } = await ctx.llm.discoverModels('llm-pi-ai', {
+      provider: 'acme-gateway', api: 'google-generative-ai', describe: ['gemini-3.9-flash'],
+    })
+
+    expect(models).toEqual([expect.objectContaining({
+      id: 'gemini-3.9-flash',
+      inCatalog: false,
+      template: 'gemini-3.8-flash',
+      reasoning: {
+        suggested: { efforts: ['low', 'medium', 'high'].map(level => ({ level, value: level })) },
+        standard: { efforts: ['minimal', 'low', 'medium', 'high'].map(level => ({ level, value: level })) },
+      },
+    })])
+  })
+
+  it('takes a Gemini thinking flag from the endpoint and the levels from the matched model', async () => {
+    const server = await listingServer({ body: JSON.stringify({ models: [
+      { name: 'models/gemini-3.9-flash', inputTokenLimit: 2_000_000, thinking: true, supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/house-thinker', thinking: true },
+      { name: 'models/gemini-3.9-flash-tts', thinking: false },
+    ] }) })
+    const ctx = await harness()
+
+    const { models } = await ctx.llm.discoverModels('llm-pi-ai', {
+      baseURL: server.url, api: 'google-generative-ai', apiKey: 'key', listEndpoint: true,
+    })
+
+    const template = getBuiltinModels('google').find(model => model.id === 'gemini-3.8-flash')
+    expect(models[0]).toMatchObject({
+      contextWindow: 2_000_000,
+      maxTokens: template?.maxTokens,
+      template: 'gemini-3.8-flash',
+      sources: { contextWindow: 'endpoint', maxTokens: 'template', reasoning: 'endpoint' },
+      reasoning: { suggested: { efforts: ['low', 'medium', 'high'].map(level => ({ level, value: level })) } },
+    })
+    // A thinking model nothing else describes gets the protocol's ordinary levels.
+    expect(models[1]?.reasoning?.suggested).toEqual(models[1]?.reasoning?.standard)
+    expect(models[2]?.reasoning?.suggested).toBe(false)
+  })
+
+  it('reads reasoning efforts and input modalities in the OpenRouter shape', async () => {
+    const server = await listingServer({ body: JSON.stringify({ data: [
+      {
+        id: 'acme/thinker',
+        architecture: { input_modalities: ['text', 'image'] },
+        supported_parameters: ['reasoning', 'max_tokens'],
+        reasoning: { supported_efforts: ['low', 'high', 'turbo'], mandatory: false },
+      },
+      { id: 'acme/always-thinks', supported_parameters: ['reasoning'], reasoning: { supported_efforts: ['medium'], mandatory: true } },
+      { id: 'acme/plain', architecture: { input_modalities: ['text'] }, supported_parameters: ['max_tokens'] },
+    ] }) })
+    const ctx = await harness()
+
+    const { models } = await ctx.llm.discoverModels('llm-pi-ai', { baseURL: server.url, listEndpoint: true })
+
+    expect(models[0]).toMatchObject({
+      inputModalities: ['text', 'image'],
+      sources: { inputModalities: 'endpoint', reasoning: 'endpoint' },
+      // An effort pi-ai does not send is left out.
+      reasoning: { suggested: { efforts: [{ level: 'off', value: null }, { level: 'low', value: 'low' }, { level: 'high', value: 'high' }] } },
+    })
+    expect(models[1]?.reasoning?.suggested).toEqual({ efforts: [{ level: 'medium', value: 'medium' }] })
+    expect(models[2]).toMatchObject({ inputModalities: ['text'], reasoning: { suggested: false } })
   })
 })
 
@@ -129,7 +369,7 @@ describe('draft-provider model discovery', () => {
     })
     const ctx = await harness()
 
-    const models = await ctx.llm.discoverModels('llm-pi-ai', { baseURL: `${server.url}/v1`, apiKey: 'probe-key' })
+    const models = await discover(ctx, 'llm-pi-ai', { baseURL: `${server.url}/v1`, apiKey: 'probe-key' })
 
     expect(models).toEqual([
       { id: 'acme-large', name: 'Acme Large', contextWindow: 65_536, maxTokens: 4096 },
@@ -161,7 +401,7 @@ describe('draft-provider model discovery', () => {
     })
     const ctx = await harness()
 
-    expect(await ctx.llm.discoverModels('llm-pi-ai', { baseURL: server.url })).toEqual([
+    expect(await discover(ctx, 'llm-pi-ai', { baseURL: server.url })).toEqual([
       {
         id: 'lobechat-deepseek-chat',
         name: 'DeepSeek V4 Flash',
@@ -188,17 +428,17 @@ describe('draft-provider model discovery', () => {
     })
     const ctx = await harness()
 
-    const rootModels = await ctx.llm.discoverModels('llm-pi-ai', {
+    const rootModels = await discover(ctx, 'llm-pi-ai', {
       baseURL: server.url,
       api: 'anthropic-messages',
       apiKey: 'anthropic-key',
     })
-    const versionedModels = await ctx.llm.discoverModels('llm-pi-ai', {
+    const versionedModels = await discover(ctx, 'llm-pi-ai', {
       baseURL: `${server.url}/v1`,
       api: 'anthropic-messages',
       apiKey: 'anthropic-key',
     })
-    await ctx.llm.discoverModels('llm-pi-ai', {
+    await discover(ctx, 'llm-pi-ai', {
       baseURL: server.url,
       api: 'anthropic-messages',
     })
@@ -241,7 +481,7 @@ describe('draft-provider model discovery', () => {
     })
     const ctx = await harness()
 
-    const models = await ctx.llm.discoverModels('llm-pi-ai', {
+    const models = await discover(ctx, 'llm-pi-ai', {
       baseURL: `${server.url}/v1beta/`,
       api: 'google-generative-ai',
       apiKey: 'gemini-key',
@@ -260,7 +500,7 @@ describe('draft-provider model discovery', () => {
     const server = await listingServer({ body: JSON.stringify({ data: [{ id: 'm' }] }) })
     const ctx = await harness()
 
-    const failure = ctx.llm.discoverModels('llm-pi-ai', { baseURL: server.url, api: 'google-generative-ai' })
+    const failure = discover(ctx, 'llm-pi-ai', { baseURL: server.url, api: 'google-generative-ai' })
     await expect(failure).rejects.toMatchObject({ code: 'DISCOVERY_FAILED' })
     await expect(failure).rejects.toThrow(/no "models" array/)
     expect(server.headers[0]?.['x-goog-api-key']).toBeUndefined()
@@ -275,7 +515,7 @@ describe('draft-provider model discovery', () => {
     })
     const ctx = await harness()
 
-    await expect(ctx.llm.discoverModels('llm-pi-ai', { baseURL: server.url }))
+    await expect(discover(ctx, 'llm-pi-ai', { baseURL: server.url }))
       .resolves.toEqual([{ id: 'standard', name: 'standard' }])
   })
 
@@ -283,7 +523,7 @@ describe('draft-provider model discovery', () => {
     const server = await listingServer({ body: JSON.stringify({ data: [{ id: 'm' }] }) })
     const ctx = await harness()
 
-    await ctx.llm.discoverModels('llm-pi-ai', { baseURL: `${server.url}/openai/v1/` })
+    await discover(ctx, 'llm-pi-ai', { baseURL: `${server.url}/openai/v1/` })
 
     expect(server.paths).toEqual(['/openai/v1/models'])
   })
@@ -292,7 +532,7 @@ describe('draft-provider model discovery', () => {
     const server = await listingServer({ body: JSON.stringify({ data: [{ id: 'm' }] }) })
     const ctx = await harness()
 
-    await ctx.llm.discoverModels('llm-pi-ai', { baseURL: server.url })
+    await discover(ctx, 'llm-pi-ai', { baseURL: server.url })
 
     expect(server.headers[0]?.authorization).toBeUndefined()
   })
@@ -325,17 +565,17 @@ describe('draft-provider model discovery', () => {
       },
     })
 
-    await ctx.llm.discoverModels('llm-pi-ai', { provider: 'acme-gateway', baseURL: server.url })
+    await discover(ctx, 'llm-pi-ai', { provider: 'acme-gateway', baseURL: server.url })
     // A key typed into the form is the one being tested — possibly the
     // replacement for the stored one — so it wins without resolving the
     // missing stored credential, while the route's headers still apply.
     Reflect.deleteProperty(process.env, 'ACME_GATEWAY_KEY')
-    await ctx.llm.discoverModels('llm-pi-ai', { provider: 'acme-gateway', baseURL: server.url, apiKey: 'typed' })
+    await discover(ctx, 'llm-pi-ai', { provider: 'acme-gateway', baseURL: server.url, apiKey: 'typed' })
     // A route no profile declares yet is the create case: nothing is stored.
-    await ctx.llm.discoverModels('llm-pi-ai', { provider: 'not-declared-yet', baseURL: server.url })
+    await discover(ctx, 'llm-pi-ai', { provider: 'not-declared-yet', baseURL: server.url })
     // A configured route without deployment headers still contributes its
     // stored credential without inventing a header map.
-    await ctx.llm.discoverModels('llm-pi-ai', { provider: 'plain-gateway', baseURL: server.url, apiKey: 'plain-typed' })
+    await discover(ctx, 'llm-pi-ai', { provider: 'plain-gateway', baseURL: server.url, apiKey: 'plain-typed' })
 
     expect(server.headers.map(headers => headers.authorization))
       .toEqual(['Bearer stored-key', 'Bearer typed', undefined, 'Bearer plain-typed'])
@@ -352,7 +592,7 @@ describe('draft-provider model discovery', () => {
     Reflect.deleteProperty(process.env, 'ABSENT_FOR_DISCOVERY')
     await ctx.plugin(LlmPiAi, { providers: { deepseek: { apiKeyEnv: 'ABSENT_FOR_DISCOVERY' } } })
 
-    await expect(ctx.llm.discoverModels('llm-pi-ai', { provider: 'deepseek' })).resolves.not.toHaveLength(0)
+    await expect(discover(ctx, 'llm-pi-ai', { provider: 'deepseek' })).resolves.not.toHaveLength(0)
   })
 
   it('drops unusable rows rather than failing the whole listing', async () => {
@@ -370,7 +610,7 @@ describe('draft-provider model discovery', () => {
     })
     const ctx = await harness()
 
-    expect(await ctx.llm.discoverModels('llm-pi-ai', { baseURL: server.url }))
+    expect(await discover(ctx, 'llm-pi-ai', { baseURL: server.url }))
       .toEqual([{ id: 'good', name: 'good' }, { id: 'zero-capacity', name: 'zero-capacity' }])
   })
 
@@ -379,14 +619,14 @@ describe('draft-provider model discovery', () => {
 
     for (const status of [401, 403]) {
       const refused = await listingServer({ status, body: '{"error":"nope"}' })
-      await expect(ctx.llm.discoverModels('llm-pi-ai', { baseURL: refused.url, apiKey: 'wrong' }))
+      await expect(discover(ctx, 'llm-pi-ai', { baseURL: refused.url, apiKey: 'wrong' }))
         .rejects.toThrow(new RegExp(`answered ${status}; check the API key`))
     }
 
     // A server fault is not a credential problem, so it must not send the user
     // off to re-check a key that is fine.
     const broken = await listingServer({ status: 500, body: '{"error":"boom"}' })
-    await expect(ctx.llm.discoverModels('llm-pi-ai', { baseURL: broken.url, apiKey: 'fine' }))
+    await expect(discover(ctx, 'llm-pi-ai', { baseURL: broken.url, apiKey: 'fine' }))
       .rejects.toThrow(/answered 500$/)
   })
 
@@ -394,11 +634,11 @@ describe('draft-provider model discovery', () => {
     const server = await listingServer({ body: '{"models":[]}' })
     const ctx = await harness()
 
-    await expect(ctx.llm.discoverModels('llm-pi-ai', { baseURL: server.url }))
+    await expect(discover(ctx, 'llm-pi-ai', { baseURL: server.url }))
       .rejects.toThrow(/neither a "data" array nor a "models" object/)
 
     const broken = await listingServer({ body: 'not json at all' })
-    await expect(ctx.llm.discoverModels('llm-pi-ai', { baseURL: broken.url }))
+    await expect(discover(ctx, 'llm-pi-ai', { baseURL: broken.url }))
       .rejects.toThrow(/did not answer with JSON/)
   })
 
@@ -408,20 +648,20 @@ describe('draft-provider model discovery', () => {
     const oversized = `{"data":[{"id":"m","pad":"${'x'.repeat(4 * 1024 * 1024)}"}]}`
 
     const declared = await listingServer({ body: oversized })
-    await expect(ctx.llm.discoverModels('llm-pi-ai', { baseURL: declared.url }))
+    await expect(discover(ctx, 'llm-pi-ai', { baseURL: declared.url }))
       .rejects.toThrow(/answered with more than 4194304 bytes/)
 
     // A streamed reply declares no length, so the ceiling has to hold on the
     // body the harness actually read.
     const streamed = await listingServer({ chunks: ['{"data":[{"id":"m","pad":"', 'x'.repeat(4 * 1024 * 1024), '"}]}'] })
-    await expect(ctx.llm.discoverModels('llm-pi-ai', { baseURL: streamed.url }))
+    await expect(discover(ctx, 'llm-pi-ai', { baseURL: streamed.url }))
       .rejects.toThrow(/answered with more than 4194304 bytes/)
   })
 
   it('reports an unreachable endpoint instead of an empty catalog', async () => {
     const ctx = await harness()
     // Port 9 is the discard service: nothing accepts a connection there.
-    await expect(ctx.llm.discoverModels('llm-pi-ai', { baseURL: 'http://127.0.0.1:9/v1' }))
+    await expect(discover(ctx, 'llm-pi-ai', { baseURL: 'http://127.0.0.1:9/v1' }))
       .rejects.toMatchObject({ code: 'DISCOVERY_FAILED' })
   })
 
@@ -432,7 +672,7 @@ describe('draft-provider model discovery', () => {
       // query despite its OpenAI lineage, and Codex uses OAuth; guessing at
       // either would report an auth failure as a provider with no models.
       const ctx = await harness()
-      await expect(ctx.llm.discoverModels('llm-pi-ai', { baseURL: 'https://gateway.example/v1', api }))
+      await expect(discover(ctx, 'llm-pi-ai', { baseURL: 'https://gateway.example/v1', api }))
         .rejects.toMatchObject({ code: 'DISCOVERY_UNSUPPORTED' })
     },
   )
@@ -456,7 +696,7 @@ describe('draft-provider model discovery', () => {
         },
       }))
     })
-    const probe = ctx.llm.discoverModels('llm-pi-ai', {
+    const probe = discover(ctx, 'llm-pi-ai', {
       baseURL: 'https://slow.example/v1',
     }, controller.signal)
     await bodyRead.promise
@@ -468,7 +708,7 @@ describe('draft-provider model discovery', () => {
   it('honors caller cancellation', async () => {
     const ctx = await harness()
     const aborted = AbortSignal.abort('test cancellation')
-    await expect(ctx.llm.discoverModels('llm-pi-ai', {
+    await expect(discover(ctx, 'llm-pi-ai', {
       baseURL: 'http://127.0.0.1:9/v1',
     }, aborted)).rejects.toMatchObject({ code: 'ABORTED' })
   })
@@ -476,10 +716,10 @@ describe('draft-provider model discovery', () => {
   it('is offered for the namespace, and refuses one it does not serve', async () => {
     const ctx = await harness()
 
-    await expect(ctx.llm.discoverModels('llm-pi-ai', { provider: 'openai' })).resolves.not.toHaveLength(0)
-    await expect(ctx.llm.discoverModels('llm-deepseek', { baseURL: 'https://api.deepseek.com' }))
+    await expect(discover(ctx, 'llm-pi-ai', { provider: 'openai' })).resolves.not.toHaveLength(0)
+    await expect(discover(ctx, 'llm-deepseek', { baseURL: 'https://api.deepseek.com' }))
       .rejects.toMatchObject({ code: 'NO_DISCOVERY' })
-    await expect(ctx.llm.discoverModels('llm-pi-ai', { baseURL: '' }))
+    await expect(discover(ctx, 'llm-pi-ai', { baseURL: '' }))
       .rejects.toMatchObject({ code: 'INVALID_DISCOVERY' })
   })
 
@@ -487,11 +727,11 @@ describe('draft-provider model discovery', () => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
     const fiber = await ctx.plugin(LlmPiAi, {})
-    await expect(ctx.llm.discoverModels('llm-pi-ai', { provider: 'openai' })).resolves.not.toHaveLength(0)
+    await expect(discover(ctx, 'llm-pi-ai', { provider: 'openai' })).resolves.not.toHaveLength(0)
 
     await fiber.dispose()
 
-    await expect(ctx.llm.discoverModels('llm-pi-ai', { provider: 'openai' }))
+    await expect(discover(ctx, 'llm-pi-ai', { provider: 'openai' }))
       .rejects.toMatchObject({ code: 'NO_DISCOVERY' })
   })
 })
@@ -499,6 +739,7 @@ describe('draft-provider model discovery', () => {
 describe('probe key format', () => {
   it('reports an illegal probe key as a credential fault, not an unreachable endpoint', async () => {
     await expect(discoverModels({
+      listEndpoint: true,
       baseURL: 'https://acme.test',
       api: 'openai-completions',
       apiKey: 'sk-\u{1F600}',
@@ -511,6 +752,7 @@ describe('probe key format', () => {
     // key is judged, and only an absent one probes unauthenticated. '' means
     // "I have a key" and is answered as the empty key it is.
     await expect(discoverModels({
+      listEndpoint: true,
       baseURL: 'https://acme.test',
       api: 'openai-completions',
       apiKey: '',
@@ -531,7 +773,7 @@ describe('probe key format', () => {
       })
     })
 
-    await discoverModels({ baseURL: 'https://acme.test', api: 'openai-completions' })
+    await discoverModels({ listEndpoint: true, baseURL: 'https://acme.test', api: 'openai-completions' })
 
     const headers = new Headers(requests[0]?.headers)
     expect(headers.has('authorization')).toBe(false)
@@ -592,6 +834,6 @@ describe('recorded provider listings', () => {
     const server = await listingServer({ body })
     const ctx = await harness()
 
-    await expect(ctx.llm.discoverModels('llm-pi-ai', { baseURL: server.url, api })).resolves.toEqual(models)
+    await expect(discover(ctx, 'llm-pi-ai', { baseURL: server.url, api })).resolves.toEqual(models)
   })
 })

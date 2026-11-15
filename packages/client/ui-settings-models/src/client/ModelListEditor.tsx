@@ -15,12 +15,21 @@
  *
  * A provider that cannot be interrogated (an unreachable endpoint, a protocol
  * with no readable listing) is not a dead end: the failure is shown next to the
- * rows the user can still fill in by hand.
+ * rows the user can still fill in by hand. A catalog route keeps its installed
+ * catalog then, with the reason shown as a notice.
+ *
+ * Rows the route's installed catalog does not describe carry their own
+ * reasoning. The adapter describes each such id — saved rows when the card
+ * opens, a typed id when its field is left, listed models when fetched — and a
+ * row it describes with confidence is settled at once when it is adopted or
+ * typed. A saved row that states no reasoning is never rewritten behind the
+ * user: it shows the suggestion with one action, and the list offers to apply
+ * every such suggestion at once.
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
+import type { LlmDiscoveredModel, LlmModelDiscoveryRequest } from '@deepseek-ai/dsh-api-remotes/client'
 import { AnimatedRows, Button, IconPlusOutlineRegular, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import { TextSearchIndex } from '@deepseek-ai/dsh-util-text-search'
 import { formatCapacity, parseCapacity } from './DeepSeekModelsEditor.tsx'
@@ -28,6 +37,9 @@ import type { ModelsOperations } from './operations.ts'
 import type { DeepSeekModelDraft } from './DeepSeekModelsEditor.tsx'
 import type { en } from './locales.ts'
 import { ModelRow } from './ModelRow.tsx'
+import type { EffortSummary } from './ModelRow.tsx'
+import { undescribedReasoning } from './ModelReasoningEfforts.tsx'
+import { reasoningChoice, withProposal, withSuggestion } from './reasoning-choice.ts'
 import { useModelRows } from './useModelRows.ts'
 import type { CapacityField } from './useModelRows.ts'
 import styles from './ModelsSection.module.css'
@@ -75,9 +87,9 @@ export interface ModelListEditorProps {
   /** Installed provider whose catalog supplies defaults without endpoint I/O. */
   catalogProvider?: string | undefined
   /**
-   * Reasoning levels a hand-declared route's rows may declare in
+   * Reasoning levels a row outside the installed catalog may declare in
    * `reasoningEfforts`, in escalation order; absent or empty shows no
-   * reasoning control, leaving a catalog model's levels to the catalog.
+   * reasoning control. A catalog model's levels stay the catalog's.
    */
   reasoningLevels?: readonly string[] | undefined
   /** Whether the route's protocol accepts only {@link reasoningLevels}, each sent under its own name. */
@@ -138,15 +150,52 @@ function capacitySpelling(value: number | undefined): string {
   return value === undefined ? '' : formatCapacity(value)
 }
 
-/** Adopt a candidate, preserving disclosed capacities and input types. */
+/**
+ * Adopt a candidate, preserving disclosed capacities and input types. A model
+ * outside the installed catalog also takes the reasoning described for it with
+ * confidence, so it offers its effort levels without another step.
+ */
 function adopt(candidate: LlmDiscoveredModel): ModelDraft {
-  return {
+  const row: ModelDraft = {
     id: candidate.id,
     ...candidate.name === undefined ? {} : { name: candidate.name },
     ...candidate.contextWindow === undefined ? {} : { contextWindow: candidate.contextWindow },
     ...candidate.maxTokens === undefined ? {} : { maxTokens: candidate.maxTokens },
     ...candidate.inputModalities === undefined ? {} : { input: [...candidate.inputModalities] },
   }
+  return candidate.inCatalog === false ? withSuggestion(row, candidate.reasoning) : row
+}
+
+/** The row fields a description's sources speak for, with the label each is named by. */
+const DESCRIBED_FIELDS = [
+  { field: 'contextWindow', row: 'contextWindow', label: 'contextWindow' },
+  { field: 'maxTokens', row: 'maxTokens', label: 'maxTokens' },
+  { field: 'inputModalities', row: 'input', label: 'modelInputTypes' },
+] as const
+
+/**
+ * Say where a row's described values came from, naming only the fields whose
+ * stored value is still the described one.
+ * @param model - the row.
+ * @param description - what the adapter described for its id.
+ * @param t - section copy.
+ * @returns the caption, or `undefined` when no stored value came from the description.
+ */
+function sourceNoteOf(
+  model: ModelDraft, description: LlmDiscoveredModel | undefined, t: (key: keyof typeof en) => string,
+): string | undefined {
+  if (description?.sources === undefined) return undefined
+  const named = (source: 'endpoint' | 'template'): string[] => DESCRIBED_FIELDS
+    .filter(({ field, row }) => description.sources?.[field] === source
+      && JSON.stringify(model[row]) === JSON.stringify(description[field]))
+    .map(({ label }) => t(label))
+  const parts = [
+    ...named('endpoint').length > 0 ? [t('modelFromEndpoint').replace('{fields}', () => named('endpoint').join(', '))] : [],
+    ...named('template').length > 0 && description.template !== undefined
+      ? [t('modelFromTemplate').replace('{model}', () => description.template ?? '').replace('{fields}', () => named('template').join(', '))]
+      : [],
+  ]
+  return parts.length === 0 ? undefined : parts.join(' ')
 }
 
 /**
@@ -160,22 +209,71 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
   const [busy, setBusy] = useState(false)
   useEffect(() => { onBusyChange(busy) }, [busy, onBusyChange])
   const [failure, setFailure] = useState<string | undefined>(undefined)
-  const [inheritedCatalog, setInheritedCatalog] = useState<{
-    provider: string
-    models: readonly LlmDiscoveredModel[]
-  } | undefined>(undefined)
+  const [notice, setNotice] = useState<string | undefined>(undefined)
+  // What the adapter has described so far, by id, for the route this card edits.
+  const [described, setDescribed] = useState<{
+    route: string | undefined
+    models: ReadonlyMap<string, LlmDiscoveredModel>
+  }>({ route: undefined, models: new Map() })
+  const route = catalogProvider ?? probe.provider
+  const descriptions = described.route === route ? described.models : new Map<string, LlmDiscoveredModel>()
+  const learn = (found: readonly LlmDiscoveredModel[]): void => {
+    setDescribed(current => ({
+      route,
+      models: new Map([...current.route === route ? current.models : [], ...found.map(model => [model.id, model] as const)]),
+    }))
+  }
+  // The rows as last drafted, for an answer that arrives after further edits.
+  const latest = useRef(models)
+  latest.current = models
+  const idsOf = (rows: readonly ModelDraft[]): string[] => [...new Set(rows.map(model => textOf(model, 'id')).filter(id => id.length > 0))]
+  // A route the adapter knows, or a draft endpoint, identifies what to describe.
+  const describable = probe.provider !== undefined || (probe.baseURL !== undefined && probe.baseURL.length > 0)
+  const describeRequest = (ids: readonly string[]): LlmModelDiscoveryRequest => ({
+    ...probe.provider === undefined ? {} : { provider: probe.provider },
+    ...probe.baseURL === undefined || probe.baseURL.length === 0 ? {} : { baseURL: probe.baseURL },
+    ...probe.api === undefined ? {} : { api: probe.api },
+    describe: ids,
+  })
+  const [catalogLoaded, setCatalogLoaded] = useState<string | undefined>(undefined)
   useEffect(() => {
-    if (catalogProvider === undefined) return
+    if (route === undefined || probe.provider === undefined) return
     let current = true
-    void operations.discoverModels(probe.settingsNs, { provider: catalogProvider }).then((answer) => {
+    // Opening the card describes the installed catalog and the saved ids; nothing reaches the endpoint.
+    void operations.discoverModels(probe.settingsNs, describeRequest(idsOf(latest.current))).then((answer) => {
       if (!current) return
-      setInheritedCatalog({ provider: catalogProvider, models: answer.kind === 'found' ? answer.models : [] })
+      if (answer.kind === 'found') learn(answer.models)
+      setCatalogLoaded(route)
       setFailure(answer.kind === 'refused' ? answer.message : undefined)
     })
     return () => { current = false }
-  }, [catalogProvider, operations, probe.settingsNs])
-  const catalog = inheritedCatalog?.provider === catalogProvider ? inheritedCatalog?.models : undefined
-  const inputDefaults = useMemo(() => new Map(catalog?.map(model => [model.id, model.inputModalities])), [catalog])
+    // Described once per route: later rows are described as they are typed or fetched.
+  }, [route, operations, probe.settingsNs])
+  const inputDefaults = useMemo(() => new Map([...descriptions.values()]
+    .filter(model => model.inCatalog !== false)
+    .map(model => [model.id, model.inputModalities])), [descriptions])
+
+  /**
+   * Describe an id just typed and, for a row that states no reasoning yet,
+   * apply what is suggested with confidence.
+   * @param id - the id the row's field was left with.
+   */
+  const describeTyped = (id: string): void => {
+    if (id.length === 0 || !describable) return
+    const settle = (description: LlmDiscoveredModel | undefined): void => {
+      if (description?.inCatalog !== false || !showsReasoning(description)) return
+      const rows = latest.current
+      const next = rows.map(row => textOf(row, 'id') === id ? withSuggestion(row, description.reasoning) : row)
+      if (next.some((row, at) => row !== rows[at])) onChange(next)
+    }
+    const known = descriptions.get(id)
+    if (known !== undefined) { settle(known); return }
+    void operations.discoverModels(probe.settingsNs, describeRequest([id])).then((answer) => {
+      if (answer.kind !== 'found') return
+      learn(answer.models)
+      settle(answer.models.find(model => model.id === id))
+    })
+  }
   const [candidates, setCandidates] = useState<readonly LlmDiscoveredModel[] | undefined>(undefined)
   // Candidates whose checkbox the user flipped from its default. The default
   // is read from the list at render, so a row drafted while the fetch was in
@@ -212,19 +310,20 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
   const fetchModels = async (): Promise<void> => {
     setBusy(true)
     setFailure(undefined)
+    setNotice(undefined)
     try {
       const answer = await operations.discoverModels(probe.settingsNs, {
-        ...probe.provider === undefined ? {} : { provider: probe.provider },
-        ...probe.baseURL === undefined || probe.baseURL.length === 0 ? {} : { baseURL: probe.baseURL },
-        ...probe.api === undefined ? {} : { api: probe.api },
+        ...describeRequest(idsOf(models)),
         ...probe.apiKey === undefined ? {} : { apiKey: probe.apiKey },
+        listEndpoint: true,
       })
       if (answer.kind === 'refused') {
         setFailure(answer.message)
         return
       }
       const found = answer.models
-      if (catalogProvider !== undefined) setInheritedCatalog({ provider: catalogProvider, models: found })
+      learn(found)
+      setNotice(answer.notice)
       if (found.length === 0) {
         setFailure(t('fetchEmpty'))
         return
@@ -308,7 +407,64 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
 
   // A route the adapter already describes answers without an endpoint; only a
   // draft with neither has nothing to ask about.
-  const askable = probe.provider !== undefined || (probe.baseURL !== undefined && probe.baseURL.length > 0)
+  const askable = describable
+  const levels = props.reasoningLevels ?? []
+
+  /** Whether a row outside the catalog edits its reasoning here. */
+  function showsReasoning(description: LlmDiscoveredModel | undefined): boolean {
+    return levels.length > 0 && (catalogProvider === undefined || description?.inCatalog === false)
+  }
+
+  /** How a description's suggestion reads, when it has one. */
+  const suggestionLabel = (description: LlmDiscoveredModel | undefined): string | undefined => {
+    const suggested = description?.reasoning?.suggested
+    if (suggested === undefined) return undefined
+    if (suggested === false) return t('modelEffortNone')
+    const template = description.template
+    return template === undefined ? t('modelEffortAsEndpoint') : t('modelEffortAs').replace('{model}', () => template)
+  }
+
+  /** The folded row's account of its reasoning and the one action that settles it. */
+  const summaryOf = (model: ModelDraft, index: number, description: LlmDiscoveredModel | undefined): EffortSummary | undefined => {
+    const reasoning = description?.reasoning
+    const choice = reasoningChoice(model, reasoning ?? undescribedReasoning(levels))
+    const label = suggestionLabel(description)
+    const replace = (next: ModelDraft): void => { onChange(models.map((row, at) => at === index ? next : row)) }
+    if (choice === 'unset') {
+      if (reasoning === undefined) return { text: t('modelEffortSummaryUnset'), pending: true }
+      if (label === undefined) {
+        return {
+          text: t('modelEffortSummaryUnknown'),
+          pending: true,
+          action: { label: t('modelEffortUseStandard'), run: () => { replace(withProposal(model, reasoning.standard)) } },
+        }
+      }
+      return {
+        text: t('modelEffortSummarySuggested').replace('{choice}', () => label),
+        pending: true,
+        action: { label: t('modelEffortApply'), run: () => { replace(withSuggestion(model, reasoning)) } },
+      }
+    }
+    const text = choice === 'none'
+      ? t('modelEffortNone')
+      : choice === 'suggested' && label !== undefined
+        ? label
+        : choice === 'standard' ? t('modelEffortStandard') : t('modelEffortCustom')
+    return { text: t('modelEffortSummary').replace('{choice}', () => text), pending: false }
+  }
+
+  // Saved rows that state no reasoning while a confident suggestion exists, settled together on request.
+  const settleable = models.filter((model) => {
+    const description = descriptions.get(textOf(model, 'id'))
+    return showsReasoning(description) && reasoningChoice(model, description?.reasoning) === 'unset'
+      && description?.reasoning?.suggested !== undefined
+  }).length
+  const settleAll = (): void => {
+    onChange(models.map((model) => {
+      const description = descriptions.get(textOf(model, 'id'))
+      return showsReasoning(description) ? withSuggestion(model, description?.reasoning) : model
+    }))
+  }
   return (
     <section className={styles['modelCatalog']} aria-label={t('models')}>
       <div className={styles['modelListHead']}>
@@ -346,42 +502,63 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
           {busy ? t('fetching') : t('fetchModels')}
         </button>
       </div>
+      {settleable > 0
+        ? (
+          <p className={styles['modelEffortPending']}>
+            <span>{t('modelEffortPendingRows').replace('{count}', () => String(settleable))}</span>
+            <button type="button" className={styles['linkButton']} disabled={disabled} onClick={settleAll}>
+              {t('modelEffortApplyAll')}
+            </button>
+          </p>
+        )
+        : null}
       {models.length === 0 ? <p className={styles['modelEmpty']}>{t('modelsEmpty')}</p> : null}
       <AnimatedRows className={styles['modelList'] as string} rowKeys={rowState.rows.map(row => String(row.key))} ready resetKey="">
-        {rowState.rows.map(({ model, key, expanded, order }, index) => (
-          <ModelRow
-            key={key}
-            rowKey={key}
-            order={order}
-            model={model}
-            position={index + 1}
-            inputField="input"
-            inputFallback={inputDefaults.get(textOf(model, 'id')) ?? props.defaultInput}
-            inputLoading={catalogProvider !== undefined && catalog === undefined}
-            reasoningLevels={props.reasoningLevels}
-            reasoningLevelsOnly={props.reasoningLevelsOnly}
-            expanded={expanded}
-            disabled={disabled}
-            t={t}
-            contextWindow={{
-              value: capacityText(model, index, 'contextWindow'),
-              placeholder: CAPACITY_HINT.contextWindow,
-              onChange: (text) => { editCapacity(index, 'contextWindow', text) },
-            }}
-            maxTokens={{
-              value: capacityText(model, index, 'maxTokens'),
-              placeholder: CAPACITY_HINT.maxTokens,
-              onChange: (text) => { editCapacity(index, 'maxTokens', text) },
-            }}
-            onFieldChange={(field, value) => { patch(index, { [field]: value }) }}
-            onChange={(next) => { onChange(models.map((row, at) => at === index ? next : row)) }}
-            onToggle={() => { rowState.toggle(index) }}
-            onRemove={() => {
-              onChange(models.filter((_model, at) => at !== index))
-              rowState.forget(new Set([index]))
-            }}
-          />
-        ))}
+        {rowState.rows.map(({ model, key, expanded, order }, index) => {
+          const description = descriptions.get(textOf(model, 'id'))
+          // A row stating its own levels keeps them editable, wherever its id sits.
+          const reasoningShown = showsReasoning(description) || (levels.length > 0 && model['reasoningEfforts'] !== undefined)
+          const outside = description?.inCatalog === false
+          return (
+            <ModelRow
+              key={key}
+              rowKey={key}
+              order={order}
+              model={model}
+              position={index + 1}
+              inputField="input"
+              inputFallback={inputDefaults.get(textOf(model, 'id')) ?? props.defaultInput}
+              inputLoading={catalogProvider !== undefined && catalogLoaded !== route}
+              reasoningLevels={reasoningShown ? levels : undefined}
+              reasoningLevelsOnly={props.reasoningLevelsOnly}
+              reasoning={outside ? description.reasoning : undefined}
+              suggestionLabel={outside ? suggestionLabel(description) : undefined}
+              effortSummary={reasoningShown && textOf(model, 'id').length > 0 ? summaryOf(model, index, outside ? description : undefined) : undefined}
+              sourceNote={outside ? sourceNoteOf(model, description, t) : undefined}
+              expanded={expanded}
+              disabled={disabled}
+              t={t}
+              contextWindow={{
+                value: capacityText(model, index, 'contextWindow'),
+                placeholder: CAPACITY_HINT.contextWindow,
+                onChange: (text) => { editCapacity(index, 'contextWindow', text) },
+              }}
+              maxTokens={{
+                value: capacityText(model, index, 'maxTokens'),
+                placeholder: CAPACITY_HINT.maxTokens,
+                onChange: (text) => { editCapacity(index, 'maxTokens', text) },
+              }}
+              onFieldChange={(field, value) => { patch(index, { [field]: value }) }}
+              onIdBlur={(id) => { describeTyped(id.trim()) }}
+              onChange={(next) => { onChange(models.map((row, at) => at === index ? next : row)) }}
+              onToggle={() => { rowState.toggle(index) }}
+              onRemove={() => {
+                onChange(models.filter((_model, at) => at !== index))
+                rowState.forget(new Set([index]))
+              }}
+            />
+          )
+        })}
       </AnimatedRows>
       <button
         type="button"
@@ -393,6 +570,7 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
         {t('addModel')}
       </button>
       {failure !== undefined ? <p className={styles['error']}>{failure}</p> : null}
+      {notice !== undefined ? <p className={styles['modelEffortNote']} role="status">{notice}</p> : null}
       <Modal
         open={candidates !== undefined}
         onClose={closePicker}
@@ -447,6 +625,9 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
                     <span className={styles['candidateId']} title={candidate.name ?? candidate.id}>
                       {candidate.id}
                     </span>
+                    {catalogProvider !== undefined && candidate.inCatalog === false
+                      ? <span className={styles['candidateBadge']}>{t('fetchNotInCatalog')}</span>
+                      : null}
                   </label>
                 </li>
               ))}

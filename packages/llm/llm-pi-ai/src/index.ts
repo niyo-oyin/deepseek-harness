@@ -296,6 +296,7 @@ export function apply(ctx: Context, config: Config): void {
     if (profile === undefined) return undefined
     return {
       headers: profile.headers,
+      baseURL: profile.baseURL,
       resolveApiKey: () => resolveApiKey(provider, profile),
     }
   }

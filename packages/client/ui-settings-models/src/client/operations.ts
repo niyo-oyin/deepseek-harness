@@ -23,10 +23,10 @@ export type SettingsWriteOutcome =
   /** Any other refusal, with the Host's own diagnostic. */
   | { readonly kind: 'refused'; readonly message: string }
 
-/** What one endpoint interrogation answered. */
+/** What one discovery answered. */
 export type ModelDiscoveryOutcome =
-  /** The candidates the provider disclosed, in its own order. */
-  | { readonly kind: 'found'; readonly models: readonly LlmDiscoveredModel[] }
+  /** The described models in answer order, and why the endpoint was skipped when it was. */
+  | { readonly kind: 'found'; readonly models: readonly LlmDiscoveredModel[]; readonly notice?: string }
   /** The interrogation was refused, with the Host's own diagnostic. */
   | { readonly kind: 'refused'; readonly message: string }
 
@@ -92,7 +92,7 @@ export function createModelsOperations(ctx: ClientContext): ModelsOperations {
     discoverModels: async (settingsNs, request) => {
       const response = await ctx.remote.llm.discoverModels(settingsNs, request)
       return response.ok
-        ? { kind: 'found', models: response.value }
+        ? { kind: 'found', models: response.value.models, ...response.value.notice === undefined ? {} : { notice: response.value.notice } }
         : { kind: 'refused', message: response.error.message }
     },
   }
