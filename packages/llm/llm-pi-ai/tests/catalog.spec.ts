@@ -955,6 +955,7 @@ describe('compat switches', () => {
     expect(models.get('acme-opus')?.compat).toEqual({
       supportsTemperature: false,
       supportsCacheControlOnTools: false,
+      supportsMessageThreads: false,
     })
   })
 

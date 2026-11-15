@@ -68,4 +68,22 @@ describe('pi-ai gateway compatibility declarations', () => {
   it('keeps generic additions absent unless configured', () => {
     expect(resolved({})).toBeUndefined()
   })
+
+  it.each([
+    { compat: { requiresNonNullAssistantContent: true } },
+    { compat: { requiresToolsWithToolHistory: true } },
+    { compat: { promptCacheKeyMode: 'disabled' } },
+    { compat: { promptCacheKeyMode: 'enabled' }, api: 'openai-responses' },
+  ])('preserves gateway switch $compat on $api', ({ compat, api }) => {
+    expect(resolved(compat, api)).toMatchObject(compat)
+  })
+
+  it('keeps Anthropic message threads off unless a profile enables them', () => {
+    const catalog = resolveProfiles({ anthropic: {} }).get('anthropic')?.piProvider?.getModels() ?? []
+    expect(catalog.length).toBeGreaterThan(0)
+    const threads = catalog.map(model => (model.compat as { supportsMessageThreads?: boolean } | undefined)?.supportsMessageThreads)
+    expect(new Set(threads)).toEqual(new Set([false]))
+    expect(resolved({}, 'anthropic-messages')).toEqual({ supportsMessageThreads: false })
+    expect(resolved({ supportsMessageThreads: true }, 'anthropic-messages')).toMatchObject({ supportsMessageThreads: true })
+  })
 })

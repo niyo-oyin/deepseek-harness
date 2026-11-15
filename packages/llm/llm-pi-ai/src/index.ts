@@ -63,6 +63,8 @@ import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import { assertUsableApiKey, LlmError, resolveImageAttachmentAccess } from '@deepseek-ai/dsh-llm'
 import type { AdapterRegistrationHandle, DirectoryRegistrationHandle, LlmConfigurableProvider } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-fs'
+import type {} from '@deepseek-ai/dsh-session'
+import { cleanupSessionResources } from '@earendil-works/pi-ai'
 import { deepEqualJson } from '@deepseek-ai/dsh-util-values'
 import { PiAiAdapter } from './adapter.ts'
 import { authContextFrom, credentialStoreFrom } from './auth.ts'
@@ -337,6 +339,11 @@ export function apply(ctx: Context, config: Config): void {
     registeredFacts = facts
   }
   ensureRegistrationFacts()
+
+  // pi-ai keeps per-session state keyed by the request's session id — the
+  // Anthropic message thread when a profile enables it, tools Claude refused
+  // as strict, Codex continuation — until it is told the session ended.
+  ctx.on('session/disposed', (session) => { cleanupSessionResources(String(session.id)) }, { global: true })
 
   ctx.on('loader/volatile-update', () => {
     try { ensureRegistrationFacts(); ensureDirectory() }

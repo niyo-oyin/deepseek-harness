@@ -14,7 +14,7 @@
  */
 import type { Volatile } from '@deepseek-ai/cordis'
 
-import type { CacheRetention, ChatTemplateKwargValue, ModelThinkingLevel, Provider, ThinkingBudgets, Transport } from '@earendil-works/pi-ai'
+import type { CacheRetention, ModelThinkingLevel, Provider, ThinkingBudgets, Transport } from '@earendil-works/pi-ai'
 import z from '@deepseek-ai/schemastery'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
@@ -28,12 +28,14 @@ import {
   MAX_TOKENS_FIELDS,
   MODALITIES,
   PiAiCatalogError,
+  PROMPT_CACHE_KEY_MODES,
   resolveRouteModels,
   SUPPORTED_THINKING_FORMATS,
   THINKING_LEVELS,
   THINKING_TOKEN_BUDGET_FIELDS,
 } from './catalog.ts'
 import type {
+  PiAiChatTemplateKwarg,
   PiAiCompatProfile,
   PiAiModality,
   PiAiModelOverride,
@@ -95,6 +97,7 @@ export const DEFAULT_MAX_TOKENS = 128_000
 export const DEFAULT_INPUT: readonly PiAiModality[] = ['text']
 
 export type {
+  PiAiChatTemplateKwarg,
   PiAiCompatProfile,
   PiAiModality,
   PiAiModelOverride,
@@ -287,7 +290,7 @@ const thinkingBudgets = z.object({
  * thinking state, which makes a template-driven gateway configurable without
  * restating its template.
  */
-const chatTemplateKwarg: z<ChatTemplateKwargValue> = z.union([
+const chatTemplateKwarg: z<PiAiChatTemplateKwarg> = z.union([
   z.string(),
   z.number(),
   z.boolean(),
@@ -307,6 +310,8 @@ const compatProfile: z<PiAiCompatProfile> = z.object({
   maxTokensField: z.union(MAX_TOKENS_FIELDS),
   requiresToolResultName: z.boolean(),
   requiresAssistantAfterToolResult: z.boolean(),
+  requiresNonNullAssistantContent: z.boolean(),
+  requiresToolsWithToolHistory: z.boolean(),
   requiresThinkingAsText: z.boolean(),
   requiresReasoningContentOnAssistantMessages: z.boolean(),
   thinkingFormat: z.union(SUPPORTED_THINKING_FORMATS),
@@ -318,6 +323,7 @@ const compatProfile: z<PiAiCompatProfile> = z.object({
   supportsMaxOutputTokens: z.boolean(),
   supportsStrictMode: z.boolean(),
   cacheControlFormat: z.union(CACHE_CONTROL_FORMATS),
+  promptCacheKeyMode: z.union(PROMPT_CACHE_KEY_MODES),
   supportsLongCacheRetention: z.boolean(),
   supportsEagerToolInputStreaming: z.boolean(),
   supportsCacheControlOnTools: z.boolean(),
@@ -325,6 +331,7 @@ const compatProfile: z<PiAiCompatProfile> = z.object({
   forceAdaptiveThinking: z.boolean(),
   allowEmptySignature: z.boolean(),
   supportsStrictTools: z.boolean(),
+  supportsMessageThreads: z.boolean(),
 })
 
 /**

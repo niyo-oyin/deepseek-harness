@@ -18,7 +18,6 @@ import type {
   AnthropicMessagesCompat,
   Api,
   BedrockCompat,
-  ChatTemplateKwargValue,
   KnownApi,
   MistralConversationsCompat,
   Model,
@@ -150,10 +149,35 @@ const CACHE_CONTROL_FORMAT_GATE: Record<PiAiCacheControlFormat, true> = {
 /** The prompt-cache marker conventions a profile may name. */
 export const CACHE_CONTROL_FORMATS = Object.keys(CACHE_CONTROL_FORMAT_GATE) as readonly PiAiCacheControlFormat[]
 
-/** The request-state placeholders a `chat_template_kwargs` value may name. */
-export type PiAiChatTemplateVar = Extract<ChatTemplateKwargValue, { $var: string }>['$var']
+/** The `prompt_cache_key` sending modes pi-ai accepts. */
+export type PiAiPromptCacheKeyMode = NonNullable<OpenAICompletionsCompat['promptCacheKeyMode']>
 
-/** Drift gate over {@link PiAiChatTemplateVar}; a new upstream placeholder fails compilation until named. */
+/** Drift gate over {@link PiAiPromptCacheKeyMode}; a new upstream mode fails compilation until named. */
+const PROMPT_CACHE_KEY_MODE_GATE: Record<PiAiPromptCacheKeyMode, true> = {
+  auto: true,
+  enabled: true,
+  disabled: true,
+}
+
+/** The `prompt_cache_key` sending modes a profile may name. */
+export const PROMPT_CACHE_KEY_MODES = Object.keys(PROMPT_CACHE_KEY_MODE_GATE) as readonly PiAiPromptCacheKeyMode[]
+
+/**
+ * One upstream type with every optional member's explicit `undefined` dropped,
+ * at any depth. pi-ai's schemas spell an optional member `?: T | undefined`,
+ * while this adapter's configuration, under `exactOptionalPropertyTypes`,
+ * leaves an unset member absent; both describe the same accepted values.
+ */
+type WithoutUndefinedMembers<T> = T extends object ? { [K in keyof T]: WithoutUndefinedMembers<Exclude<T[K], undefined>> } : T
+
+/**
+ * The request-state placeholders a `chat_template_kwargs` value may name.
+ * Spelled out rather than derived, so the config catalog can state them; a new
+ * upstream placeholder fails {@link EveryProfileFieldMatchesUpstream} until named.
+ */
+export type PiAiChatTemplateVar = 'thinking.enabled' | 'thinking.effort' | 'thinking.budget'
+
+/** Every {@link PiAiChatTemplateVar}, keyed so that none is left out of the list below. */
 const CHAT_TEMPLATE_VAR_GATE: Record<PiAiChatTemplateVar, true> = {
   'thinking.enabled': true,
   'thinking.effort': true,
@@ -162,6 +186,21 @@ const CHAT_TEMPLATE_VAR_GATE: Record<PiAiChatTemplateVar, true> = {
 
 /** The request-state placeholders a profile may name. */
 export const CHAT_TEMPLATE_VARS = Object.keys(CHAT_TEMPLATE_VAR_GATE) as readonly PiAiChatTemplateVar[]
+
+/**
+ * One `chat_template_kwargs` or `chat_template_args` value: a literal, or a
+ * placeholder dispatch fills from the request's thinking state.
+ * {@link EveryProfileFieldMatchesUpstream} holds it to pi-ai's own value type.
+ */
+export type PiAiChatTemplateKwarg = string | number | boolean | null | PiAiChatTemplatePlaceholder
+
+/** A `chat_template_kwargs` value dispatch fills from the request's thinking state. */
+export interface PiAiChatTemplatePlaceholder {
+  /** The request-state value sent in this kwarg's place. */
+  $var: PiAiChatTemplateVar
+  /** Whether to leave the kwarg out entirely while thinking is off. */
+  omitWhenOff?: boolean
+}
 
 let providerIndex: Map<string, Provider> | undefined
 
@@ -254,6 +293,8 @@ const COMPLETIONS_COMPAT_GATE = {
   maxTokensField: 'offer',
   requiresToolResultName: 'offer',
   requiresAssistantAfterToolResult: 'offer',
+  requiresNonNullAssistantContent: 'offer',
+  requiresToolsWithToolHistory: 'offer',
   requiresThinkingAsText: 'offer',
   requiresReasoningContentOnAssistantMessages: 'offer',
   thinkingFormat: 'offer',
@@ -264,6 +305,7 @@ const COMPLETIONS_COMPAT_GATE = {
   vllmPriority: 'offer',
   supportsStrictMode: 'offer',
   cacheControlFormat: 'offer',
+  promptCacheKeyMode: 'offer',
   supportsLongCacheRetention: 'offer',
   openRouterRouting: 'withhold',
   vercelGatewayRouting: 'withhold',
@@ -280,6 +322,7 @@ const RESPONSES_COMPAT_GATE = {
   supportsDeveloperRole: 'offer',
   supportsMaxOutputTokens: 'offer',
   supportsStrictMode: 'offer',
+  promptCacheKeyMode: 'offer',
   supportsLongCacheRetention: 'offer',
   sessionAffinityFormat: 'withhold',
   supportsOpenAIGrammarTools: 'withhold',
@@ -299,6 +342,7 @@ const ANTHROPIC_COMPAT_GATE = {
   forceAdaptiveThinking: 'offer',
   allowEmptySignature: 'offer',
   supportsStrictTools: 'offer',
+  supportsMessageThreads: 'offer',
   sendSessionAffinityHeaders: 'withhold',
   sessionAffinityFormat: 'withhold',
   supportsMidConvoSystemMessages: 'withhold',
@@ -410,6 +454,14 @@ export interface PiAiCompatProfile {
   requiresToolResultName?: boolean
   /** Whether a user message after tool results needs an assistant message between; `openai-completions`. */
   requiresAssistantAfterToolResult?: boolean
+  /** Whether a replayed assistant message with no text (only tool calls) must send `""` instead of `null` content; `openai-completions`. */
+  requiresNonNullAssistantContent?: boolean
+  /**
+   * Whether a request without tools must still send `"tools": []` when the
+   * history holds tool calls or results, as some proxies in front of
+   * Anthropic require; `openai-completions`.
+   */
+  requiresToolsWithToolHistory?: boolean
   /** Whether thinking blocks must travel as text in `<thinking>` delimiters; `openai-completions`. */
   requiresThinkingAsText?: boolean
   /** Whether replayed assistant messages need an empty `reasoning_content` while reasoning is on; `openai-completions`. */
@@ -423,9 +475,9 @@ export interface PiAiCompatProfile {
    * entry or from pi-ai's own baseURL detection, neither of which resolution
    * can read, so kwargs set beside another format are sent nowhere.
    */
-  chatTemplateKwargs?: NonNullable<OpenAICompletionsCompat['chatTemplateKwargs']>
+  chatTemplateKwargs?: Record<string, PiAiChatTemplateKwarg>
   /** Arguments sent as `chat_template_args` under the `baseten` thinking format; `openai-completions`. */
-  chatTemplateArgs?: NonNullable<OpenAICompletionsCompat['chatTemplateArgs']>
+  chatTemplateArgs?: Record<string, PiAiChatTemplateKwarg>
   /** Alias for `thinkingTokenBudgetField: "thinking_token_budget"`; an explicit field wins. `openai-completions`. */
   supportsThinkingTokenBudget?: boolean
   /** Request field carrying the reasoning budget from `thinkingBudgets`; omitted unless configured. `openai-completions`. */
@@ -441,6 +493,13 @@ export interface PiAiCompatProfile {
   supportsStrictMode?: boolean
   /** Prompt-cache marker convention; `openai-completions`. */
   cacheControlFormat?: NonNullable<OpenAICompletionsCompat['cacheControlFormat']>
+  /**
+   * When to send `prompt_cache_key`: `auto` lets pi-ai decide per protocol,
+   * `enabled` sends it whenever caching is active, `disabled` never sends it,
+   * for a proxy that rejects the field. `openai-completions` and the three
+   * Responses protocols.
+   */
+  promptCacheKeyMode?: PiAiPromptCacheKeyMode
   /**
    * Whether the endpoint accepts long prompt-cache retention;
    * `openai-completions`, the three Responses protocols, `anthropic-messages`.
@@ -458,6 +517,13 @@ export interface PiAiCompatProfile {
   allowEmptySignature?: boolean
   /** Whether the endpoint accepts Anthropic strict tool schemas; `anthropic-messages`. */
   supportsStrictTools?: boolean
+  /**
+   * Whether to use Anthropic message threads, which keep the conversation on
+   * the provider's side so a request sends only the new messages. Off unless
+   * set, on every route; `true` needs an endpoint that accepts the `thread`
+   * request field, as api.anthropic.com does. `anthropic-messages`.
+   */
+  supportsMessageThreads?: boolean
 }
 
 /** Compile-time constraint that `T` is `never`. */
@@ -492,10 +558,13 @@ type UpstreamCompat = OpenAICompletionsCompat & OpenAIResponsesCompat & Anthropi
  * union would otherwise leave configuration silently behind.
  */
 export type EveryProfileFieldMatchesUpstream = AssertTrue<
-  PiAiCompatProfile extends Partial<Pick<UpstreamCompat, OfferedCompatField>>
-    ? Partial<Pick<UpstreamCompat, OfferedCompatField>> extends PiAiCompatProfile ? true : false
+  PiAiCompatProfile extends OfferedUpstreamCompat
+    ? OfferedUpstreamCompat extends PiAiCompatProfile ? true : false
     : false
 >
+
+/** The upstream types of the offered fields, spelled as a profile states them. */
+type OfferedUpstreamCompat = WithoutUndefinedMembers<Partial<Pick<UpstreamCompat, OfferedCompatField>>>
 
 /**
  * The compat entries a profile actually set.
@@ -816,6 +885,11 @@ function resolveModelCompat(
     }
     configured[field] = value
   }
+  // pi-ai turns Anthropic message threads on by itself for `anthropic` on
+  // api.anthropic.com once a request carries a session id, which every agent
+  // request here does. Threads keep conversation state on the provider's side,
+  // so they stay off unless a profile turns them on.
+  if (api === 'anthropic-messages') configured['supportsMessageThreads'] ??= false
   if (Object.keys(configured).length === 0) return {}
   // The installed entry's compat matches the entry's OWN api — a route-level
   // `api` repoint (an anthropic catalog served through an OpenAI-compatible

@@ -41,7 +41,7 @@ async function collect(events: AsyncIterable<AssistantMessageEvent>): Promise<{ 
 
 const context = normalizeContext({ messages: [{ role: 'user', content: 'hi', timestamp: 0 }] })
 
-describe('streamed tool-call arguments (patched pi-ai)', () => {
+describe('streamed tool-call arguments', () => {
   it('preserves an empty Responses message after parallel tool calls with its replay metadata', async () => {
     const calls = [0, 1, 2].map(index => ({ type: 'function_call', call_id: `call_${index}`, id: `item_${index}`, name: 'read', arguments: '{}' }))
     const empty = { type: 'message', id: 'message_empty', role: 'assistant', content: [{ type: 'output_text', text: '', annotations: [] }] }
@@ -71,62 +71,78 @@ describe('streamed tool-call arguments (patched pi-ai)', () => {
     expect(server.requests).toHaveLength(1)
   })
 
-  it('openai-completions parses arguments once, at the end of the call', async () => {
-    const server = await mockServer([{ events: [
-      JSON.stringify({ choices: [{
-        delta: {
-          role: 'assistant',
-          tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: 'write', arguments: '' } }],
-        },
-        index: 0, finish_reason: null,
-      }] }),
-      ...fragments.map(fragment => JSON.stringify({
-        choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: fragment } }] }, index: 0, finish_reason: null }],
-      })),
-      '{"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":3,"completion_tokens":1}}',
-      '[DONE]',
-    ] }])
-    const events = streamCompletions(model('openai-completions', server.url), context, { apiKey: 'test-key' })
-    const { partials, final } = await collect(events)
+  /** Server events for one `write` call whose arguments arrive in the given fragments. */
+  const protocols: Array<{ api: 'openai-completions' | 'anthropic-messages' | 'openai-responses'; events: (pieces: readonly string[], json: string) => Array<string | { event: string; data: string }>; stream: (url: string) => AsyncIterable<AssistantMessageEvent> }> = [
+    {
+      api: 'openai-completions',
+      events: pieces => [
+        JSON.stringify({ choices: [{
+          delta: { role: 'assistant', tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: 'write', arguments: '' } }] },
+          index: 0, finish_reason: null,
+        }] }),
+        ...pieces.map(piece => JSON.stringify({
+          choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: piece } }] }, index: 0, finish_reason: null }],
+        })),
+        '{"choices":[{"delta":{},"index":0,"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":3,"completion_tokens":1}}',
+        '[DONE]',
+      ],
+      stream: url => streamCompletions(model('openai-completions', url), context, { apiKey: 'test-key' }),
+    },
+    {
+      api: 'anthropic-messages',
+      events: pieces => [
+        anthropicMessageStart,
+        frame({ type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'toolu_1', name: 'write', input: {} } }),
+        ...pieces.map(piece => frame({ type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: piece } })),
+        frame({ type: 'content_block_stop', index: 0 }),
+        frame({ type: 'message_delta', delta: { stop_reason: 'tool_use', stop_sequence: null }, usage: { output_tokens: 5 } }),
+        frame({ type: 'message_stop' }),
+      ],
+      stream: url => streamAnthropic(model('anthropic-messages', url), context, { apiKey: 'test-key' }),
+    },
+    {
+      api: 'openai-responses',
+      events: (pieces, json) => {
+        const item = { type: 'function_call', call_id: 'call_1', id: 'fc_1', name: 'write' }
+        return [
+          '{"type":"response.created","response":{"id":"resp_1"}}',
+          JSON.stringify({ type: 'response.output_item.added', output_index: 0, item: { ...item, arguments: '' } }),
+          ...pieces.map(piece => JSON.stringify({ type: 'response.function_call_arguments.delta', output_index: 0, delta: piece })),
+          JSON.stringify({ type: 'response.function_call_arguments.done', output_index: 0, arguments: json }),
+          JSON.stringify({ type: 'response.output_item.done', output_index: 0, item: { ...item, arguments: json } }),
+          JSON.stringify({ type: 'response.completed', response: {
+            id: 'resp_1', status: 'completed', output: [], usage: { input_tokens: 3, output_tokens: 1, total_tokens: 4 },
+          } }),
+        ]
+      },
+      stream: url => streamResponses(model('openai-responses', url), context, { apiKey: 'test-key' }),
+    },
+  ]
+
+  it.each(protocols)('$api shows each delta as a growing partial and parses the complete arguments', async ({ events, stream }) => {
+    const server = await mockServer([{ events: events(fragments, argsJson) }])
+    const { partials, final } = await collect(stream(server.url))
     expect(partials).toHaveLength(fragments.length)
-    expect(partials.every(partial => JSON.stringify(partial) === '{}')).toBe(true)
+    // Every partial is a snapshot of the text read so far, never a value from later text.
+    for (const partial of partials) {
+      const content = (partial as { content?: unknown }).content
+      if (content !== undefined) expect(args.content.startsWith(content as string)).toBe(true)
+    }
     expect(final).toEqual(args)
   })
 
-  it('anthropic-messages parses arguments once, at the end of the call', async () => {
-    const server = await mockServer([{ events: [
-      anthropicMessageStart,
-      frame({ type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'toolu_1', name: 'write', input: {} } }),
-      ...fragments.map(fragment => frame({
-        type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: fragment },
-      })),
-      frame({ type: 'content_block_stop', index: 0 }),
-      frame({ type: 'message_delta', delta: { stop_reason: 'tool_use', stop_sequence: null }, usage: { output_tokens: 5 } }),
-      frame({ type: 'message_stop' }),
-    ] }])
-    const events = streamAnthropic(model('anthropic-messages', server.url), context, { apiKey: 'test-key' })
-    const { partials, final } = await collect(events)
-    expect(partials).toHaveLength(fragments.length)
-    expect(partials.every(partial => JSON.stringify(partial) === '{}')).toBe(true)
-    expect(final).toEqual(args)
-  })
-
-  it('openai-responses parses arguments once, at the end of the call', async () => {
-    const item = { type: 'function_call', call_id: 'call_1', id: 'fc_1', name: 'write' }
-    const server = await mockServer([{ events: [
-      '{"type":"response.created","response":{"id":"resp_1"}}',
-      JSON.stringify({ type: 'response.output_item.added', output_index: 0, item: { ...item, arguments: '' } }),
-      ...fragments.map(fragment => JSON.stringify({ type: 'response.function_call_arguments.delta', output_index: 0, delta: fragment })),
-      JSON.stringify({ type: 'response.function_call_arguments.done', output_index: 0, arguments: argsJson }),
-      JSON.stringify({ type: 'response.output_item.done', output_index: 0, item: { ...item, arguments: argsJson } }),
-      JSON.stringify({ type: 'response.completed', response: {
-        id: 'resp_1', status: 'completed', output: [], usage: { input_tokens: 3, output_tokens: 1, total_tokens: 4 },
-      } }),
-    ] }])
-    const events = streamResponses(model('openai-responses', server.url), context, { apiKey: 'test-key' })
-    const { partials, final } = await collect(events)
-    expect(partials).toHaveLength(fragments.length)
-    expect(partials.every(partial => JSON.stringify(partial) === '{}')).toBe(true)
-    expect(final).toEqual(args)
-  })
+  // Re-parsing the accumulated JSON on every delta costs O(n²) for this stream: tens of seconds,
+  // during which the event loop serves no other session. Read once per delta, it takes well under one.
+  it.each(protocols)('$api streams a megabyte of arguments in linear time', async ({ events, stream }) => {
+    const large = { file_path: 'notes.md', content: 'x'.repeat(1 << 20) }
+    const largeJson = JSON.stringify(large)
+    // 128-character pieces keep the scripted stream within the mock server's event budget.
+    const pieces = largeJson.match(/.{1,128}/gs) ?? []
+    const server = await mockServer([{ events: events(pieces, largeJson) }])
+    const started = performance.now()
+    const { partials, final } = await collect(stream(server.url))
+    expect(performance.now() - started).toBeLessThan(15_000)
+    expect(partials).toHaveLength(pieces.length)
+    expect(final).toEqual(large)
+  }, 30_000)
 })
