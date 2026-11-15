@@ -776,9 +776,6 @@ importers:
       '@deepseek-ai/dsh-client-ui-theme':
         specifier: workspace:*
         version: link:../../packages/client/ui-theme
-      '@deepseek-ai/dsh-deepseek-account':
-        specifier: workspace:*
-        version: link:../../packages/credentials/deepseek-account
       '@deepseek-ai/dsh-desktop-publisher':
         specifier: workspace:*
         version: link:../desktop-publisher
@@ -884,9 +881,6 @@ importers:
       '@deepseek-ai/dsh-client-connection':
         specifier: workspace:*
         version: link:../../packages/client/connection
-      '@deepseek-ai/dsh-deepseek-account':
-        specifier: workspace:*
-        version: link:../../packages/credentials/deepseek-account
       '@deepseek-ai/dsh-host-authentication-desktop':
         specifier: workspace:*
         version: link:../../packages/host/authentication-desktop

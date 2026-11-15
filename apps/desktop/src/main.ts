@@ -27,7 +27,6 @@ import {
 import { resolveDesktopPaths } from './paths.ts'
 import { DesktopProjectManager } from './project-manager.ts'
 import { DesktopHostFatalError, DesktopHostProcess, DesktopHostUncleanExitError } from './host-process.ts'
-import { DesktopPlatformView, PLATFORM_IPC, platformBounds } from './platform-view.ts'
 import { installDesktopFileDrag } from './file-drag.ts'
 import { installDesktopDirectoryPicker } from './directory-picker.ts'
 import { installMicrophonePermissions } from './microphone-permissions.ts'
@@ -497,15 +496,12 @@ async function main(): Promise<void> {
     navigation = next
     return next.promise
   }
-  const platformView = new DesktopPlatformView(join(app.getAppPath(), 'lib', 'preload-platform-account.cjs'),
-    () => locale.id === 'zh-CN' ? 'zh_CN' : 'en_US', process.platform === 'win32' ? 'win32' : 'darwin',
-    owner => isMandatory() || updateOverlays.input(owner).blocked)
   const backend = new DesktopBackendController((onFailure) => {
     const hostInspectPort = developmentHostInspectPort(development)
     const host = new DesktopHostProcess(resources.node, resources.dsh, activeProject,
       hostInspectPort, { ...hostEnvironment, DSH_CLIENT_VERSION: desktopClientVersion() }, onFailure,
       primaryRuntime,
-      resources, (next) => { platformView.setSession(next) }, (record) => {
+      resources, (record) => {
         operationJournal ??= new OperationJournal(join(app.getPath('userData'), 'plugin-operations'), {
           segmentBytes: 256 * 1024, recordBytes: 4096, queuedBytes: 64 * 1024,
         })
@@ -659,8 +655,6 @@ async function main(): Promise<void> {
         const stillActive = await host.updateTasks('lock')
         if (stillActive && !active) throw new DesktopUpdatePreparationError('tasks-changed', locale.messages.updateTasksChanged)
         mandatoryUI?.preparingRestart(stillActive)
-        // The embedded Platform document holds credentials issued by the Host that is about to stop.
-        await platformView.closeAndWait()
         await disposeFileDrag().catch((error: unknown) => { console.error(error) })
         requireCleanStop = true
         updateStopFailure = undefined
@@ -782,24 +776,10 @@ async function main(): Promise<void> {
   const assertMainApplication = (event: IpcMainInvokeEvent): BrowserWindow => {
     const owner = mainWindow
     if (owner === undefined || event.sender !== owner.webContents || event.senderFrame !== owner.webContents.mainFrame
-      || !event.senderFrame.url.startsWith('dsh-app://app/')) throw new Error('Rejected Platform command')
+      || !event.senderFrame.url.startsWith('dsh-app://app/')) throw new Error('Rejected main application command')
     return owner
   }
   installFileActions(assertMainApplication, () => hostUrl)
-  ipcMain.on(PLATFORM_IPC.bootstrap, (event) => {
-    try { event.returnValue = platformView.bootstrap(event) }
-    catch { event.returnValue = null }
-  })
-  ipcMain.handle(PLATFORM_IPC.open, (event, page: unknown, bounds: unknown) => {
-    const owner = assertMainApplication(event)
-    if (page !== 'usage' && page !== 'top-up') throw new Error('Invalid Platform page')
-    return platformView.open(owner, page, platformBounds(bounds))
-  })
-  ipcMain.handle(PLATFORM_IPC.bounds, (event, bounds: unknown) => {
-    assertMainApplication(event)
-    platformView.setBounds(platformBounds(bounds))
-  })
-  ipcMain.handle(PLATFORM_IPC.close, (event) => { assertMainApplication(event); platformView.close() })
   // Only the main window may synchronize its palette with the native material.
   ipcMain.on(DESKTOP_IPC.nativeThemeSet, (event, source: unknown) => {
     if (mainWindow === undefined || event.sender !== mainWindow.webContents
@@ -824,7 +804,6 @@ async function main(): Promise<void> {
     writeDesktopLocaleCache(app.getPath('userData'), current.id)
     if (current.id === locale.id) return
     locale = current
-    platformView.notifyLocaleChanged()
     windowsLanguage = locale.id
     refreshApplicationMenu()
   })
@@ -1353,7 +1332,6 @@ async function main(): Promise<void> {
         await operationJournal?.drain(500)
         throw error
       }),
-      platformView.dispose(),
       disposeFileDrag(),
     ].map(cleanup => cleanup.catch((error: unknown) => { console.error(error) })))
       .then(() => { app.quit() })
@@ -1367,8 +1345,6 @@ async function main(): Promise<void> {
       tray?.dispose()
       updateDialog.dispose()
       mandatoryUI?.dispose()
-      // Installation preparation already awaited Platform storage cleanup.
-      void platformView.dispose().catch((error: unknown) => { console.error(error) })
       return
     }
     if (quitting) return
