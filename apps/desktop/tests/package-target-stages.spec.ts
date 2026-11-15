@@ -242,10 +242,26 @@ it.each([
   await expect(packageTarget(invocation, environment, run)).rejects.toThrow('stage refused')
   const failedAt = stages.findIndex(stage => stage.startsWith(failure))
   expect(failedAt).toBeGreaterThanOrEqual(0)
-  expect(stages.slice(failedAt + 1)).toEqual(
-    target === 'win-x64' && failure.startsWith('exec tsx') ? ['run prepare:runtime'] : [])
+  // Windows prepares the runtime beside the pack, so it may be recorded on either side of the failure.
+  expect(stages.slice(failedAt + 1).filter(stage => stage !== 'run prepare:runtime')).toEqual([])
   expect(stages.some(stage => stage.startsWith('--dir apps/desktop-host pack'))).toBe(false)
   expect(writeFileSync).not.toHaveBeenCalled()
+})
+
+it.each(['mac-arm64', 'win-x64'] as const)('publishes the Windows Computer Use helper before packing only for Windows (%s)', async (target) => {
+  const { run, stages } = supervisor()
+  const windows = target === 'win-x64'
+  await packageTarget(parseDesktopPackageInvocation([target, '--unsigned'], windows ? 'win32' : 'darwin', windows ? 'x64' : 'arm64'),
+    environment, run)
+  const helper = stages.indexOf('run prepare:cua-helper')
+  const pack = stages.findIndex(stage => stage.startsWith('exec tsx apps/desktop/scripts/pack-local-packages.ts'))
+  if (!windows) {
+    expect(helper).toBe(-1)
+    return
+  }
+  expect(helper).toBeGreaterThanOrEqual(0)
+  expect(helper).toBeLessThan(pack)
+  expect(run.run.mock.calls.find(([stage]) => stage === 'run prepare:cua-helper')?.[3].env.DSH_DESKTOP_TARGET_ARCH).toBe('x64')
 })
 
 it('checks the assembled macOS runtime before notarizing and recording the release', async () => {

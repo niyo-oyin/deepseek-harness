@@ -68,6 +68,34 @@ async function probeWindowsInstallerToolchain(environment: NodeJS.ProcessEnv): P
   return failures
 }
 
+/** Where the packaging host gets the SDK the Windows Computer Use helper builds with. */
+const DOTNET_SDK_DOWNLOAD = 'https://dotnet.microsoft.com/download/dotnet/10.0'
+
+/**
+ * Judge a `dotnet --list-sdks` listing for the Windows Computer Use helper,
+ * which targets .NET 10 and is published by `prepare-cua-helper.ts`.
+ * @param listing - The command's standard output, one `<version> [<path>]` line per SDK.
+ * @returns What is missing, or `undefined` when an SDK of version 10 or later is installed.
+ */
+export function dotnetSdkFailure(listing: string): string | undefined {
+  const versions = listing.split(/\r?\n/u).map(line => line.trim().split(/\s+/u)[0] ?? '').filter(version => /^\d+\./u.test(version))
+  if (versions.some(version => Number.parseInt(version, 10) >= 10)) return undefined
+  return `the Windows Computer Use helper needs the .NET 10 SDK (installed: ${versions.length === 0 ? 'none' : versions.join(', ')});`
+    + ` install it from ${DOTNET_SDK_DOWNLOAD}`
+}
+
+async function probeDotnetSdk(): Promise<string | undefined> {
+  try {
+    const listed = await run('dotnet', ['--list-sdks'], { windowsHide: true, timeout: 30_000 })
+    return dotnetSdkFailure(listed.stdout)
+  }
+  catch (error) {
+    const code = error instanceof Error && 'code' in error ? error.code : undefined
+    if (code === 'ENOENT') return `dotnet is not on PATH; the Windows Computer Use helper needs the .NET 10 SDK from ${DOTNET_SDK_DOWNLOAD}`
+    return error instanceof Error ? error.message : String(error)
+  }
+}
+
 /**
  * Probe every external tool one packaging run needs.
  * @param platform - Target platform; a Windows target already requires a Windows build host.
@@ -81,7 +109,11 @@ export async function probeDesktopToolchain(
   const failures: DesktopToolchainProbeFailure[] = []
   const tar = await probeTar()
   if (tar !== undefined) failures.push({ tool: 'tar', detail: tar })
-  if (platform === 'win32') failures.push(...await probeWindowsInstallerToolchain(environment))
+  if (platform === 'win32') {
+    failures.push(...await probeWindowsInstallerToolchain(environment))
+    const dotnet = await probeDotnetSdk()
+    if (dotnet !== undefined) failures.push({ tool: 'dotnet', detail: dotnet })
+  }
   return failures
 }
 

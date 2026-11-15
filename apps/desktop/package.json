@@ -22,6 +22,7 @@
     "prepare:primary-runtime": "tsx scripts/prepare-primary-runtime.ts",
     "sign:primary-runtime": "tsx scripts/sign-primary-runtime.ts",
     "cache:windows-signatures": "node scripts/manage-windows-signature-cache.mjs",
+    "prepare:cua-helper": "tsx scripts/prepare-cua-helper.ts",
     "prepare:packages": "tsx scripts/prepare-package-set.ts",
     "prepare:dsh": "tsx scripts/prepare-dsh.ts",
     "prepare:package": "tsx scripts/package-target.ts --prepare-only",

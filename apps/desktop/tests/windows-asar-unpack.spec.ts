@@ -263,6 +263,28 @@ it.each([false, true])('unpacks platform ripgrep executables with external sourc
   }
 })
 
+it.each([false, true])('keeps the Windows Computer Use helper directory outside ASAR with external source=%s', async (external) => {
+  const input = await fixture(external)
+  const helper = join('node_modules', '@deepseek-ai', 'dsh-cua-windows')
+  // The non-PE files the helper starts with must sit beside its exe, not only the PE files.
+  const files = ['native/bin/win-x64/dsh-cua-windows.runtimeconfig.json', 'native/bin/win-x64/dsh-cua-windows.deps.json',
+    'native/bin/win-x64/ja/System.CommandLine.resources.json']
+  for (const file of [...files, 'lib/index.js']) {
+    const path = join(input.source, helper, file)
+    await mkdir(dirname(path), { recursive: true })
+    await writeFile(path, '{}')
+  }
+  const config = unsignedWindowsConfig('com.example.cua', input.source)
+  input.config.asarUnpack = [...config.asarUnpack]
+  await packageFixture(input)
+  const archive = await readAsar(join(input.resources, 'app.asar'))
+  expect(archive.getFile(join('dsh', helper, 'lib/index.js')).unpacked).not.toBe(true)
+  for (const file of files) {
+    expect(archive.getFile(join('dsh', helper, file), false).unpacked).toBe(true)
+    expect(await readFile(join(input.resources, 'app.asar.unpacked', 'dsh', helper, file), 'utf8')).toBe('{}')
+  }
+})
+
 it.each([false, true])('keeps the complete Office engine outside ASAR with external source=%s', async (external) => {
   const input = await fixture(external)
   const engine = join('node_modules', '@deepseek-ai', 'libreoffice-kit-win32-x64')

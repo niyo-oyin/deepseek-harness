@@ -37,7 +37,7 @@ export function nativeHostArchitecture(platform: string, architecture: string): 
  * @returns Absolute payload path.
  */
 export function nativeExecutablePath(packageRoot: string, architecture: NativeArchitecture): string {
-  // TODO: Installed-package paths are placeholders until the Windows package layout is finalized.
+  // Desktop packaging publishes the helper here and unpacks the whole directory beside ASAR.
   const root = packageRoot.replace(/([\\/])app\.asar(?=[\\/])/u, '$1app.asar.unpacked')
   return join(root, 'native', 'bin', `win-${architecture}`, 'dsh-cua-windows.exe')
 }

@@ -1,4 +1,4 @@
-/** Validate the assembled application, including native Office conversion outside ASAR. */
+/** Validate the assembled application, including native Office conversion and the Windows Computer Use helper outside ASAR. */
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 import { desktopArtifactOutput, resolveDesktopBuildTarget, resolveDesktopTargetBuildPaths } from './desktop-build-paths.mjs'
@@ -7,6 +7,8 @@ import { verifyWindowsCode } from './windows-runtime-signature.mjs'
 import { smokePreparedRuntime } from './smoke-prepared-runtime.ts'
 import { resolveDesktopPackageTarget } from './package-target.ts'
 import { DESKTOP_PRODUCT_NAME } from './desktop-product.mjs'
+import { CUA_WINDOWS_PACKAGE_ROOT } from './prepare-cua-helper.ts'
+import { smokeCuaWindowsHelper } from './smoke-cua-helper.ts'
 
 const paths = resolveDesktopTargetBuildPaths()
 const { values } = parseArgs({ options: { unsigned: { type: 'boolean', default: false }, 'skip-notarization': { type: 'boolean', default: false } }, allowPositionals: false })
@@ -21,3 +23,7 @@ const descriptor = await verifyDesktopRuntime(paths.dsh, readDesktopRuntime(path
   resolveDesktopPackageTarget(target))
 if (windows && !values.unsigned) await verifyWindowsCode(application)
 await smokePreparedRuntime(join(resources, 'app.asar', 'dsh'), executable, join(resources, 'runtime'), descriptor)
+if (windows) {
+  const architecture = resolveDesktopPackageTarget(target).arch
+  await smokeCuaWindowsHelper(join(CUA_WINDOWS_PACKAGE_ROOT, 'native', 'bin', `win-${architecture}`), resources, architecture)
+}

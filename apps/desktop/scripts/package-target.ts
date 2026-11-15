@@ -486,6 +486,8 @@ export async function packageTarget(
     catch (error) { preparationFailure ??= { error }; throw error }
   }
   const pack = async (): Promise<void> => {
+    // The Windows Computer Use helper rides in its package's native/bin, so it is published before the package set is packed.
+    if (target.platform === 'win32') await executePreparation(['run', 'prepare:cua-helper'], targetEnv)
     await executePreparation([
       ...(invocation.unsigned
         ? ['exec', 'tsx', 'apps/desktop/scripts/pack-local-packages.ts']
