@@ -20,7 +20,7 @@ const searchProvider = (options: DeepSeekSearchApiOptions): DeepSeekSearchApiPro
   new DeepSeekSearchApiProvider(() => options)
 
 const BASE = 'https://api.deepseek.test/api/v1/tools'
-const auth = (key: string, baseURL = BASE): DeepSeekSearchApiOptions['auth'] => ({ sources: [{ kind: 'api-key', baseURL, key }] })
+const auth = (key: string, baseURL = BASE): DeepSeekSearchApiOptions['auth'] => ({ source: { kind: 'api-key', baseURL, key } })
 
 const options = {
   auth: auth('ds-key'),
@@ -82,12 +82,8 @@ describe('DeepSeekSearchApiProvider availability', () => {
     expect(searchProvider(options).available()).toBe(true)
   })
 
-  it('is available with only an account token resolver', () => {
-    expect(searchProvider({ ...options, auth: { sources: [{ kind: 'account', baseURL: BASE, resolveToken: async () => 'account-token', rejectToken: async () => {} }] } }).available()).toBe(true)
-  })
-
   it('is available with only a misconfigured source, which the search reports', () => {
-    expect(searchProvider({ ...options, auth: { sources: [{ kind: 'misconfigured', message: 'route settings do not resolve' }] } }).available()).toBe(true)
+    expect(searchProvider({ ...options, auth: { source: { kind: 'misconfigured', message: 'route settings do not resolve' } } }).available()).toBe(true)
   })
 
   it('is misconfigured when the base URL is unparseable', () => {
@@ -285,7 +281,7 @@ describe('Search API configuration and failures', () => {
         + 'The web request used endpoint "https://api.deepseek.test/api/v1/tools/search". '
         + 'Search sends the API key under web-deepseek-api.searchApiKeyEnv to web-deepseek-api.searchBaseURL. If that '
         + 'endpoint is not intended, guide the user to correct web-deepseek-api.searchBaseURL and '
-        + 'web-deepseek-api.searchApiKeyEnv, or to remove both so Search uses the DeepSeek credential of the conversation. '
+        + 'web-deepseek-api.searchApiKeyEnv, or to remove both so Search uses the DeepSeek API key. '
         + 'Only the user should choose or change the endpoint.',
     })
   })

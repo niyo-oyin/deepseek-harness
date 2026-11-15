@@ -1,0 +1,13 @@
+version: 1
+scenario: web-search-api-key
+profile: headless
+composition: web-search-api-key
+recording: authored
+header:
+  class: web-search-api-key
+  pin: true
+  toolSchemasSource: text-turn
+environment:
+  # The DeepSeek API key the Search API receives, and the fixed official origin it is sent to.
+  DEEPSEEK_API_KEY: snapshot-search-key
+  DEEPSEEK_BASE_URL: https://api.deepseek.com/anthropic

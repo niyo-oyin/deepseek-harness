@@ -1,0 +1,17 @@
+# Keyless replay counterpart: the Search endpoint remains real; only the model adapter is replaced by replay.
+- id: llm-deepseek
+  name: '@deepseek-ai/dsh-llm-deepseek-api-key'
+  disabled: true
+
+- insert:
+    - id: llm-replay
+      name: '@deepseek-ai/dsh-llm-replay'
+      config:
+        providers:
+          - id: snapshot-other
+            name: Other provider
+            models:
+              - id: other-model
+
+    - id: web-search-api-key-fixture
+      name: './web-search-api-key-fixture.mjs'

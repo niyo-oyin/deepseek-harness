@@ -26,7 +26,7 @@ const ORIGINAL_QUESTION_MAX_CHARS = 128
 
 /** Authentication, endpoint, and result settings snapshotted for one search. */
 export interface DeepSeekSearchApiOptions {
-  /** Ordered authentication sources of the search; `/search` is appended to the base of the source sent. */
+  /** Credential of the search; `/search` is appended to the base it is sent to. */
   auth: DeepSeekWebAuth
   /** Settings that endpoint failures of the search name. */
   guidance: DeepSeekWebGuidance
@@ -73,14 +73,14 @@ export class DeepSeekSearchApiProvider implements WebSearchProvider {
   private readonly starts: number[] = []
   /** Picker description: what this provider suits and what it costs or cannot do. */
   readonly description: NonNullable<WebSearchProvider['description']> = {
-    en: 'Incurs charges, paid by the account or API key chosen under Billing.',
-    zh: '会产生费用，由「计费方式」选定的账号或 API Key 支付。',
-    ja: '料金が発生し、「課金方法」で選んだアカウントまたは API キーに請求されます。',
-    es: 'Genera cargos, que paga la cuenta o la clave de API elegida en Facturación.',
-    fr: 'Entraîne des frais, payés par le compte ou la clé API choisi dans Facturation.',
-    de: 'Verursacht Kosten, die das unter Abrechnung gewählte Konto oder der API-Schlüssel trägt.',
-    ru: 'Услуга платная: оплата идёт с аккаунта или ключа API, выбранного в разделе «Оплата».',
-    pt: 'Gera cobranças, pagas pela conta ou chave de API escolhida em Cobrança.',
+    en: 'Incurs charges, paid by the DeepSeek API key.',
+    zh: '会产生费用，由 DeepSeek API Key 支付。',
+    ja: '料金が発生し、DeepSeek の API キーに請求されます。',
+    es: 'Genera cargos, que paga la clave de API de DeepSeek.',
+    fr: 'Entraîne des frais, payés par la clé API DeepSeek.',
+    de: 'Verursacht Kosten, die der DeepSeek-API-Schlüssel trägt.',
+    ru: 'Услуга платная: оплата идёт с ключа API DeepSeek.',
+    pt: 'Gera cobranças, pagas pela chave de API da DeepSeek.',
   }
 
   /**
@@ -92,7 +92,7 @@ export class DeepSeekSearchApiProvider implements WebSearchProvider {
   available(): boolean {
     const options = this.resolveOptions()
     return hasDeepSeekWebCredential(options.auth)
-      && options.auth.sources.every(source => source.kind === 'misconfigured' || URL.canParse(source.baseURL))
+      && (options.auth.source.kind === 'misconfigured' || URL.canParse(options.auth.source.baseURL))
       && isPositiveInteger(options.count) && isPositiveInteger(options.requestsPerSecond)
   }
 

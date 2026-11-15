@@ -7,7 +7,7 @@ import { DSH_LAUNCH_ENVIRONMENT_KEY, createLaunchEnvironmentSnapshot } from '@de
 import { customGuidance } from './guidance.ts'
 const fetchProvider = (options: DeepSeekFetchApiOptions) => new DeepSeekFetchApiProvider(() => options)
 const BASE = 'https://api.deepseek.test/api/v1/tools'
-const auth = (key: string, baseURL = BASE): DeepSeekFetchApiOptions['auth'] => ({ sources: [{ kind: 'api-key', baseURL, key }] })
+const auth = (key: string, baseURL = BASE): DeepSeekFetchApiOptions['auth'] => ({ source: { kind: 'api-key', baseURL, key } })
 const options = { auth: auth('ds-key'), guidance: customGuidance('fetch') }
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' }, ...init })
@@ -51,7 +51,7 @@ describe('DeepSeek Fetch API', () => {
         + 'The web request used endpoint "https://api.deepseek.test/api/v1/tools/fetch". '
         + 'Fetch sends the API key under web-deepseek-api.fetchApiKeyEnv to web-deepseek-api.fetchBaseURL. If that '
         + 'endpoint is not intended, guide the user to correct web-deepseek-api.fetchBaseURL and '
-        + 'web-deepseek-api.fetchApiKeyEnv, or to remove both so Fetch uses the DeepSeek credential of the conversation. '
+        + 'web-deepseek-api.fetchApiKeyEnv, or to remove both so Fetch uses the DeepSeek API key. '
         + 'Only the user should choose or change the endpoint.',
     })
   })
