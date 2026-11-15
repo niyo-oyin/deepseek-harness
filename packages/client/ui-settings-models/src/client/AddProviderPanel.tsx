@@ -75,8 +75,8 @@ export interface AddProviderPanelProps {
   schema: SettingsSchemaOperations
   operations: ModelsOperations
   t: (key: keyof typeof en) => string
-  /** The provider-card seat, rendered under the catalog draft. */
-  renderSlot: PropsRenderSlots<'settings.models.provider-card'>['renderSlot']
+  /** The provider-card seat, rendered under the catalog draft; absent where the host declares no seat. */
+  renderSlot?: PropsRenderSlots<'settings.models.provider-card'>['renderSlot']
   /**
    * Close the panel.
    * @param changed - whether a write landed.
@@ -196,6 +196,7 @@ export function AddProviderPanel({ state, schema, operations, t, renderSlot, onC
               schema={schema}
               settingsPath={draft.target.settingsPath}
               operations={operations}
+              {...draft.target.settingsPath.length === 0 ? { credentialRequired: true } : {}}
               {...draft.target.defaultBaseURL === undefined ? {} : { defaultBaseURL: draft.target.defaultBaseURL }}
               {...draft.target.baseURLEnv === undefined ? {} : { baseURLEnv: draft.target.baseURLEnv }}
               {...draft.target.nativeAuth === undefined ? {} : { nativeAuth: draft.target.nativeAuth }}
@@ -206,7 +207,7 @@ export function AddProviderPanel({ state, schema, operations, t, renderSlot, onC
               onClose={(changed) => { onClose(changed, draft.target) }}
               onBusyChange={setCatalogBusy}
             />
-            {addRow === undefined
+            {addRow === undefined || renderSlot === undefined
               ? null
               : renderSlot(
                 'settings.models.provider-card',

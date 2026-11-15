@@ -90,18 +90,11 @@ export interface ProviderEditorProps {
   t: (key: keyof typeof en) => string
   /** Disable writes (read-only settings provider). */
   readOnly: boolean
-  /** Render only the credential field and actions, without provider settings. */
-  credentialOnly?: boolean
-  /** Require a newly entered credential before this editor can submit. */
+  /**
+   * Require a newly entered credential before this editor can submit: a
+   * provider that owns its whole section exists only through its key.
+   */
   credentialRequired?: boolean
-  /** Give the credential field initial focus when this editor mounts. */
-  autoFocusCredential?: boolean
-  /** Override the dismiss action copy. */
-  cancelLabelKey?: keyof typeof en
-  /** Override the idle commit action copy. */
-  submitLabelKey?: keyof typeof en
-  /** Override the in-flight commit action copy. */
-  submitBusyLabelKey?: keyof typeof en
   /** Close the editor; `changed` reports whether an Apply committed. */
   onClose: (changed: boolean) => void
   /**
@@ -282,7 +275,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   const retryDefaults = retryNode === undefined
     ? undefined
     : retryPolicyDefaults(schema, retryNode, schema.getPath(namespace.base, [...settingsPath, 'retryPolicy']))
-  const retryFailure = retryNode === undefined || retryDefaults === undefined || props.credentialOnly === true
+  const retryFailure = retryNode === undefined || retryDefaults === undefined
     ? undefined
     : retryPolicyFailure(schema, retryNode, schema.getPath(draft, ['retryPolicy']), retryDefaults, t)
   const keyFailure = apiKeyFailure(keyText)
@@ -328,19 +321,17 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
       && stringAt(schema.getPath(namespace.base, settingsPath), 'apiKeyEnv') === undefined && keyValue.length > 0
       ? schema.setPath(profileDraft, ['apiKeyEnv'], keyRef)
       : profileDraft
-    if (props.credentialOnly !== true) {
-      // The same checker gates the submit button, so a card cannot reach this
-      // with a bad row; it stays because the schema check below would refuse
-      // the write with a message naming a path instead of the row, and because
-      // nothing but this function decides what is written.
-      const failure = validateModels(schema.getPath(next, ['models']))
-      /* v8 ignore next 3 -- unreachable from the card: the same failure disables submit */
-      if (failure !== undefined) {
-        return `${t('model')} ${String(failure.index + 1)}: ${t(failure.key)}`
-      }
+    // The same checker gates the submit button, so a card cannot reach this
+    // with a bad row; it stays because the schema check below would refuse
+    // the write with a message naming a path instead of the row, and because
+    // nothing but this function decides what is written.
+    const failure = validateModels(schema.getPath(next, ['models']))
+    /* v8 ignore next 3 -- unreachable from the card: the same failure disables submit */
+    if (failure !== undefined) {
+      return `${t('model')} ${String(failure.index + 1)}: ${t(failure.key)}`
     }
     /* v8 ignore next -- apply is only reachable from the rendered card, which required a resolved node */
-    if (props.credentialOnly !== true && node !== undefined && settingsPath.length === 0) {
+    if (node !== undefined && settingsPath.length === 0) {
       const sectionError = schema.validate(node, next)
       if (sectionError !== undefined) return sectionError
     }
@@ -348,11 +339,9 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
       && fallback === undefined
       && committedOriginal === undefined
       && Object.keys(next).length === 0
-    const ops: SettingsPathOpView[] = props.credentialOnly === true
-      ? []
-      : materializesNativeProfile
-        ? [{ op: 'set', path: [...settingsPath], value: {} }]
-        : pathOps(settingsPath, committedOriginal, next)
+    const ops: SettingsPathOpView[] = materializesNativeProfile
+      ? [{ op: 'set', path: [...settingsPath], value: {} }]
+      : pathOps(settingsPath, committedOriginal, next)
     if (keyRemoval !== undefined && keyRemoval.removed !== true) {
       const removed = await operations.removeCredential(keyRemoval.ref)
       if (removed !== undefined) return removed
@@ -507,7 +496,6 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
               aria-invalid={shownKeyFailure !== undefined && !protocolKeyMissing}
               aria-describedby={credentialHint === undefined ? undefined : `${props.provider}-credential-hint`}
               required={props.credentialRequired === true || protocolNeedsKeyHere}
-              autoFocus={props.autoFocusCredential === true}
               disabled={disabled || keyRemoval?.removed === true}
               onChange={(event) => {
                 setKeyDraft(event.target.value === '' && savedCredential
@@ -522,7 +510,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
               ? null
               : <p className={styles[protocolKeyMissing ? 'advancedHint' : 'error']}>{t(shownKeyFailure)}</p>}
           </div>}
-        {props.credentialOnly === true ? null : <details
+        <details
           className={styles['customized']}
           onToggle={(event) => { setCustomizedOpen(event.currentTarget.open) }}
         >
@@ -663,13 +651,13 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
                 />
               )}
           </div>
-        </details>}
+        </details>
       </>
     )
   }
 
   return (
-    <div className={props.credentialOnly === true ? styles['addBlock'] : styles['editor']}>
+    <div className={styles['editor']}>
       {props.hideTitle === true
         ? null
         : (
@@ -684,7 +672,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
         ? <p className={styles['advancedHint']}>{`${t('advancedHint')} (${namespace.ns})`}</p>
         : curatedFields(layout)}
       {failure !== undefined ? <p className={styles['error']}>{failure}</p> : null}
-      {props.credentialOnly === true || modelFailure === undefined
+      {modelFailure === undefined
         ? null
         : (
           <p className={styles['advancedHint']}>
@@ -699,13 +687,13 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
         t={t}
         busy={busy}
         submitDisabled={disabled || layout === 'unknown'
-          || (props.credentialOnly !== true && modelFailure !== undefined)
+          || modelFailure !== undefined
           || retryFailure !== undefined
           || shownKeyFailure !== undefined
           || (props.credentialRequired === true && keyValue.length === 0)}
-        submitLabelKey={props.submitLabelKey ?? 'apply'}
-        submitBusyLabelKey={props.submitBusyLabelKey ?? 'applying'}
-        cancelLabelKey={keyRemoval?.removed === true ? 'close' : props.cancelLabelKey ?? 'cancel'}
+        submitLabelKey="apply"
+        submitBusyLabelKey="applying"
+        cancelLabelKey={keyRemoval?.removed === true ? 'close' : 'cancel'}
         onCancel={() => { props.onClose(false) }}
         onSubmit={() => { void apply() }}
       />

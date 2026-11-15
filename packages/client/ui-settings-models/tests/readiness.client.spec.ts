@@ -67,33 +67,21 @@ describe('providerUsable', () => {
 })
 
 describe('onboardingReadiness', () => {
-  it('waits for the first join and skips onboarding when the adapter directory entry is absent', () => {
+  it('waits for the first join', () => {
     expect(onboardingReadiness(state({ status: 'idle', rows: [] }))).toEqual({ kind: 'loading' })
     expect(onboardingReadiness(state({ status: 'loading', rows: [] }))).toEqual({ kind: 'loading' })
-    expect(onboardingReadiness(state({ rows: [] }))).toEqual({ kind: 'adapter-absent' })
-    expect(onboardingReadiness(state({
-      rows: [row({
-        entry: {
-          ...row().entry,
-          settingsNs: '',
-        },
-      })],
-    }))).toEqual({ kind: 'adapter-absent' })
   })
 
-  it('reports a missing writable effective credential', () => {
-    expect(onboardingReadiness(state())).toEqual({ kind: 'credential-missing' })
-  })
-
-  it('ends onboarding once any other registered provider can serve requests', () => {
-    expect(onboardingReadiness(state({ rows: [row(), otherRow()] }))).toEqual({ kind: 'provider-ready' })
-    // A provider the user cannot reach yet leaves the prompt in place.
+  it('asks for a provider while none is usable, whichever vendors the directory lists', () => {
+    expect(onboardingReadiness(state())).toEqual({ kind: 'provider-missing' })
+    expect(onboardingReadiness(state({ rows: [] }))).toEqual({ kind: 'provider-missing' })
     expect(onboardingReadiness(state({
       rows: [row(), otherRow({ credential: missingCredential })],
-    }))).toEqual({ kind: 'credential-missing' })
+    }))).toEqual({ kind: 'provider-missing' })
   })
 
-  it('accepts file and process-environment credentials without prompting', () => {
+  it('ends onboarding once any registered provider can serve requests, DeepSeek or not', () => {
+    expect(onboardingReadiness(state({ rows: [row(), otherRow()] }))).toEqual({ kind: 'provider-ready' })
     expect(onboardingReadiness(state({
       rows: [row({ credential: { configured: true, source: 'file', writable: true } })],
     }))).toEqual({ kind: 'provider-ready' })
@@ -102,26 +90,11 @@ describe('onboardingReadiness', () => {
     }))).toEqual({ kind: 'provider-ready' })
   })
 
-  it('turns missing capabilities into diagnostics that never block the product', () => {
+  it('steps aside where adding a provider cannot help', () => {
     expect(onboardingReadiness(state({ status: 'error', error: 'settings down' }))).toEqual({
       kind: 'unavailable',
       reason: 'load-failed',
     })
-    expect(onboardingReadiness(state({
-      rows: [row({ entry: { ...row().entry, active: false } })],
-    }))).toEqual({ kind: 'unavailable', reason: 'provider-inactive' })
-    expect(onboardingReadiness(state({
-      credentialError: 'credentials service is absent',
-    }))).toEqual({
-      kind: 'unavailable',
-      reason: 'credentials-unavailable',
-    })
-    expect(onboardingReadiness(state({
-      rows: [row({ credential: undefined })],
-    }))).toEqual({ kind: 'unavailable', reason: 'credentials-unavailable' })
-    expect(onboardingReadiness(state({
-      rows: [row({ credential: { configured: false, writable: false } })],
-    }))).toEqual({ kind: 'unavailable', reason: 'credential-read-only' })
     expect(onboardingReadiness(state({ writable: false }))).toEqual({
       kind: 'unavailable',
       reason: 'settings-read-only',
