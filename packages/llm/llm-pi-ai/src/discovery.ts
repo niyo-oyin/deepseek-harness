@@ -446,6 +446,40 @@ interface ListingTarget {
   api: string
   /** Whether a request without a key is pointless rather than possibly authorized by a header. */
   requiresKey: boolean
+  /**
+   * The endpoint the stored route's credential and headers belong to: its
+   * stored baseURL, or a catalog route's own endpoint when it stores none.
+   */
+  home: string | undefined
+}
+
+/**
+ * One endpoint's identity for deciding whether stored credentials may go to
+ * it: scheme, host, and port, plus the path without trailing slashes. A query,
+ * a fragment, and the letter case of the host do not change where a key goes.
+ * @param url - an endpoint as configured or typed.
+ * @returns the comparable identity, or `undefined` for text that is not a URL.
+ */
+function endpointIdentity(url: string): string | undefined {
+  try {
+    const parsed = new URL(url)
+    return `${parsed.protocol}//${parsed.host.toLowerCase()}${parsed.pathname.replace(/\/+$/u, '')}`
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Whether a listing may carry the stored route's credential and headers: only
+ * to the endpoint they were stored for, so a URL edited in a draft never
+ * receives them before it is saved.
+ * @param target - the listing destination and the stored route's endpoint.
+ * @returns whether the destination is the stored endpoint.
+ */
+function storedEndpoint(target: ListingTarget): boolean {
+  if (target.home === undefined) return false
+  const home = endpointIdentity(target.home)
+  return home !== undefined && home === endpointIdentity(target.baseURL)
 }
 
 /**
@@ -475,8 +509,20 @@ async function listEndpoint(
   // failing. The stored profile is asked past the protocol check, and its
   // credential resolver remains lazy so a typed key cannot fail over a stored
   // credential it supersedes. A gateway may still authenticate through a
-  // deployment-owned Authorization header when neither key exists.
-  const supplied = request.apiKey ?? await stored?.resolveApiKey()
+  // deployment-owned Authorization header when neither key exists. The stored
+  // key and headers go only to the endpoint they were stored for.
+  const trusted = stored !== undefined && storedEndpoint(target)
+  // Elsewhere, a route that has a saved key refuses rather than asking unauthenticated, which would read as a bad key.
+  const savedKey = async (): Promise<boolean> => stored !== undefined
+    && await stored.resolveApiKey().then(key => key !== undefined, () => false)
+  if (request.apiKey === undefined && !trusted && await savedKey()) {
+    throw new LlmError(
+      `the saved API key is sent only to ${target.home ?? 'the saved endpoint'}; to list models at ${target.baseURL}, `
+      + 'type the API key into the form',
+      INVALID_CREDENTIAL_CODE,
+    )
+  }
+  const supplied = request.apiKey ?? (trusted ? await stored.resolveApiKey() : undefined)
   if (supplied === undefined && target.requiresKey) {
     throw new LlmError(
       'this provider signs in without an API key stored on the Models page, and its model listing needs one',
@@ -486,7 +532,7 @@ async function listEndpoint(
   const apiKey = supplied === undefined ? undefined : usableProbeKey(supplied)
   let response: Response
   try {
-    const headers = new Headers(stored?.headers === undefined ? undefined : Object.entries(stored.headers))
+    const headers = new Headers(!trusted || stored.headers === undefined ? undefined : Object.entries(stored.headers))
     headers.set('accept', 'application/json')
     if (api === 'anthropic-messages') {
       headers.set('anthropic-version', ANTHROPIC_VERSION)
@@ -601,7 +647,8 @@ export async function discoverModels(
         if (baseURL === undefined) {
           throw new LlmError('this provider has no single endpoint to ask', 'DISCOVERY_UNSUPPORTED')
         }
-        listed = await listEndpoint(request, { baseURL, api, requiresKey: true }, stored)
+        const home = stored?.baseURL ?? catalogProvider(provider)?.baseUrl
+        listed = await listEndpoint(request, { baseURL, api, requiresKey: true, home }, stored)
       } catch (error: unknown) {
         if (error instanceof LlmError && error.code === 'ABORTED') throw error
         notice = `${error instanceof Error ? error.message : String(error)}; the list shows the installed catalog only`
@@ -614,7 +661,7 @@ export async function discoverModels(
           'DISCOVERY_FAILED',
         )
       }
-      listed = await listEndpoint(request, { baseURL: request.baseURL, api, requiresKey: false }, stored)
+      listed = await listEndpoint(request, { baseURL: request.baseURL, api, requiresKey: false, home: stored?.baseURL }, stored)
     }
   }
   const home = catalogRoute ? provider : undefined

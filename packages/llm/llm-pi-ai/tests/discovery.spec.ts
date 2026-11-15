@@ -738,6 +738,88 @@ describe('draft-provider model discovery', () => {
   })
 })
 
+describe('stored credentials and their endpoint', () => {
+  /** A hand-declared route whose saved key and headers belong to `baseURL`. */
+  async function storedGateway(baseURL: string, apiKeyEnv: string | null = 'GATEWAY_LISTING_KEY'): Promise<Context> {
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    if (apiKeyEnv !== null) {
+      process.env[apiKeyEnv] = 'stored-key'
+      touchedEnv.push(apiKeyEnv)
+    }
+    await ctx.plugin(LlmPiAi, { providers: { 'acme-gateway': {
+      ...apiKeyEnv === null ? {} : { apiKeyEnv },
+      api: 'openai-completions', baseURL, headers: { 'X-Tenant': 'private' }, models: [{ id: 'm' }],
+    } } })
+    return ctx
+  }
+
+  const ask = (ctx: Context, baseURL: string, apiKey?: string) => ctx.llm.discoverModels('llm-pi-ai', {
+    provider: 'acme-gateway', baseURL, api: 'openai-completions', listEndpoint: true, ...apiKey === undefined ? {} : { apiKey },
+  })
+
+  it('sends the saved key and headers to the endpoint they were saved for, however it is spelled', async () => {
+    const server = await listingServer({ body: JSON.stringify({ data: [{ id: 'm' }] }) })
+    const ctx = await storedGateway(`${server.url}/v1`)
+
+    await ask(ctx, `${server.url.replace('127.0.0.1', '127.0.0.1')}/v1/`)
+
+    expect(server.headers[0]?.authorization).toBe('Bearer stored-key')
+    expect(server.headers[0]?.['x-tenant']).toBe('private')
+  })
+
+  it.each([
+    { name: 'another host', draft: (url: string) => url.replace('127.0.0.1', 'localhost') },
+    { name: 'another port', draft: (url: string) => url.replace(/:(\d+)$/u, (_match, port: string) => `:${String(Number(port) + 1)}`) },
+    { name: 'another scheme', draft: (url: string) => url.replace('http:', 'https:') },
+    { name: 'another path', draft: (url: string) => `${url}/other` },
+  ])('refuses to send the saved key to $name until a key is typed', async ({ draft }) => {
+    const server = await listingServer({ body: JSON.stringify({ data: [{ id: 'm' }] }) })
+    const ctx = await storedGateway(server.url)
+
+    await expect(ask(ctx, draft(server.url))).rejects.toThrow(/saved API key is sent only to .*type the API key into the form/u)
+    expect(server.paths).toEqual([])
+  })
+
+  it('uses a typed key as typed at any endpoint, without the saved headers elsewhere', async () => {
+    const saved = await listingServer({ body: JSON.stringify({ data: [{ id: 'm' }] }) })
+    const other = await listingServer({ body: JSON.stringify({ data: [{ id: 'm' }] }) })
+    const ctx = await storedGateway(saved.url)
+
+    await ask(ctx, other.url, 'typed-key')
+    await ask(ctx, saved.url, 'typed-key')
+
+    expect(other.headers[0]?.authorization).toBe('Bearer typed-key')
+    expect(other.headers[0]?.['x-tenant']).toBeUndefined()
+    expect(saved.headers[0]?.authorization).toBe('Bearer typed-key')
+    expect(saved.headers[0]?.['x-tenant']).toBe('private')
+  })
+
+  it('asks another endpoint of a keyless route without its saved headers', async () => {
+    const other = await listingServer({ body: JSON.stringify({ data: [{ id: 'm' }] }) })
+    const ctx = await storedGateway('https://gateway.invalid/v1', null)
+
+    await ask(ctx, other.url)
+
+    expect(other.headers[0]?.authorization).toBeUndefined()
+    expect(other.headers[0]?.['x-tenant']).toBeUndefined()
+  })
+
+  it('keeps a catalog route without a saved endpoint to its own endpoint', async () => {
+    const other = await listingServer({ body: JSON.stringify({ data: [{ id: 'm' }] }) })
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    process.env['ANTHROPIC_LISTING_KEY'] = 'stored-key'
+    touchedEnv.push('ANTHROPIC_LISTING_KEY')
+    await ctx.plugin(LlmPiAi, { providers: { anthropic: { apiKeyEnv: 'ANTHROPIC_LISTING_KEY' } } })
+
+    const answer = await ctx.llm.discoverModels('llm-pi-ai', { provider: 'anthropic', baseURL: other.url, listEndpoint: true })
+
+    expect(answer.notice).toMatch(/saved API key is sent only to https:\/\/api\.anthropic\.com/u)
+    expect(other.paths).toEqual([])
+  })
+})
+
 describe('probe key format', () => {
   it('reports an illegal probe key as a credential fault, not an unreachable endpoint', async () => {
     await expect(discoverModels({
