@@ -1,0 +1,6 @@
+# No default model ships. The DeepSeek Messages scenario starts on the route it
+# is about, so it names that route itself.
+- id: agent-default-model
+  config:
+    provider: deepseek-official
+    model: deepseek-flash

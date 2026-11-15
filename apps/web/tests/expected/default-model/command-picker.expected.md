@@ -1,6 +1,10 @@
 - textbox "筛选选项":
   - /placeholder: 搜索模型…
 - listbox "/model 匹配项":
+  - group "Acme Gateway":
+    - text: Acme Gateway
+    - option "Acme Large" [selected]
+    - option "Acme Small"
   - group "DeepSeek":
     - text: DeepSeek
     - option "DeepSeek-V4-Flash"
@@ -8,7 +12,3 @@
   - group "Origin Gateway":
     - text: Origin Gateway
     - option "Origin Large"
-  - group "Acme Gateway":
-    - text: Acme Gateway
-    - option "Acme Large" [selected]
-    - option "Acme Small"

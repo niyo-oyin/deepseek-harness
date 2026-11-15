@@ -363,8 +363,12 @@ export async function connectFreshWorkspace(page: Page, root: string, name = 'wo
  * @param root - workspace parent directory.
  * @param name - directory created under `root` and connected.
  * @param modelAvailable - require an editable composer when the selected model is available.
+ * @param placeholder - the composer placeholder to wait for; a blocked composer shows its block reason instead.
  */
-export async function connectFreshWorkspaceZh(page: Page, root: string, name = 'workspace', modelAvailable = true): Promise<void> {
+export async function connectFreshWorkspaceZh(
+  page: Page, root: string, name = 'workspace', modelAvailable = true,
+  placeholder = '描述你想要构建的内容, / 调用指令, @ 文件或对话',
+): Promise<void> {
   mkdirSync(join(root, name), { recursive: true })
   await revealNavigationDrawer(page, 'zh')
   await page.getByRole('button', { name: '添加工作区', exact: true }).click()
@@ -376,7 +380,7 @@ export async function connectFreshWorkspaceZh(page: Page, root: string, name = '
   await pathInput.press('Enter')
   await dialog.getByRole('button', { name: '打开', exact: true }).click()
   const editable = modelAvailable ? '[contenteditable="true"]' : ''
-  await page.locator(`[data-composer-input]${editable}[data-placeholder="描述你想要构建的内容, / 调用指令, @ 文件或对话"]`)
+  await page.locator(`[data-composer-input]${editable}[data-placeholder="${placeholder}"]`)
     .waitFor({ timeout: 15_000 })
 }
 

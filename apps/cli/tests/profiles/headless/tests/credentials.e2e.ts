@@ -13,6 +13,8 @@ const binScript = fileURLToPath(new URL('../../../../../../apps/cli/src/bin.ts',
 const tsconfigPath = fileURLToPath(new URL('../../../../../../tsconfig.json', import.meta.url))
 const savedKey = 'headless-saved-key'
 const launchKey = 'headless-launch-key'
+/** No default model ships, so the DeepSeek scenarios name their route in their own patch. */
+const DEEPSEEK_DEFAULT_PATCH = JSON.stringify([{ id: 'agent-default-model', config: { provider: 'deepseek-official', model: 'deepseek-flash' } }])
 const projectKey = 'headless-project-key'
 const homeKey = 'headless-home-key'
 const processTimeoutMs = 60_000
@@ -71,13 +73,14 @@ describe('headless credential policy', { retry: 0 }, () => {
       const result = await runLoaderSmoke({
         label: `headless credentials: ${scenario.name}`,
         tempDirPrefix: 'headless-credentials-', binScript, tsconfigPath, sourceImport: 'tsx/esm',
-        configPath: '', binArgs: ['headless', 'Reply briefly.'], processTimeoutMs,
+        configPath: '', binArgs: ['headless', '--patch', './model.patch.json', 'Reply briefly.'], processTimeoutMs,
         env: {
           DEEPSEEK_API_KEY: scenario.launch, DEEPSEEK_BASE_URL: server.baseURL,
         },
         prepare: async (cwd) => {
           await mkdir(join(cwd, '.dsh'), { recursive: true })
           await writeFile(join(cwd, '.dsh', '.credentials.yaml'), credentials, { mode: 0o600 })
+          await writeFile(join(cwd, 'model.patch.json'), DEEPSEEK_DEFAULT_PATCH)
           if (scenario.project !== undefined) await writeFile(join(cwd, '.env'), `DEEPSEEK_API_KEY=${scenario.project}\n`)
           if (scenario.home !== undefined) await writeFile(join(cwd, '.dsh', '.env'), `DEEPSEEK_API_KEY=${scenario.home}\n`)
         },
@@ -143,12 +146,13 @@ describe('headless credential policy', { retry: 0 }, () => {
         label: `headless credential boundary: ${mode}`,
         tempDirPrefix: 'headless-credential-boundary-', binScript, tsconfigPath, sourceImport: 'tsx/esm',
         configPath: '',
-        binArgs: ['headless', ...restoring ? ['--patch', './auth.patch.json'] : [], 'Reply briefly.'],
+        binArgs: ['headless', '--patch', './model.patch.json', ...restoring ? ['--patch', './auth.patch.json'] : [], 'Reply briefly.'],
         processTimeoutMs, expectedExitCode: missing ? 1 : 0,
         env: { DEEPSEEK_API_KEY: empty ? '' : missing ? undefined : launchKey, DEEPSEEK_BASE_URL: server.baseURL },
         prepare: async (cwd) => {
           await mkdir(join(cwd, '.dsh'), { recursive: true })
           await writeFile(join(cwd, '.dsh', '.credentials.yaml'), document, { mode: 0o600 })
+          await writeFile(join(cwd, 'model.patch.json'), DEEPSEEK_DEFAULT_PATCH)
           if (empty) await writeFile(join(cwd, '.env'), `DEEPSEEK_API_KEY=${projectKey}\n`)
           if (restoring) await writeFile(join(cwd, 'auth.patch.json'), JSON.stringify(
             ['credentials', 'authorization', 'deepseek-account'].map(id => ({ id, disabled: false })),
