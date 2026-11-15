@@ -9,6 +9,7 @@
 import {
   decodeSeqRanges,
 } from '@deepseek-ai/dsh-session'
+import { pathToFileURL } from 'node:url'
 import { prepareSessionSnapshotFixtureForComparison } from '@deepseek-ai/dsh-llm-replay'
 import { redactSessionSnapshotIds } from './identity.ts'
 import { sessionHeaderVersion } from './session-files.ts'
@@ -125,7 +126,11 @@ function cwdSpellings(ctx: NormalizeContext): string[] {
   const quoted = spellings
     .filter(spelling => spelling.includes('\\'))
     .map(spelling => JSON.stringify(spelling).slice(1, -1))
-  return [...new Set([...spellings, ...macAliases, ...quoted])]
+  // A file URL spells a Windows directory as an escaped `/C:/...` path, so `file://{{cwd}}` reads alike on every platform.
+  const fileUrlPaths = spellings
+    .filter(spelling => /^[A-Za-z]:[\\/]/u.test(spelling))
+    .map(spelling => pathToFileURL(spelling, { windows: true }).pathname)
+  return [...new Set([...spellings, ...macAliases, ...quoted, ...fileUrlPaths])]
     .sort((left, right) => right.length - left.length)
 }
 

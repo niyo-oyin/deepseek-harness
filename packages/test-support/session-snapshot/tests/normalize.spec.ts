@@ -142,6 +142,20 @@ describe('normalizeStdout', () => {
     expect(frame.text).toBe('Current working directory: "{{cwd}}". Writable: "{{cwd}}/nested".')
   })
 
+  it('scrubs a Windows cwd spelled as a file URL to the same text a POSIX cwd gives', () => {
+    const windowsCtx: NormalizeContext = { sessionIds: [], cwd: String.raw`C:\Users\RUNNER~1\AppData\Local\Temp\dsh-log-snap-x` }
+    const raw = JSON.stringify({
+      text: 'await import("file:///C:/Users/RUNNER%7E1/AppData/Local/Temp/dsh-log-snap-x/cua-runtime/lib/bridge.js")',
+    })
+    const frame = JSON.parse(normalizeStdout(raw, windowsCtx)) as { text: string }
+    expect(frame.text).toBe('await import("file://{{cwd}}/cua-runtime/lib/bridge.js")')
+    const posix = JSON.parse(normalizeStdout(
+      JSON.stringify({ text: 'await import("file:///tmp/dsh-log-snap-x/cua-runtime/lib/bridge.js")' }),
+      { sessionIds: [], cwd: '/tmp/dsh-log-snap-x' },
+    )) as { text: string }
+    expect(posix.text).toBe(frame.text)
+  })
+
   it('canonicalizes only cwd-rooted path separators', () => {
     const windowsCtx: NormalizeContext = {
       sessionIds: [],
