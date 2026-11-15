@@ -29,6 +29,9 @@ import type { ModelSelectInjected } from './slots.ts'
 import { ModelSelect } from './ModelSelect.tsx'
 import { en, ja, es, fr, de, ru, pt, zh, type ModelKey } from './locales.ts'
 import { orderModelProviders } from './provider-order.ts'
+import { createElement } from 'react'
+import { ModelRouteField } from './ModelRouteField.tsx'
+import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 
 export { ModelDirectory } from './directory.ts'
 export type { ModelDirectoryState } from './directory.ts'
@@ -192,5 +195,16 @@ export function apply(ctx: ClientContext): void {
         }
       },
     }, ModelSelect))
+  })
+
+  // Entry 3: the settings editor of `model-route` fields, over the same Host catalog.
+  ctx.inject(['slots', 'modelDirectories'], (scope: ClientContext) => {
+    const catalog = scope.modelDirectories.catalog
+    const load = (): void => { catalog.load().catch(() => { /* surfaced on the store */ }) }
+    scope.slots.inject('plugins.config.field', () => scope.slots.register(
+      { name: 'plugins.config.field', key: 'model-route', locale: NS },
+      ({ id, value, disabled, onChange }) =>
+        createElement(ModelRouteField, { id, value, disabled, onChange, catalog: catalog.store, load, t }),
+    ))
   })
 }

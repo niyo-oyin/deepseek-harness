@@ -30,6 +30,29 @@ export interface PluginConfigViewProps {
   readonly form?: ConfigPageForm | undefined
 }
 
+/**
+ * Owner props of one configuration field a generated form delegates to the
+ * plugin registered for its schema role. The form stages the value and writes
+ * it on save; the renderer only shows and edits it.
+ */
+export interface PluginConfigFieldProps {
+  /** Element id for the field's label to point at. */
+  readonly id: string
+  /** The field name as the form labels it. */
+  readonly label: string
+  /** The schema's description in the active language, when it declares one. */
+  readonly hint?: string | undefined
+  /** The staged value, or `undefined` while the field inherits its default. */
+  readonly value: unknown
+  /** Whether the field cannot be edited (read-only document or a save in flight). */
+  readonly disabled: boolean
+  /**
+   * Stage a new value; `undefined` clears the field so it inherits its default.
+   * @param value - the replacement value, JSON-shaped.
+   */
+  readonly onChange: (value: unknown) => void
+}
+
 /** One row of a bundle as a detail contribution sees it. */
 export interface PluginRowRef {
   /** The row id as the bundle's patch declares it. */
@@ -139,6 +162,12 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * updates through the owner's `install` and `update`.
      */
     'plugins.tab': { kind: 'list'; scope: 'root'; owner: PluginTabProps }
+    /**
+     * Editors for configuration fields whose schema declares a `role`, keyed by
+     * that role, such as `model-route`. A generated form renders a field with a
+     * registered role through its entry instead of listing it as unsupported.
+     */
+    'plugins.config.field': { kind: 'keyed'; scope: 'root'; owner: PluginConfigFieldProps }
     /** Optional guidance after the user enables a bundle from the list, keyed by npm package name. */
     'plugins.bundle.activation': { kind: 'keyed'; scope: 'root'; owner: PluginActivationOwnerProps }
     /**

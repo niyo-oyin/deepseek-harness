@@ -47,7 +47,7 @@ export type PluginManagerPageProps =
   & PropsLocale<'pluginManager'>
   & PropsRenderSlots<
     | 'plugins.item' | 'plugins.bundle.config' | 'plugins.row.config' | 'plugins.bundle.activation'
-    | 'plugins.add.actions' | 'plugins.tab'
+    | 'plugins.add.actions' | 'plugins.tab' | 'plugins.config.field'
     | 'plugins.detail.actions' | 'plugins.detail.badge' | 'plugins.detail.section'
   >
   & InjectFace<PluginManagerFace & PluginHeaderLayoutFace>
@@ -1585,9 +1585,9 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
   const generatedConfig = (rowId: string): AutoConfig | undefined => {
     const served = configurations?.find(candidate => candidate.ns === rowId)
     if (served === undefined || !served.autoGenerate) return undefined
-    const key = `${language}:${JSON.stringify(served.schema)}`
+    const key = `${language}:${[...ledger.fields].join(',')}:${JSON.stringify(served.schema)}`
     const cached = generatedCache.current.get(rowId)
-    const config = cached?.key === key ? cached.config : autoConfig(served.schema, language)
+    const config = cached?.key === key ? cached.config : autoConfig(served.schema, language, ledger.fields)
     if (cached?.key !== key) generatedCache.current.set(rowId, { key, config })
     return config.fields.length === 0 ? undefined : config
   }
@@ -1603,6 +1603,7 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
         config={config}
         storedSecrets={new Set(secrets.flatMap(secret => secret.set && secret.path.length === 1 ? [String(secret.path[0])] : []))}
         t={t}
+        renderField={(role, field) => props.renderSlot('plugins.config.field', field, { entryKey: role })}
       />
     )
   }

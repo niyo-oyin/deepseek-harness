@@ -11,7 +11,8 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
-import { autoBooleanField, autoChoiceField, type AutoConfig, type AutoField } from './auto-config.ts'
+import { autoBooleanField, autoChoiceField, autoRoleField, type AutoConfig, type AutoField } from './auto-config.ts'
+import type { PluginConfigFieldProps } from './slot-contract.ts'
 import type { Translate } from './presentation.ts'
 import css from './AutoConfigForm.module.css'
 
@@ -32,6 +33,7 @@ function specOf(field: AutoField): SettingsFieldSpec {
   if (field.kind === 'number') return settingsNumberField(field.name)
   if (field.kind === 'boolean') return autoBooleanField(field.name)
   if (field.kind === 'choice') return autoChoiceField(field.name, field.choices ?? [])
+  if (field.kind === 'role') return autoRoleField(field.name)
   return settingsTextField(field.name)
 }
 
@@ -58,6 +60,12 @@ export interface AutoConfigFormProps {
   /** Names of the secret fields the Host reports a stored value for. */
   readonly storedSecrets: ReadonlySet<string>
   readonly t: Translate
+  /**
+   * Render the registered editor of one role field.
+   * @param role - the field's schema role.
+   * @param props - the field's staged value and edit action.
+   */
+  readonly renderField: (role: string, props: PluginConfigFieldProps) => ReactNode
 }
 
 /**
@@ -77,7 +85,9 @@ export function AutoConfigForm(props: AutoConfigFormProps): ReactNode {
   return bound === null ? null : <AutoConfigFields {...props} bound={bound} />
 }
 
-function AutoConfigFields({ bound, scope, config, storedSecrets, t }: AutoConfigFormProps & { readonly bound: BoundForm }): ReactNode {
+function AutoConfigFields(
+  { bound, scope, config, storedSecrets, t, renderField }: AutoConfigFormProps & { readonly bound: BoundForm },
+): ReactNode {
   const state = useSyncExternalStore(bound.store.subscribe, bound.store.getSnapshot)
   const { actions } = bound
   const disabled = !state.shell.writable
@@ -121,6 +131,27 @@ function AutoConfigFields({ bound, scope, config, storedSecrets, t }: AutoConfig
               </button>
             )
             : null}
+        </div>
+      )
+    }
+    if (field.kind === 'role' && field.role !== undefined) {
+      let value: unknown
+      try { value = fieldState.text === '' ? undefined : JSON.parse(fieldState.text) } catch { value = undefined }
+      return (
+        <div key={field.name} className={css.field}>
+          <div className={css.head}>
+            <label className={css.label} htmlFor={id}>{field.name}</label>
+            {overrideBadge(field, fieldState)}
+          </div>
+          {renderField(field.role, {
+            id,
+            label: field.name,
+            hint: field.description,
+            value,
+            disabled,
+            onChange: (next) => { actions.edit(field.name, next === undefined ? '' : JSON.stringify(next)) },
+          })}
+          {field.description === undefined ? null : <p className={css.hint}>{field.description}</p>}
         </div>
       )
     }

@@ -99,7 +99,7 @@ function subjectOf(owner: unknown): PluginsSubject | undefined {
   return typeof owner === 'object' && owner !== null && 'subject' in owner ? (owner as PluginDetailProps).subject : undefined
 }
 
-const NO_CONFIG: ConfigLedger = { items: [], bundles: new Set(), rows: new Set() }
+const NO_CONFIG: ConfigLedger = { items: [], bundles: new Set(), rows: new Set(), fields: new Set() }
 
 function renderTab(
   state: Partial<PluginManagerState> = {}, config: Partial<ConfigLedger> = {},

@@ -404,3 +404,48 @@
   height: 12px;
   color: var(--dsw-alias-menu-icon);
 }
+
+/* The settings route field: model select, then the effort select when the model offers levels. */
+.routeField {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.routeSelect {
+  height: 34px;
+  padding: 0 12px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-3);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-primary);
+}
+
+.routeSelect:focus-visible {
+  outline: none;
+  border-color: var(--dsw-alias-state-business-primary);
+}
+
+.routeSelect:disabled {
+  color: var(--dsw-alias-label-tertiary);
+  cursor: default;
+}
+
+.routeEffort {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.routeWarning {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-state-warn-label);
+}

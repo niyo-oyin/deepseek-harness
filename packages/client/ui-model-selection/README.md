@@ -41,6 +41,11 @@ Both entries group models by provider, with DeepSeek Account first and DeepSeek 
 
 The composer trigger leads the model name with its provider name, as in `DeepSeek · DeepSeek-V4-Flash`, so two providers that serve a model of the same name stay apart; when the row is tight the effort gives way first, then the provider, and the model name last. The composer replaces the provider, model, and effort text with the Models icon when the expanded controls cannot share one line, and restores the text when space permits. The full selection remains available in the trigger's accessible name, tooltip, and menu.
 
+<a id="settings-route-field"></a>
+### Settings route field
+
+The plugin also edits settings that name one model route. A plugin Config field declared as an object of `provider`, `model`, and `reasoningEffort` strings with `.role('model-route')` renders on the plugin's generated settings page as a model select over the same Host catalog the composer reads, grouped by provider, with a first entry meaning the Session's model, which leaves the field unset. An effort select appears only when the chosen model offers levels, with a first entry keeping the provider default. A stored route the catalog no longer offers stays selected and listed as unavailable, with a note that features using it fail until it changes. Auto review's `reviewer` setting uses this field.
+
 ### Model label extensions
 
 `conversation.input.model.label` is a session-scoped, inline `single` slot for the composer trigger (`placement: 'trigger'`), the root menu's current value (`'menu'`), and each model option (`'option'`). Its owner props provide `provider: { id, name }`, the exact catalog `model`, `placement`, and `selected`. Provider names are localized display names; match channels by `provider.id`, and identify a model by the provider/model ID pair. Connection URLs and credentials are not passed to the slot.

@@ -11,7 +11,7 @@
 import type { SettingsFieldSpec } from '@deepseek-ai/dsh-client-ui-primitives'
 
 /** How a generated form edits one field. */
-export type AutoFieldKind = 'text' | 'number' | 'boolean' | 'choice' | 'secret'
+export type AutoFieldKind = 'text' | 'number' | 'boolean' | 'choice' | 'secret' | 'role'
 
 /** One field a generated form renders. */
 export interface AutoField {
@@ -24,6 +24,8 @@ export interface AutoField {
   readonly choices?: readonly string[]
   /** The schema default rendered as text, when it is a scalar. */
   readonly defaultText?: string
+  /** The schema role a `role` field's registered editor renders. */
+  readonly role?: string
 }
 
 /** What a generated form can and cannot edit of one entry. */
@@ -66,10 +68,11 @@ function scalarText(value: unknown): string | undefined {
  * Read the editable fields of one serialized schema.
  * @param schema - the `schema` of a settings namespace view.
  * @param language - active locale id, selecting a localized description.
+ * @param roles - schema roles with a registered field editor; a field declaring one is edited through it.
  * @returns the fields a generated form edits and the declared fields it leaves to the profile document;
  *   both empty when the schema is not a serialized object schema.
  */
-export function autoConfig(schema: unknown, language: string): AutoConfig {
+export function autoConfig(schema: unknown, language: string, roles: ReadonlySet<string> = new Set()): AutoConfig {
   const envelope = record(schema)
   const refs = record(envelope?.refs)
   const node = (uid: unknown): SchemaNode | undefined =>
@@ -86,7 +89,9 @@ export function autoConfig(schema: unknown, language: string): AutoConfig {
     const description = describe(meta.description, language)
     const defaultText = scalarText(meta.default)
     const shared = { name, ...description === undefined ? {} : { description }, ...defaultText === undefined ? {} : { defaultText } }
-    if (child.type === 'string') {
+    if (typeof meta.role === 'string' && meta.role !== 'secret' && roles.has(meta.role)) {
+      fields.push({ name, kind: 'role', role: meta.role, ...description === undefined ? {} : { description } })
+    } else if (child.type === 'string') {
       // A secret never rides a response, so its default is not rendered either.
       fields.push(meta.role === 'secret' ? { name, kind: 'secret', ...description === undefined ? {} : { description } } : { ...shared, kind: 'text' })
     } else if (child.type === 'number') {
@@ -108,6 +113,30 @@ export function autoConfig(schema: unknown, language: string): AutoConfig {
     }
   }
   return { fields, unsupported }
+}
+
+/**
+ * A field edited through a registered role editor, staged as JSON text. An
+ * empty draft, or an empty object, clears the field so it inherits its default.
+ * @param field - field name inside the namespace section.
+ * @returns the field's conversion spec.
+ */
+export function autoRoleField(field: string): SettingsFieldSpec {
+  const empty = (value: unknown): boolean => value === undefined || value === null
+    || (typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0)
+  return {
+    field,
+    format: value => empty(value) ? '' : JSON.stringify(value),
+    parse: (text) => {
+      if (text === '') return { kind: 'clear' }
+      try {
+        const value: unknown = JSON.parse(text)
+        return empty(value) ? { kind: 'clear' } : { kind: 'set', value }
+      } catch {
+        return undefined
+      }
+    },
+  }
 }
 
 /**

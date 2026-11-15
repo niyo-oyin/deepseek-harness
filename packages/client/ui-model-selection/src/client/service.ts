@@ -37,7 +37,8 @@ export class ModelDirectoryResolver extends Service {
   static inject = ['sessions', 'remote', 'remote.session']
 
   private readonly live: LiveState = { directories: new WeakMapWithValues() }
-  private readonly catalog: ModelCatalogDirectory
+  /** The Host-generation model catalog every Session selector and the settings route field read. */
+  readonly catalog: ModelCatalogDirectory
 
   /**
    * @param ctx - owning root context (the service registers itself as `models`).

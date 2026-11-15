@@ -3,7 +3,8 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { stubConfigForm } from '@deepseek-ai/dsh-client-test-runtime'
 import { StrictMode } from 'react'
-import { autoBooleanField, autoChoiceField, autoConfig } from '../src/client/auto-config.ts'
+import { autoBooleanField, autoChoiceField, autoConfig, autoRoleField } from '../src/client/auto-config.ts'
+import type { PluginConfigFieldProps } from '../src/client/slot-contract.ts'
 import { AutoConfigForm } from '../src/client/AutoConfigForm.tsx'
 import { en, type PluginManagerLocaleKey } from '../src/client/locales.ts'
 import type { Translate } from '../src/client/presentation.ts'
@@ -88,7 +89,9 @@ describe('AutoConfigForm', () => {
     const stub = stubConfigForm<Record<string, unknown>>()
     stub.publish({ status: 'ready', writable: true, revision: 4, value: { name: 'exa', count: 3, strict: true, mode }, base: { strict: true }, user: { strict: true } })
     const view = render(
-      <StrictMode><AutoConfigForm scope={stub.scope} config={config} storedSecrets={new Set(stored)} t={t} /></StrictMode>,
+      <StrictMode>
+        <AutoConfigForm scope={stub.scope} config={config} storedSecrets={new Set(stored)} t={t} renderField={() => null} />
+      </StrictMode>,
     )
     return { stub, view }
   }
@@ -176,8 +179,58 @@ describe('AutoConfigForm', () => {
   it('renders a switch without a hint when the schema declares no description or default', () => {
     const stub = stubConfigForm<Record<string, unknown>>()
     stub.publish({ status: 'ready', writable: true, revision: 0, value: {}, base: {}, user: {} })
-    render(<AutoConfigForm scope={stub.scope} config={{ fields: [{ name: 'flag', kind: 'boolean' }], unsupported: [] }} storedSecrets={new Set()} t={t} />)
+    render(<AutoConfigForm scope={stub.scope} config={{ fields: [{ name: 'flag', kind: 'boolean' }], unsupported: [] }} storedSecrets={new Set()} t={t} renderField={() => null} />)
     expect(screen.getByRole('switch', { name: 'flag' }).getAttribute('aria-checked')).toBe('false')
     expect(screen.queryByText(/Default/u)).toBeNull()
+  })
+})
+
+describe('role fields', () => {
+  /** A schema with one `model-route` object field, as auto-review declares it. */
+  const ROUTE_SCHEMA = {
+    uid: 1,
+    refs: {
+      1: { type: 'object', meta: {}, dict: { reviewer: 2 } },
+      2: { type: 'object', meta: { role: 'model-route', default: {}, description: { en: 'Reviews cost one request each.', ja: '審査ごとに 1 回' } }, dict: { provider: 3, model: 3 } },
+      3: { type: 'string', meta: {} },
+    },
+  }
+
+  it('edits a field through the editor registered for its role, and lists it as unsupported without one', () => {
+    expect(autoConfig(ROUTE_SCHEMA, 'ja', new Set(['model-route']))).toEqual({
+      fields: [{ name: 'reviewer', kind: 'role', role: 'model-route', description: '審査ごとに 1 回' }], unsupported: [],
+    })
+    expect(autoConfig(ROUTE_SCHEMA, 'en')).toEqual({ fields: [], unsupported: ['reviewer'] })
+  })
+
+  it('stages a role value as JSON text and clears an empty one', () => {
+    const spec = autoRoleField('reviewer')
+    expect([spec.format({ provider: 'p', model: 'm' }), spec.format({}), spec.format(undefined)]).toEqual(['{"provider":"p","model":"m"}', '', ''])
+    expect([spec.parse('{"provider":"p","model":"m"}'), spec.parse(''), spec.parse('{}'), spec.parse('{')])
+      .toEqual([{ kind: 'set', value: { provider: 'p', model: 'm' } }, { kind: 'clear' }, { kind: 'clear' }, undefined])
+  })
+
+  it('hands the staged value to the role editor and writes what it stages on save', async () => {
+    const stub = stubConfigForm<Record<string, unknown>>()
+    stub.publish({ status: 'ready', writable: true, revision: 2, value: { reviewer: {} }, base: { reviewer: {} }, user: {} })
+    const seen: PluginConfigFieldProps[] = []
+    render(<AutoConfigForm
+      scope={stub.scope} config={autoConfig(ROUTE_SCHEMA, 'en', new Set(['model-route']))} storedSecrets={new Set()} t={t}
+      renderField={(role, field) => {
+        seen.push(field)
+        return (
+          <button type="button" id={field.id} onClick={() => { field.onChange({ provider: 'cheap', model: 'small' }) }}>
+            {`${role}:${JSON.stringify(field.value) ?? 'unset'}`}
+          </button>
+        )
+      }}
+    />)
+    expect(screen.getByText('model-route:unset')).toBeTruthy()
+    expect(screen.getByText('Reviews cost one request each.')).toBeTruthy()
+    fireEvent.click(screen.getByText('model-route:unset'))
+    expect(screen.getByText('model-route:{"provider":"cheap","model":"small"}')).toBeTruthy()
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.autoConfigSave })) })
+    expect(stub.mutate.mock.calls).toEqual([[[{ op: 'set', path: ['reviewer'], value: { provider: 'cheap', model: 'small' } }], 2]])
+    expect(seen.at(-1)?.disabled).toBe(false)
   })
 })

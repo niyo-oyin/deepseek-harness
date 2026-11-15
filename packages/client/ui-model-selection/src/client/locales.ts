@@ -33,6 +33,9 @@ export const zh = {
   'search.empty': '没有匹配的模型。',
   'empty.models': '暂无可用模型',
   'empty.efforts': '当前模型未提供推理等级。',
+  'route.session': '与会话的模型相同',
+  'route.unavailable': '{model}（不可用）',
+  'route.unavailableHint': '此模型已不在可用列表中。使用它的功能会失败，直到选择其他模型或改回与会话的模型相同。',
 } satisfies Record<string, string>
 
 /** The model namespace key union. */
@@ -63,6 +66,9 @@ export const en = {
   'search.empty': 'No matching models.',
   'empty.models': 'No models available.',
   'empty.efforts': 'This model provides no reasoning effort levels.',
+  'route.session': 'Same as the session\'s model',
+  'route.unavailable': '{model} (unavailable)',
+  'route.unavailableHint': 'This model is no longer available. Features that use it fail until you choose another model or go back to the session\'s model.',
 } satisfies Record<ModelKey, string>
 
 /** Japanese copy, checked against the English keys. */
@@ -90,6 +96,9 @@ export const ja = {
   'search.empty': '一致するモデルがありません。',
   'empty.models': '利用可能なモデルがありません。',
   'empty.efforts': 'このモデルには推論強度の設定がありません。',
+  'route.session': 'セッションのモデルと同じ',
+  'route.unavailable': '{model}（利用できません）',
+  'route.unavailableHint': 'このモデルは現在利用できません。別のモデルを選ぶか、セッションのモデルと同じに戻すまで、これを使う機能は失敗します。',
 } satisfies Record<keyof typeof en, string>
 
 /** Spanish dictionary, checked against the English keys. */
@@ -117,6 +126,9 @@ export const es = {
   'search.empty': 'No hay modelos coincidentes.',
   'empty.models': 'No hay modelos disponibles.',
   'empty.efforts': 'Este modelo no proporciona niveles de esfuerzo de razonamiento.',
+  'route.session': 'Igual que el modelo de la sesión',
+  'route.unavailable': '{model} (no disponible)',
+  'route.unavailableHint': 'Este modelo ya no está disponible. Las funciones que lo usan fallan hasta que elija otro modelo o vuelva al modelo de la sesión.',
 } satisfies Record<keyof typeof en, string>
 
 /** French dictionary, checked against the English keys. */
@@ -144,6 +156,9 @@ export const fr = {
   'search.empty': 'Aucun modèle correspondant.',
   'empty.models': 'Aucun modèle disponible.',
   'empty.efforts': 'Ce modèle ne fournit aucun niveau d’effort de raisonnement.',
+  'route.session': 'Identique au modèle de la session',
+  'route.unavailable': '{model} (indisponible)',
+  'route.unavailableHint': 'Ce modèle n’est plus disponible. Les fonctions qui l’utilisent échouent tant que vous ne choisissez pas un autre modèle ou ne revenez pas au modèle de la session.',
 } satisfies Record<keyof typeof en, string>
 
 /** German dictionary, checked against the English keys. */
@@ -171,6 +186,9 @@ export const de = {
   'search.empty': 'Keine passenden Modelle.',
   'empty.models': 'Keine Modelle verfügbar.',
   'empty.efforts': 'Dieses Modell liefert keine Argumentationsaufwandsstufen.',
+  'route.session': 'Wie das Modell der Sitzung',
+  'route.unavailable': '{model} (nicht verfügbar)',
+  'route.unavailableHint': 'Dieses Modell ist nicht mehr verfügbar. Funktionen, die es verwenden, schlagen fehl, bis Sie ein anderes Modell wählen oder zum Modell der Sitzung zurückkehren.',
 } satisfies Record<keyof typeof en, string>
 
 /** Russian dictionary, checked against the English keys. */
@@ -198,6 +216,9 @@ export const ru = {
   'search.empty': 'Нет подходящих моделей.',
   'empty.models': 'Нет доступных моделей.',
   'empty.efforts': 'Эта модель не обеспечивает обоснования уровней усилий.',
+  'route.session': 'Как модель сессии',
+  'route.unavailable': '{model} (недоступна)',
+  'route.unavailableHint': 'Эта модель больше недоступна. Функции, которые её используют, будут завершаться ошибкой, пока вы не выберете другую модель или не вернётесь к модели сессии.',
 } satisfies Record<keyof typeof en, string>
 
 /** Portuguese dictionary, checked against the English keys. */
@@ -225,4 +246,7 @@ export const pt = {
   'search.empty': 'Não há modelos correspondentes.',
   'empty.models': 'Nenhum modelo disponível.',
   'empty.efforts': 'Este modelo não fornece níveis de esforço de raciocínio.',
+  'route.session': 'Igual ao modelo da sessão',
+  'route.unavailable': '{model} (indisponível)',
+  'route.unavailableHint': 'Este modelo não está mais disponível. Os recursos que o usam falham até você escolher outro modelo ou voltar ao modelo da sessão.',
 } satisfies Record<keyof typeof en, string>
