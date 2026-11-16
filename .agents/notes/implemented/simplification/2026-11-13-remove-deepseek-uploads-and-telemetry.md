@@ -19,7 +19,7 @@ What remains is local:
 
 - The canonical feedback events stay in the Session log; the [canonical feedback log](../architecture/2026-09-05-canonical-feedback-log.md) owns them, and nothing delivers them.
 - The persisted `session-log-deepseek/delivery-accepted` event keeps its shape in the core `SessionEventMap`, because existing logs contain it and the finalized format digests cover it. No plugin appends it.
-- The `deepseek-account` and `llm-deepseek-account` packages stay, and the base bundle patch keeps the vendor account route disabled.
+- The `deepseek-account` and `llm-deepseek-account` packages stayed at first; the [account removal](../simplification/2026-11-16-remove-deepseek-account.md) deleted them.
 - DeepSeek model requests still carry the anonymous user id and Session id headers that the `llm-deepseek` adapter sets.
 
 The decisions that built the removed channels are archived: [request extensions](../../archived/architecture/2026-08-21-deepseek-llm-api-request-extensions.md), [default Session-log upload](../../archived/architecture/2026-09-14-session-log-upload-default.md), [bounded upload](../../archived/architecture/2026-09-24-bounded-session-log-upload.md), [explicit-feedback OTel](../../archived/architecture/2026-09-05-nonofficial-feedback-otel.md), and [Session-log OTLP limits](../../archived/architecture/2026-09-25-session-log-otel-byte-limits.md).

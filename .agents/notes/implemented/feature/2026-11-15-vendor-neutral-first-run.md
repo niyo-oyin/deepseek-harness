@@ -36,6 +36,6 @@ The native welcome window existed because the design called for native desktop b
 
 ## Consequences
 
-A fresh profile has no model until the owner adds a provider and picks one; every face says so in place. Profiles and fixtures that relied on the shipped default must state their own, which the scaffold and headless snapshots already did. The DeepSeek account plumbing that only the welcome window used is gone, but the `deepseek-account` service and the disabled `llm-deepseek-account` row stay because other packages still read them.
+A fresh profile has no model until the owner adds a provider and picks one; every face says so in place. Profiles and fixtures that relied on the shipped default must state their own, which the scaffold and headless snapshots already did. The DeepSeek account plumbing that only the welcome window used is gone; the rest of the account feature was [removed afterwards](../simplification/2026-11-16-remove-deepseek-account.md).
 
 This change does not cover the remaining DeepSeek defaults: the web search default `deepseek-search-api` and the search card's key reference, the SDK client and server default route and the SDK server's auto-mount of the DeepSeek plugin, `subagent-dsh-sdk`'s default route, ACP's configured route, and the translator and reasoning-translation DeepSeek choices.
