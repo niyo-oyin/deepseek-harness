@@ -164,7 +164,7 @@ Selection semantics (resolved at execution time, never order-dependent):
 - No id configured, multiple usable providers → `WEB_PROVIDER_AMBIGUOUS`.
 - No id configured, no usable provider → `WEB_PROVIDER_UNAVAILABLE`.
 
-Search then substitutes the only other available and ready provider when the selected provider's `ready()` answers false, so an installed search provider serves without an explicit selection while the default provider has no credential.
+Search counts only usable providers that are also ready when no id is configured, so automatic selection never picks a provider without a credential; with none or several ready, search has no selection and `searchReady()` answers false. A configured provider is never replaced.
 
 ```ts cordis-catalog
 /**
@@ -206,12 +206,14 @@ registerFetchProvider(provider: WebFetchProvider): () => void
 async search(request: WebSearchRequest, signal?: AbortSignal): Promise<WebSearchResult>
 
 /**
- * Whether the provider `search()` would select can authenticate a search made for a
- * model request on the `llmProvider` chat route. Asks only that provider's `ready()`;
- * one without `ready()` counts as ready. Makes no network calls. A selection failure
- * answers true, because `search()` reports that failure as a structured `WebError`.
+ * Whether search has a provider that can authenticate a search made for a model
+ * request on the `llmProvider` chat route. With a configured id, asks only that
+ * provider's `ready()`, and a selection failure answers true because `search()`
+ * reports it as a structured `WebError`. Without one, answers whether exactly one
+ * usable provider is ready. A provider without `ready()` counts as ready. Makes no
+ * network calls.
  * @param llmProvider - the provider route id of the model request, when known.
- * @returns false only when the selected provider reports that it cannot authenticate.
+ * @returns false when the configured provider cannot authenticate, or when no id is configured and zero or several providers are ready.
  */
 async searchReady(llmProvider?: string): Promise<boolean>
 

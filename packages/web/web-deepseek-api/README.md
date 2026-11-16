@@ -22,7 +22,7 @@ Search and fetch the web through the DeepSeek Search and Fetch APIs: one direct 
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount the plugin alongside `dsh-web` and select its providers. Shipped profiles mount it and select its Search API (`deepseek-search-api`) for search and local HTTP fetch for fetch. In **Plugins > Built-in plugin settings > Web search and fetch**, choosing **DeepSeek Search API** in the **Search** menu selects `deepseek-search-api` and choosing **DeepSeek Fetch API** in the **Fetch** menu selects `deepseek-fetch-api`; each menu is saved independently, and choosing another entry restores another provider. A saved selection applies to the next operation.
+Mount the plugin alongside `dsh-web` and select its providers. Shipped profiles mount it, choose no search provider, and select local HTTP fetch for fetch; with a DeepSeek key, both this Search API and legacy Messages search are set up, so search stays off until one is chosen. In **Plugins > Built-in plugin settings > Web search and fetch**, choosing **DeepSeek Search API** in the **Search** menu selects `deepseek-search-api` and choosing **DeepSeek Fetch API** in the **Fetch** menu selects `deepseek-fetch-api`; each menu is saved independently, and choosing another entry restores another provider. A saved selection applies to the next operation.
 
 ```yaml
 - name: '@deepseek-ai/dsh-web'

@@ -126,7 +126,7 @@ Selection must not depend on registration order. Cordis load order, config order
 | No provider id is configured and multiple usable providers for that kind are registered | fails with `WEB_PROVIDER_AMBIGUOUS` rather than choosing by registration order |
 | No provider id is configured and providers exist but none are usable | fails with `WEB_PROVIDER_UNAVAILABLE` |
 
-The "single provider auto-selects" rule is for tests, demos, and simple deployments. Product configs set explicit provider ids:
+For search, automatic selection counts only usable providers that are also ready, as the [web provider selection decision](2026-10-29-web-provider-selection.md) records; the shipped composition sets no search id and relies on it. A deployment pins explicit provider ids like this:
 
 ```yaml
 - id: web
@@ -150,7 +150,7 @@ The "single provider auto-selects" rule is for tests, demos, and simple deployme
 
 Operational overrides feed the same explicit selection path: `DSH_WEB_SEARCH_PROVIDER=deepseek-search-api` is equivalent to config `searchProvider: deepseek-search-api`, not a hidden priority chain inside `dsh-tool-web`.
 
-Each search or fetch reads the configured id when it runs, so a saved settings change selects another provider for the next operation without remounting `dsh-web`. The Search and Fetch menus on the Web search and fetch settings page rely on this to switch each capability's provider independently, including the [DeepSeek Search and Fetch APIs](../feature/2026-10-15-deepseek-search-fetch-api.md); the [web provider selection decision](2026-10-29-web-provider-selection.md) owns the shipped defaults.
+Each search or fetch reads the configured id when it runs, so a saved settings change selects another provider for the next operation without remounting `dsh-web`. The Search and Fetch menus on the Web search and fetch settings page rely on this to switch each capability's provider independently, including the [DeepSeek Search and Fetch APIs](../feature/2026-10-15-deepseek-search-fetch-api.md); the [web provider selection decision](2026-10-29-web-provider-selection.md) owns the shipped defaults and automatic search selection.
 
 `ctx.web.search()` and `ctx.web.fetch()` resolve the provider at execution time using the selection rules above. If the selected capability is unavailable, they throw `WebError` with a structured code such as `WEB_PROVIDER_UNAVAILABLE`, `WEB_PROVIDER_CONFIGURED_MISSING`, `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`, or `WEB_PROVIDER_AMBIGUOUS`. If no provider is explicitly configured and no usable provider exists, the execution error is the generic `WEB_PROVIDER_UNAVAILABLE` case; there is deliberately no diagnostic summary of every unavailable provider.
 

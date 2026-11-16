@@ -48,11 +48,16 @@ const DEFAULT_WAIT_TIMEOUT_MS = 10_000
 const WAIT_POLL_INTERVAL_MS = 10
 
 /**
- * Credential environment every keyless replay layers under its scenario environment. Shipped
- * profiles offer `web_search` only while a DeepSeek search key is configured and recordings ran
- * with a real key, so a replay supplies a placeholder instead of whatever the runner exports.
+ * Credential environment every keyless replay layers under its scenario environment. Recordings
+ * ran with a real DeepSeek key and the DeepSeek Search API as the search provider, so a replay
+ * supplies a placeholder key instead of whatever the runner exports, and chooses that provider:
+ * shipped profiles choose none, and with a DeepSeek key both DeepSeek search providers are set up,
+ * which leaves search without a selection and withholds `web_search`.
  */
-export const REPLAY_CREDENTIAL_ENV: Readonly<Record<string, string>> = { DEEPSEEK_API_KEY: 'snapshot-replay-key' }
+export const REPLAY_CREDENTIAL_ENV: Readonly<Record<string, string>> = {
+  DEEPSEEK_API_KEY: 'snapshot-replay-key',
+  DSH_WEB_SEARCH_PROVIDER: 'deepseek-search-api',
+}
 
 /**
  * One step of a scenario's deterministic input script (`input.json`). The
