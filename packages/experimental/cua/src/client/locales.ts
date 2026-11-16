@@ -8,8 +8,8 @@ export const en = {
   title: 'Authorize computer use',
   applicationsTitle: 'Manage applications computer use can access',
   windowsSetupTitle: 'Check Windows desktop access',
-  windowsSetupBody: 'Unlock the Windows desktop, then check again. DSH asks before accessing each application.',
-  windowsSessionUnknown: 'No interactive Windows desktop was verified. Run DSH in a signed-in desktop session, then check again.',
+  windowsSetupBody: 'Unlock the Windows desktop, then check again. NDSH asks before accessing each application.',
+  windowsSessionUnknown: 'No interactive Windows desktop was verified. Run NDSH in a signed-in desktop session, then check again.',
   windowsCaptureUnavailable: 'This Windows session does not support window capture. Check the Windows version and graphics driver, then check again.',
   applicationInteraction: 'Application interaction',
   windowsInstructions: 'Keep the Windows desktop unlocked. Some input needs the target application in front. Applications running with higher privileges can refuse access.',
@@ -59,8 +59,8 @@ export const zh: Record<CuaPermissionLocaleKey, string> = {
   setupBody: 'Computer Use 插件已开启。使用前请授予辅助功能和屏幕录制权限。请前往插件详情页完成设置。',
   setupQueryFailed: 'Computer Use 插件已开启，但暂时无法检测系统权限。请前往插件详情页查看原因并重试。',
   windowsSetupTitle: '检查 Windows 桌面访问状态',
-  windowsSetupBody: '请解锁 Windows 桌面，然后重新检测。DSH 会在访问每个应用前询问授权。',
-  windowsSessionUnknown: '尚未确认可交互的 Windows 桌面。请在已登录的桌面会话中运行 DSH，然后重新检测。',
+  windowsSetupBody: '请解锁 Windows 桌面，然后重新检测。NDSH 会在访问每个应用前询问授权。',
+  windowsSessionUnknown: '尚未确认可交互的 Windows 桌面。请在已登录的桌面会话中运行 NDSH，然后重新检测。',
   windowsCaptureUnavailable: '当前 Windows 会话不支持窗口截图。请检查 Windows 版本和显卡驱动，然后重新检测。',
   applicationInteraction: '应用交互',
   windowsInstructions: '请保持 Windows 桌面解锁。部分输入需要将目标应用切到前台，运行权限更高的应用可能拒绝访问。',
@@ -100,8 +100,8 @@ export const zh: Record<CuaPermissionLocaleKey, string> = {
 /** Japanese copy, checked against the English keys. */
 export const ja = {
   windowsSetupTitle: 'Windows デスクトップへのアクセスを確認',
-  windowsSetupBody: 'Windows デスクトップのロックを解除して再確認してください。DSH は各アプリへのアクセス前に確認します。',
-  windowsSessionUnknown: '操作可能な Windows デスクトップを確認できませんでした。サインイン済みのデスクトップセッションで DSH を実行し、再確認してください。',
+  windowsSetupBody: 'Windows デスクトップのロックを解除して再確認してください。NDSH は各アプリへのアクセス前に確認します。',
+  windowsSessionUnknown: '操作可能な Windows デスクトップを確認できませんでした。サインイン済みのデスクトップセッションで NDSH を実行し、再確認してください。',
   windowsCaptureUnavailable: 'この Windows セッションはウィンドウキャプチャに対応していません。Windows のバージョンとグラフィックスドライバーを確認して再試行してください。',
   applicationInteraction: 'アプリの操作',
   windowsInstructions: 'Windows デスクトップのロックを解除しておいてください。一部の入力では対象アプリを最前面にする必要があります。高い権限で実行中のアプリはアクセスを拒否する場合があります。',
@@ -168,8 +168,8 @@ export const ja = {
 /** Spanish dictionary, checked against the English keys. */
 export const es = {
   windowsSetupTitle: 'Comprobar el acceso al escritorio de Windows',
-  windowsSetupBody: 'Desbloquea el escritorio de Windows y vuelve a comprobarlo. DSH pide permiso antes de acceder a cada aplicación.',
-  windowsSessionUnknown: 'No se ha verificado un escritorio interactivo de Windows. Ejecuta DSH en una sesión de escritorio iniciada y vuelve a comprobarlo.',
+  windowsSetupBody: 'Desbloquea el escritorio de Windows y vuelve a comprobarlo. NDSH pide permiso antes de acceder a cada aplicación.',
+  windowsSessionUnknown: 'No se ha verificado un escritorio interactivo de Windows. Ejecuta NDSH en una sesión de escritorio iniciada y vuelve a comprobarlo.',
   windowsCaptureUnavailable: 'Esta sesión de Windows no admite la captura de ventanas. Comprueba la versión de Windows y el controlador gráfico, y vuelve a intentarlo.',
   applicationInteraction: 'Interacción con aplicaciones',
   windowsInstructions: 'Mantén desbloqueado el escritorio de Windows. Algunas entradas requieren que la aplicación esté en primer plano. Las aplicaciones con más privilegios pueden denegar el acceso.',
@@ -222,8 +222,8 @@ export const es = {
 /** French dictionary, checked against the English keys. */
 export const fr = {
   windowsSetupTitle: 'Vérifier l’accès au bureau Windows',
-  windowsSetupBody: 'Déverrouillez le bureau Windows, puis vérifiez à nouveau. DSH demande une autorisation avant d’accéder à chaque application.',
-  windowsSessionUnknown: 'Aucun bureau Windows interactif n’a été vérifié. Exécutez DSH dans une session de bureau ouverte, puis vérifiez à nouveau.',
+  windowsSetupBody: 'Déverrouillez le bureau Windows, puis vérifiez à nouveau. NDSH demande une autorisation avant d’accéder à chaque application.',
+  windowsSessionUnknown: 'Aucun bureau Windows interactif n’a été vérifié. Exécutez NDSH dans une session de bureau ouverte, puis vérifiez à nouveau.',
   windowsCaptureUnavailable: 'Cette session Windows ne prend pas en charge la capture de fenêtres. Vérifiez la version de Windows et le pilote graphique, puis réessayez.',
   applicationInteraction: 'Interaction avec les applications',
   windowsInstructions: 'Gardez le bureau Windows déverrouillé. Certaines saisies nécessitent que l’application soit au premier plan. Les applications disposant de privilèges supérieurs peuvent refuser l’accès.',
@@ -276,8 +276,8 @@ export const fr = {
 /** German dictionary, checked against the English keys. */
 export const de = {
   windowsSetupTitle: 'Windows-Desktopzugriff prüfen',
-  windowsSetupBody: 'Entsperren Sie den Windows-Desktop und prüfen Sie erneut. DSH fragt vor dem Zugriff auf jede Anwendung nach einer Erlaubnis.',
-  windowsSessionUnknown: 'Es wurde kein interaktiver Windows-Desktop bestätigt. Führen Sie DSH in einer angemeldeten Desktopsitzung aus und prüfen Sie erneut.',
+  windowsSetupBody: 'Entsperren Sie den Windows-Desktop und prüfen Sie erneut. NDSH fragt vor dem Zugriff auf jede Anwendung nach einer Erlaubnis.',
+  windowsSessionUnknown: 'Es wurde kein interaktiver Windows-Desktop bestätigt. Führen Sie NDSH in einer angemeldeten Desktopsitzung aus und prüfen Sie erneut.',
   windowsCaptureUnavailable: 'Diese Windows-Sitzung unterstützt keine Fensteraufnahme. Prüfen Sie die Windows-Version und den Grafiktreiber und versuchen Sie es erneut.',
   applicationInteraction: 'Anwendungsinteraktion',
   windowsInstructions: 'Lassen Sie den Windows-Desktop entsperrt. Manche Eingaben erfordern die Zielanwendung im Vordergrund. Anwendungen mit höheren Berechtigungen können den Zugriff verweigern.',
@@ -330,8 +330,8 @@ export const de = {
 /** Russian dictionary, checked against the English keys. */
 export const ru = {
   windowsSetupTitle: 'Проверить доступ к рабочему столу Windows',
-  windowsSetupBody: 'Разблокируйте рабочий стол Windows и повторите проверку. DSH запрашивает разрешение перед доступом к каждому приложению.',
-  windowsSessionUnknown: 'Интерактивный рабочий стол Windows не подтверждён. Запустите DSH в сеансе вошедшего в систему пользователя и повторите проверку.',
+  windowsSetupBody: 'Разблокируйте рабочий стол Windows и повторите проверку. NDSH запрашивает разрешение перед доступом к каждому приложению.',
+  windowsSessionUnknown: 'Интерактивный рабочий стол Windows не подтверждён. Запустите NDSH в сеансе вошедшего в систему пользователя и повторите проверку.',
   windowsCaptureUnavailable: 'Этот сеанс Windows не поддерживает захват окон. Проверьте версию Windows и графический драйвер, затем повторите проверку.',
   applicationInteraction: 'Взаимодействие с приложениями',
   windowsInstructions: 'Не блокируйте рабочий стол Windows. Для некоторых действий требуется вывести целевое приложение на передний план. Приложения с повышенными привилегиями могут отказать в доступе.',
@@ -384,8 +384,8 @@ export const ru = {
 /** Portuguese dictionary, checked against the English keys. */
 export const pt = {
   windowsSetupTitle: 'Verificar acesso à área de trabalho do Windows',
-  windowsSetupBody: 'Desbloqueie a área de trabalho do Windows e verifique novamente. O DSH pede permissão antes de acessar cada aplicativo.',
-  windowsSessionUnknown: 'Nenhuma área de trabalho interativa do Windows foi confirmada. Execute o DSH em uma sessão com login e verifique novamente.',
+  windowsSetupBody: 'Desbloqueie a área de trabalho do Windows e verifique novamente. O NDSH pede permissão antes de acessar cada aplicativo.',
+  windowsSessionUnknown: 'Nenhuma área de trabalho interativa do Windows foi confirmada. Execute o NDSH em uma sessão com login e verifique novamente.',
   windowsCaptureUnavailable: 'Esta sessão do Windows não oferece suporte à captura de janelas. Verifique a versão do Windows e o driver gráfico e tente novamente.',
   applicationInteraction: 'Interação com aplicativos',
   windowsInstructions: 'Mantenha a área de trabalho do Windows desbloqueada. Algumas entradas exigem que o aplicativo de destino esteja em primeiro plano. Aplicativos com privilégios mais altos podem recusar o acesso.',

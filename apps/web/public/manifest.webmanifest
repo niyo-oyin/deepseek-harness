@@ -1,6 +1,6 @@
 {
   "name": "Not DeepSeek Harness",
-  "short_name": "DSH",
+  "short_name": "NDSH",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
