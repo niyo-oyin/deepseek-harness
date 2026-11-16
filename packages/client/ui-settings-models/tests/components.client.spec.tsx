@@ -139,21 +139,6 @@ function wireNamespaces(): SettingsNamespaceView[] {
       secrets: [],
       revision: 4,
     },
-    {
-      ns: 'llm-deepseek-account',
-      schema: JSON.parse(JSON.stringify(DeepSeekConfig.toJSON())) as JsonValue,
-      value: {
-        baseURL: 'https://base',
-        defaultContextWindow: 1_000_000,
-        maxTokens: 256_000,
-        models: DEFAULT_DEEPSEEK_MODELS,
-      },
-      base: { defaultContextWindow: 1_000_000, maxTokens: 256_000, models: DEFAULT_DEEPSEEK_MODELS },
-      user: {},
-      autoGenerate: true, applies: 'live',
-      secrets: [],
-      revision: 0,
-    },
   ]
 }
 
@@ -2440,18 +2425,6 @@ it('keeps an inherited profile endpoint ahead of dynamic provider configuration'
   const input = screen.getByLabelText<HTMLInputElement>(en.baseUrl)
   expect(input.placeholder).toBe('https://team.example/openai/v1')
   expect(input.getAttribute('aria-describedby')).toBeNull()
-})
-
-it('renders the localized account row as signed in without an edit action', async () => {
-  const scripted = scriptedFace({})
-  const { controller } = await mountFace(scripted)
-  const row = controller.store.getSnapshot().rows.find(candidate => candidate.entry.provider === 'deepseek-official')!
-  await act(async () => { controller.store.update((state) => {
-    state.rows = [{ ...row, configured: true, accountAvailable: true, entry: { ...row.entry, provider: 'deepseek-account' } }]
-  }) })
-  const item = screen.getByText(en.deepSeekAccount).closest('li')!
-  expect(within(item).getByText(en.accountSignedIn)).toBeTruthy()
-  expect(within(item).queryByText(en.edit)).toBeNull()
 })
 
 it.each([es, fr, de, ru, pt])('keeps capacity examples in translated validation messages parseable', (dictionary) => {

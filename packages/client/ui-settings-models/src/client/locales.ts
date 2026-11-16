@@ -3,7 +3,6 @@
 /** English strings (the key-set source of truth for this pair). */
 export const en = {
   nav: 'Models',
-  deepSeekAccount: 'DeepSeek Account',
   title: 'Models',
   intro: 'Enter your API keys to use models from the following providers.',
   introEmpty: 'Add a model provider to start using models.',
@@ -34,7 +33,6 @@ export const en = {
   savedProvider: 'Saved {provider}.',
   credentialConfigured: 'API key configured',
   credentialMissing: 'API key missing',
-  accountSignedIn: 'Signed in',
   readOnly: 'The settings document is read-only in this deployment.',
   loadFailed: 'Loading the provider directory failed',
   conflict: 'Someone else changed these settings while this card was open. Close it and reopen to edit the current values.',
@@ -209,7 +207,6 @@ export type ModelsKey = keyof typeof en
 /** Chinese strings (same keys as {@link en}). */
 export const zh: { [Key in keyof typeof en]: string } = {
   nav: '模型',
-  deepSeekAccount: 'DeepSeek 账号',
   title: '模型',
   intro: '填入各提供商的 API 密钥即可使用其模型。',
   introEmpty: '添加模型提供方后即可开始使用模型。',
@@ -240,7 +237,6 @@ export const zh: { [Key in keyof typeof en]: string } = {
   savedProvider: '已保存 {provider}。',
   credentialConfigured: 'API 密钥已配置',
   credentialMissing: 'API 密钥缺失',
-  accountSignedIn: '已登录',
   readOnly: '当前部署的设置文档为只读。',
   loadFailed: '加载提供商目录失败',
   conflict: '这张卡片打开期间，这些设置已被其他地方改动。请关闭后重新打开，在当前值上编辑。',
@@ -412,7 +408,6 @@ export const zh: { [Key in keyof typeof en]: string } = {
 /** Japanese copy, checked against the English keys. */
 export const ja = {
   'nav': 'モデル',
-  'deepSeekAccount': 'DeepSeekアカウント',
   'title': 'モデル',
   'intro': '以下のプロバイダーのモデルを使用するには、APIキーを入力してください。',
   'introEmpty': 'モデルを使うには、モデルのプロバイダーを追加してください。',
@@ -443,7 +438,6 @@ export const ja = {
   'savedProvider': '{provider}を保存しました。',
   'credentialConfigured': 'APIキー設定済み',
   'credentialMissing': 'APIキー未設定',
-  'accountSignedIn': 'ログイン済み',
   'readOnly': 'このデプロイでは設定ドキュメントは読み取り専用です。',
   'loadFailed': 'プロバイダーディレクトリの読み込みに失敗しました',
   'conflict': 'このカードを開いている間に、他のユーザーが設定を変更しました。閉じて開き直し、最新の値で編集してください。',
@@ -615,7 +609,6 @@ export const ja = {
 /** Spanish dictionary, checked against the English keys. */
 export const es = {
   nav: 'Modelos',
-  deepSeekAccount: 'Cuenta DeepSeek',
   title: 'Modelos',
   intro: 'Ingrese sus claves API para usar modelos de los siguientes proveedores.',
   introEmpty: 'Añada un proveedor de modelos para empezar a usar modelos.',
@@ -646,7 +639,6 @@ export const es = {
   savedProvider: 'Guardado {provider}.',
   credentialConfigured: 'Clave API configurada',
   credentialMissing: 'Falta la clave API',
-  accountSignedIn: 'Iniciado sesión',
   readOnly: 'El documento de configuración es de solo lectura en esta implementación.',
   loadFailed: 'Error al cargar el directorio de proveedores',
   conflict: 'Alguien más cambió esta configuración mientras esta tarjeta estaba abierta. Ciérrelo y vuelva a abrirlo para editar los valores actuales.',
@@ -818,7 +810,6 @@ export const es = {
 /** French dictionary, checked against the English keys. */
 export const fr = {
   nav: 'Modèles',
-  deepSeekAccount: 'Compte DeepSeek',
   title: 'Modèles',
   intro: 'Entrez vos clés API pour utiliser les modèles des fournisseurs suivants.',
   introEmpty: 'Ajoutez un fournisseur de modèles pour commencer à utiliser des modèles.',
@@ -849,7 +840,6 @@ export const fr = {
   savedProvider: '{provider} enregistré.',
   credentialConfigured: 'Clé API configurée',
   credentialMissing: 'Clé API manquante',
-  accountSignedIn: 'Connecté',
   readOnly: 'Le document de paramètres est en lecture seule dans ce déploiement.',
   loadFailed: 'Le chargement du répertoire du fournisseur a échoué',
   conflict: "Quelqu'un d'autre a modifié ces paramètres alors que cette carte était ouverte. Fermez-le et rouvrez-le pour modifier les valeurs actuelles.",
@@ -1021,7 +1011,6 @@ export const fr = {
 /** German dictionary, checked against the English keys. */
 export const de = {
   nav: 'Modelle',
-  deepSeekAccount: 'DeepSeek-Konto',
   title: 'Modelle',
   intro: 'Geben Sie Ihre API-Schlüssel ein, um Modelle der folgenden Anbieter zu verwenden.',
   introEmpty: 'Fügen Sie einen Modellanbieter hinzu, um Modelle zu verwenden.',
@@ -1052,7 +1041,6 @@ export const de = {
   savedProvider: 'Gespeichert {provider}.',
   credentialConfigured: 'API-Schlüssel konfiguriert',
   credentialMissing: 'API-Schlüssel fehlt',
-  accountSignedIn: 'Angemeldet',
   readOnly: 'Das Einstellungsdokument ist in dieser Bereitstellung schreibgeschützt.',
   loadFailed: 'Das Laden des Anbieterverzeichnisses ist fehlgeschlagen',
   conflict: 'Jemand anderes hat diese Einstellungen geändert, während diese Karte geöffnet war. Schließen Sie es und öffnen Sie es erneut, um die aktuellen Werte zu bearbeiten.',
@@ -1224,7 +1212,6 @@ export const de = {
 /** Russian dictionary, checked against the English keys. */
 export const ru = {
   nav: 'Модели',
-  deepSeekAccount: 'DeepSeek Аккаунт',
   title: 'Модели',
   intro: 'Введите ключи API, чтобы использовать модели следующих поставщиков.',
   introEmpty: 'Добавьте поставщика моделей, чтобы начать пользоваться моделями.',
@@ -1255,7 +1242,6 @@ export const ru = {
   savedProvider: 'Сохранено {provider}.',
   credentialConfigured: 'Ключ API настроен',
   credentialMissing: 'Ключ API отсутствует',
-  accountSignedIn: 'Вошёл в систему',
   readOnly: 'В этом развертывании документ настроек доступен только для чтения.',
   loadFailed: 'Не удалось загрузить каталог поставщика',
   conflict: 'Кто-то другой изменил эти настройки, пока эта карточка была открыта. Закройте его и откройте снова, чтобы редактировать текущие значения.',
@@ -1427,7 +1413,6 @@ export const ru = {
 /** Portuguese dictionary, checked against the English keys. */
 export const pt = {
   nav: 'Modelos',
-  deepSeekAccount: 'DeepSeek Conta',
   title: 'Modelos',
   intro: 'Insira suas chaves API para usar modelos dos seguintes fornecedores.',
   introEmpty: 'Adicione um provedor de modelos para começar a usar modelos.',
@@ -1458,7 +1443,6 @@ export const pt = {
   savedProvider: 'Salvo {provider}.',
   credentialConfigured: 'API chave configurada',
   credentialMissing: 'API chave faltando',
-  accountSignedIn: 'Conectado',
   readOnly: 'O documento de configurações é somente leitura nesta implantação.',
   loadFailed: 'Falha ao carregar o diretório do provedor',
   conflict: 'Outra pessoa alterou essas configurações enquanto este cartão estava aberto. Feche-o e abra-o novamente para editar os valores atuais.',

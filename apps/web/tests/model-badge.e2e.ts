@@ -29,20 +29,17 @@ describe.skipIf(MODE === 'record')('web e2e: catalog model badges', () => {
 
   beforeAll(async () => {
     scaffold = await launchWebScaffold({
-      extraOverlayPath: fileURLToPath(new URL('./fixtures/model-badge/account.overlay.yml', import.meta.url)),
+      extraOverlayPath: fileURLToPath(new URL('./fixtures/model-badge/default-model.overlay.yml', import.meta.url)),
       replayFixture: FIXTURE,
       replayProvidersOnly: true,
       replayProviders: [
-        { id: 'deepseek-account', name: 'DeepSeek Account', models: [
-          listedModel('deepseek-flash', NAME, { text: ' 1017 ', tone: 'info' }),
-        ] },
         { id: 'deepseek-official', name: 'DeepSeek', models: [
           listedModel('deepseek-flash', NAME, { text: { en: ' New ', zh: ' 新 ' }, tone: 'success' }),
           { id: 'deepseek-v4-pro', name: 'DeepSeek-V4-Pro' },
           listedModel('long', LONG_NAME, { text: 'Preview', tone: 'future-tone' }),
           listedModel('invalid-badge', 'Invalid badge model', { text: { en: 'New', zh: '\u200b' } }),
         ] },
-        { id: 'external', name: 'External', models: [{ id: 'deepseek-flash', name: NAME }] },
+        { id: 'external', name: 'External', models: [listedModel('deepseek-flash', NAME, { text: ' 1017 ', tone: 'info' })] },
       ],
     })
     browser = await chromium.launch()
@@ -61,7 +58,7 @@ describe.skipIf(MODE === 'record')('web e2e: catalog model badges', () => {
     const trigger = page.getByRole('button', { name: /^选择模型/ })
     await trigger.getByText('新', { exact: true }).waitFor()
     expect(await trigger.textContent()).toContain(`新 ${NAME}`)
-    expect(await trigger.getAttribute('aria-label')).toBe(`选择模型，当前 ${NAME}`)
+    expect(await trigger.getAttribute('aria-label')).toBe(`选择模型，当前 DeepSeek · ${NAME}`)
     expect(await trigger.getByText('新', { exact: true }).getAttribute('data-tone')).toBe('success')
     try {
       await trigger.click()
@@ -70,15 +67,15 @@ describe.skipIf(MODE === 'record')('web e2e: catalog model badges', () => {
       await current.click()
       const menu = page.getByRole('menu', { name: '模型', exact: true })
       await compareOrRefreshGolden(EXPECTED, await captureStableAria(page, '[role="menu"][aria-label="模型"]', scaffold.workspaceCwd), MODE)
-      expect(await menu.getByRole('group', { name: 'External', exact: true }).locator('[data-tone]').count()).toBe(0)
+      expect(await menu.getByRole('menuitemradio', { name: 'DeepSeek-V4-Pro', exact: true }).locator('[data-tone]').count()).toBe(0)
       expect(await menu.getByRole('menuitemradio', { name: 'Invalid badge model', exact: true }).locator('[data-tone]').count()).toBe(0)
       expect(await menu.getByRole('menuitemradio', { name: `${LONG_NAME} Preview`, exact: true }).locator('[data-tone]').getAttribute('data-tone')).toBe('neutral')
-      const account = menu.getByRole('group', { name: 'DeepSeek 账号', exact: true })
-      expect(await account.getByText('1017', { exact: true }).getAttribute('data-tone')).toBe('info')
-      await account.getByRole('menuitemradio', { name: `${NAME} 1017`, exact: true }).click()
-      await expect.poll(() => scaffold.ctx.agentDefaultModel.currentSelection()).toEqual({ provider: 'deepseek-account', model: 'deepseek-flash' })
+      const external = menu.getByRole('group', { name: 'External', exact: true })
+      expect(await external.getByText('1017', { exact: true }).getAttribute('data-tone')).toBe('info')
+      await external.getByRole('menuitemradio', { name: `${NAME} 1017`, exact: true }).click()
+      await expect.poll(() => scaffold.ctx.agentDefaultModel.currentSelection()).toEqual({ provider: 'external', model: 'deepseek-flash' })
       await expect.poll(() => trigger.textContent()).toContain(`1017 ${NAME}`)
-      const catalog = await scaffold.ctx.llm.listModels('deepseek-account')
+      const catalog = await scaffold.ctx.llm.listModels('external')
       expect(catalog.map(model => ({ id: model.id, name: model.name }))).toEqual([{ id: 'deepseek-flash', name: NAME }])
     } finally {
       await page.keyboard.press('Escape')
@@ -113,7 +110,7 @@ describe.skipIf(MODE === 'record')('web e2e: catalog model badges', () => {
       expect(await updated.locator('[data-tone]').getAttribute('data-tone')).toBe('success')
       adapter.badge = undefined
       scaffold.ctx.emit('llm/models-updated', provider)
-      await expect.poll(() => trigger.textContent()).toBe('Live model')
+      await expect.poll(() => trigger.textContent()).toBe('live-badge ·Live model')
       const cleared = page.getByRole('menuitemradio', { name: 'Live model', exact: true })
       await cleared.waitFor()
       expect(await cleared.locator('[data-tone]').count()).toBe(0)
@@ -133,7 +130,7 @@ describe.skipIf(MODE === 'record')('web e2e: catalog model badges', () => {
       await trigger.click()
       await page.getByRole('menuitem', { name: /^模型/ }).click()
       await page.getByRole('menuitemradio', { name: `${LONG_NAME} Preview`, exact: true }).click()
-      await expect.poll(() => trigger.textContent()).toBe(`Preview ${LONG_NAME}`)
+      await expect.poll(() => trigger.textContent()).toBe(`DeepSeek ·Preview ${LONG_NAME}`)
       const triggerBadge = trigger.getByText('Preview', { exact: true })
       const triggerBox = (await trigger.boundingBox())!
       const triggerBadgeBox = (await triggerBadge.boundingBox())!

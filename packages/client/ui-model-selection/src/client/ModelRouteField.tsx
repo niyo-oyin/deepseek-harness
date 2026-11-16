@@ -117,7 +117,7 @@ export function ModelRouteField(props: ModelRouteFieldProps): ReactNode {
           )
           : null}
         {groups.map(group => (
-          <optgroup key={group.id} label={group.id === 'deepseek-account' ? t('provider.account') : group.name}>
+          <optgroup key={group.id} label={group.name}>
             {group.models.map(model => (
               <option key={model.id} value={routeKey(group.id, model.id)}>{model.name}</option>
             ))}
