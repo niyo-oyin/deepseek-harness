@@ -17,7 +17,6 @@ export const EXPERIMENTAL_PACKAGE_NAME_EXCEPTIONS: Readonly<Record<string, strin
   'packages/experimental/tool-terminal': '@deepseek-ai/dsh-tool-terminal',
   'packages/experimental/terminal-panel': '@deepseek-ai/dsh-terminal-panel',
   'packages/experimental/tool-ralph': '@deepseek-ai/dsh-tool-ralph',
-  'packages/experimental/skill-badge': '@deepseek-ai/dsh-skill-badge',
   'packages/experimental/hook-protocol': '@deepseek-ai/dsh-hook-protocol',
   'packages/experimental/hooks-claude-code': '@deepseek-ai/dsh-hooks-claude-code',
   'packages/experimental/hooks-codex': '@deepseek-ai/dsh-hooks-codex',
@@ -30,7 +29,6 @@ export const EXPERIMENTAL_PACKAGE_NAME_EXCEPTIONS: Readonly<Record<string, strin
   'packages/experimental/plugin-recommendations': '@deepseek-ai/dsh-plugin-recommendations',
   'packages/experimental/client-ui-plugin-recommendations': '@deepseek-ai/dsh-client-ui-plugin-recommendations',
   'packages/experimental/personalized-recommendations': '@deepseek-ai/dsh-personalized-recommendations',
-  'packages/experimental/deepseek-chat-import': '@deepseek-ai/dsh-deepseek-chat-import',
 } satisfies Record<`packages/experimental/${string}`, `@deepseek-ai/dsh-${string}`>
 
 /** Legacy npm namespace, allowed only in `LEGACY_PREFIXED_EXPERIMENTAL_PACKAGE_DIRECTORIES`. */
@@ -40,7 +38,6 @@ export const EXPERIMENTAL_PACKAGE_NAME_PREFIX = '@deepseek-ai/dsh-experimental-'
 export const LEGACY_PREFIXED_EXPERIMENTAL_PACKAGE_DIRECTORIES: readonly string[] = [
   'packages/experimental/api-speech-to-text',
   'packages/experimental/auto-review',
-  'packages/experimental/badge-skill-bundle',
   'packages/experimental/browser-use-chrome-devtools-mcp',
   'packages/experimental/browser-use-playwright-mcp',
   'packages/experimental/browser-use-runtime',

@@ -685,6 +685,7 @@
     "feature/2026-09-27-desktop-cli-runtime.md": "sha256:0e4eff551344f6c2feea2ba7b527f89f9b515bc2f83deb3dcddd2cd16489325d",
     "feature/2026-09-28-desktop-login-shell-environment.md": "sha256:bb7b7d8da36bee5425a07cfc70694d2532e3bfe1d038beadb136f3b68a00070e",
     "feature/2026-10-14-built-in-plugin-feature-previews.md": "sha256:228d2a1284a4083f5798bfbdc8484e9f3b4ce352426b9a2559dd07f7e066f999",
+    "feature/2026-11-11-deepseek-chat-export-import.md": "sha256:31ce65ef1afc40ef817139faf0545094e13c51371c87ad0a58516641db1c3175",
     "process/2026-06-11-doc-sync-enforcement.md": "sha256:e7a5f3dfebaaaa664d2e9461aab15f85d1e45d4d99717be86ac8aac18c43c957",
     "process/2026-06-11-quality-gates.md": "sha256:8d42d5cab29b4814770f7e65b9b13f37b1689011eaba853bbaddef50a667b11c",
     "process/2026-06-11-tsdown-over-dumble.md": "sha256:e9b927f730f14b8e34204474bab6fae4d1d10b8645411040fdedc3ef243391d8",
