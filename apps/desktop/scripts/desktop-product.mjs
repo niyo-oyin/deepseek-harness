@@ -1,7 +1,7 @@
 /** Product identity of this Desktop distribution; the values keep it apart from an upstream installation. */
 
 /** Product name: executable name, default installation directory, shortcuts, and uninstall entry. */
-export const DESKTOP_PRODUCT_NAME = 'DSH Fork'
+export const DESKTOP_PRODUCT_NAME = 'Not DeepSeek Harness'
 
 /** Packaged manifest name; Electron derives the default userData directory from it. */
-export const DESKTOP_PACKAGE_NAME = 'dsh-fork-desktop'
+export const DESKTOP_PACKAGE_NAME = 'ndsh-desktop'
