@@ -6,12 +6,11 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, ipcMain, nativeTheme, protocol } from 'electron'
 import { resolveDesktopLocale } from '../../lib/types/locale.js'
-import { UPDATE_DIALOG_IPC } from '../../lib/types/update-dialog.js'
-import { MANDATORY_IPC } from '../../lib/types/mandatory-update-ipc.js'
+import { SHELL_DIALOG_IPC } from '../../lib/types/shell-dialog.js'
 
 const directory = fileURLToPath(new URL('../../.desktop-build/qualification/', import.meta.url))
 mkdirSync(directory, { recursive: true })
-const root = mkdtempSync(join(directory, 'update-theme-'))
+const root = mkdtempSync(join(directory, 'shell-theme-'))
 app.setPath('userData', root)
 protocol.registerSchemesAsPrivileged([{ scheme: 'dsh-app', privileges: { standard: true, secure: true, supportFetchAPI: true } }])
 app.on('window-all-closed', () => {})
@@ -30,19 +29,17 @@ async function main() {
       : name.endsWith('.svg') ? 'image/svg+xml' : 'text/html'
     return new Response(await readFile(file), { headers: { 'content-type': mime } })
   })
-  ipcMain.handle(UPDATE_DIALOG_IPC.status, () => ({ revision: 1, locale: locale.id,
-    title: 'Check for updates', message: 'Update ready', detail: 'Shell palette qualification',
-    buttons: ['Install', 'Later'], cancelId: 1, closeLabel: 'Close', technicalDetails: 'Details', technicalDetailsLabel: 'Details' }))
-  ipcMain.handle(MANDATORY_IPC.status, () => ({ locale, policy: { blocking: true, checking: false },
-    update: { phase: 'error', failedOperation: 'download', version: '1.0.0', technicalDetails: 'Details' }, deferred: false }))
+  ipcMain.handle(SHELL_DIALOG_IPC.status, () => ({ revision: 1, locale: locale.id,
+    title: 'Manage dsh Command', message: 'The Desktop command is installed.', detail: 'Shell palette qualification',
+    buttons: ['Install', 'Close'], cancelId: 1, closeLabel: 'Close', technicalDetails: 'Details', technicalDetailsLabel: 'Details' }))
   try {
     assert.equal(await readFile(new URL('../../lib/shell/design-platform.css', import.meta.url), 'utf8'),
       await readFile(new URL('../../../../packages/client/ui-theme/src/styles/design-platform.css', import.meta.url), 'utf8'))
-    for (const document of ['update-dialog', 'mandatory-update']) {
+    for (const document of ['shell-dialog']) {
       for (const initial of ['light', 'dark']) {
         nativeTheme.themeSource = initial
         const window = new BrowserWindow({ show: true, width: 600, height: 650,
-          webPreferences: { preload: fileURLToPath(new URL(`../../lib/preload-${document === 'update-dialog' ? 'update-dialog' : 'mandatory'}.cjs`, import.meta.url)),
+          webPreferences: { preload: fileURLToPath(new URL('../../lib/preload-shell-dialog.cjs', import.meta.url)),
             contextIsolation: true, sandbox: true, nodeIntegration: false } })
         windows.push(window)
         // Palette checks exclude the user's pointer so hover cannot select an interaction color.
@@ -62,9 +59,9 @@ async function main() {
               const primary = getComputedStyle(document.querySelector('.primary'));
               resolve({ dark, surface: card.backgroundColor, label: card.color, primary: primary.backgroundColor,
                 primaryLabel: primary.color, boxShadow: card.boxShadow,
-                diagnostic: getComputedStyle(document.querySelector('pre, #address')).backgroundColor, body: getComputedStyle(document.body).backgroundColor,
+                diagnostic: getComputedStyle(document.querySelector('pre')).backgroundColor, body: getComputedStyle(document.body).backgroundColor,
                 mask: getComputedStyle(document.body, '::before').backgroundColor,
-                close: document.querySelector('.close') ? getComputedStyle(document.querySelector('.close'), '::before').backgroundColor : null });
+                close: getComputedStyle(document.querySelector('.close'), '::before').backgroundColor });
             }
             observer.observe(document.body, { attributes: true }); check();
           })`)
@@ -77,7 +74,7 @@ async function main() {
             primaryLabel: dark ? 'rgb(53, 54, 56)' : 'rgb(255, 255, 255)',
             diagnostic: dark ? 'rgb(27, 27, 28)' : 'rgb(249, 250, 251)', body: 'rgba(0, 0, 0, 0)',
             mask: dark ? 'rgba(0, 0, 0, 0.5)' : 'rgba(0, 0, 0, 0.24)',
-            close: document === 'update-dialog' ? dark ? 'rgb(249, 250, 251)' : 'rgb(15, 17, 21)' : null })
+            close: dark ? 'rgb(249, 250, 251)' : 'rgb(15, 17, 21)' })
           results.push({ document, initial, source, ...colors })
           if (source === initial) {
             await window.webContents.executeJavaScript('Promise.all(document.getAnimations().map(animation => animation.finished))')
@@ -88,12 +85,11 @@ async function main() {
       }
     }
     await writeFile(join(root, 'result.json'), JSON.stringify(results, null, 2) + '\n')
-    console.log(`Update theme qualification passed (${results.length} cases): ${root}`)
+    console.log(`Shell theme qualification passed (${results.length} cases): ${root}`)
   } finally {
     clearTimeout(deadline)
     for (const window of windows) if (!window.isDestroyed()) window.destroy()
-    ipcMain.removeHandler(UPDATE_DIALOG_IPC.status)
-    ipcMain.removeHandler(MANDATORY_IPC.status)
+    ipcMain.removeHandler(SHELL_DIALOG_IPC.status)
     protocol.unhandle('dsh-app')
     nativeTheme.themeSource = original
   }

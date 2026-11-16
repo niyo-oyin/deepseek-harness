@@ -10,7 +10,6 @@ import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import { localDragResource } from './file-drag.ts'
 
-import { installDesktopUpdateTaskControl } from './update-tasks.ts'
 import { installDesktopQuitInspection } from './quit-inspection.ts'
 import { installOperationDiagnostics } from './operation-diagnostics.ts'
 import { DesktopAuthenticationEnd, receiveDesktopSecret } from './authentication.ts'
@@ -65,7 +64,6 @@ async function main(): Promise<void> {
   const dragReads = new Map<number, AbortController>()
   const dragTasks = new Set<Promise<void>>()
   const control: {
-    updateTasks?: ReturnType<typeof installDesktopUpdateTaskControl>
     quitInspection?: ReturnType<typeof installDesktopQuitInspection>
   } = {}
   const stop = (): Promise<void> => stopping ??= (async () => {
@@ -124,18 +122,6 @@ async function main(): Promise<void> {
       })().catch((error: unknown) => { console.error(error) })
       return
     }
-    if (message.type !== 'update-tasks' || !('requestId' in message) || !Number.isSafeInteger(message.requestId)
-      || !('action' in message) || !['inspect', 'lock', 'unlock'].includes(String(message.action))) return
-    void (async () => {
-      try {
-        if (stopping !== undefined || control.updateTasks === undefined) throw new Error('desktop update: Host is unavailable')
-        const active = await control.updateTasks(message.action as 'inspect' | 'lock' | 'unlock')
-        await send({ type: 'update-tasks', requestId: message.requestId, active })
-      } catch (error) {
-        await send({ type: 'update-tasks', requestId: message.requestId, active: true,
-          error: error instanceof Error ? error.message : String(error) })
-      }
-    })().catch((error: unknown) => { console.error(error) })
   })
   const onAuthenticationEnd = (): void => { void stop() }
   authentication.signal.addEventListener('abort', onAuthenticationEnd, { once: true })
@@ -149,7 +135,6 @@ async function main(): Promise<void> {
     authentication.dispose()
   }, 'desktop-host: authentication channel')
   installOperationDiagnostics(ctx, record => send({ type: 'plugin-operation', record }), 32, runId)
-  control.updateTasks = installDesktopUpdateTaskControl(ctx)
   control.quitInspection = installDesktopQuitInspection(ctx)
   await ctx.plugin(DesktopAuthentication, { readSecret: () => secret }).await()
   if (!canPublish()) return

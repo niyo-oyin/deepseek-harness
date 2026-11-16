@@ -1,4 +1,4 @@
-; Electron user data and updater downloads leave with the application; the Harness home is never touched.
+; Electron user data and the per-application cache directory holding installer reports leave with the application; the Harness home is never touched.
 !include FileFunc.nsh
 Var UnTarget
 Var UnHome
