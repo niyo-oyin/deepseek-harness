@@ -52,7 +52,7 @@ Every model-selection path carries provider and model together: declarative agen
 
 Compaction configuration gains `summarizationProvider` beside `summarizationModel`. Both are empty to inherit, or both are non-empty to select an explicit target; a half-configured pair fails load. Inheritance uses the last logged request target when one exists and falls back to the agent's creation options. `compaction/summary` records both fields with the existing model-call envelope.
 
-The JSON-RPC runtime receives provider and model explicitly. Its convenience fallback mounts `dsh-llm-deepseek` only for provider `deepseek` when that provider has no registered owner; other missing providers fail without guessing an adapter.
+The JSON-RPC runtime receives provider and model together, or neither to take the profile's default model. It mounts no adapter: a provider without a registered owner fails initialization without guessing an adapter.
 
 Current seed/load validation rejects request headers and assistant messages that omit required provider/model fields. The frozen v0-to-v1 edge requires the same reconstructable routing identity before migration; it never guesses a missing provider or model, and malformed shapes refuse before publication.
 

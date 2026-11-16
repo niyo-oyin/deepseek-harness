@@ -4,6 +4,9 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { Context } from '@deepseek-ai/cordis'
+import AgentDefaultModelConfig from '@deepseek-ai/dsh-agent-default-model'
+import { apply as applyAcp } from '../src/index.ts'
 import { AttachmentError } from '@deepseek-ai/dsh-attachment'
 import type { ToolCallId, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { SESSION_FORMAT_VERSION, type SessionId, SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
@@ -862,30 +865,34 @@ describe('automation-only ACP bridge', () => {
     expect(harness.adapter.requests[1]?.tools?.map(tool => tool.name)).toContain('mcp__fixture__add')
   }, 30_000)
 
-  it('leaves absent agent targets for request listeners to supply', async () => {
+  it('rejects session/new with the setting to change when neither config nor a default model names a route', async () => {
     harness = await makeBridgeHarness({ config: { provider: undefined, model: undefined } })
     await harness.client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} })
-    const { sessionId } = await harness.client.newSession({ cwd: process.cwd(), mcpServers: [] })
 
-    expect(harness.ctx.agents.get(brandString<SessionId>(sessionId))?.options).toEqual({})
+    await expect(harness.client.newSession({ cwd: process.cwd(), mcpServers: [] }))
+      .rejects.toThrow('set provider and model under agent-default-model or on the acp entry')
+    expect(harness.ctx.agents.list()).toEqual([])
   })
 
-  it('uses a recorded selection when ACP has no initial route', async () => {
+  it('starts sessions on the default model when the ACP config names no route', async () => {
     harness = await makeBridgeHarness({
       config: { provider: undefined, model: undefined },
-      script: [textResponse('listener-routed')],
+      script: [textResponse('default-routed')],
     })
+    await harness.ctx.plugin(AgentDefaultModelConfig, { provider: 'mock', model: 'mock' })
     await harness.client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} })
     const created = await harness.client.newSession({ cwd: process.cwd(), mcpServers: [] })
 
-    expect(created.configOptions).toEqual([])
-    const agent = harness.ctx.agents.get(brandString<SessionId>(created.sessionId))!
-    agent.model.select({ provider: 'mock', model: 'mock' })
     await expect(harness.client.prompt({
       sessionId: created.sessionId,
       prompt: [{ type: 'text', text: 'route me' }],
     })).resolves.toEqual({ stopReason: 'end_turn' })
     expect(harness.adapter.requests[0]).toMatchObject({ provider: 'mock', model: 'mock' })
+  })
+
+  it('rejects a config that names only one of provider and model at load', () => {
+    expect(() => { applyAcp(new Context(), { provider: 'mock' }) })
+      .toThrow('acp: provider and model are set together; the config sets only provider')
   })
 
   it('concatenates text blocks without exposing protocol framing to the model', async () => {

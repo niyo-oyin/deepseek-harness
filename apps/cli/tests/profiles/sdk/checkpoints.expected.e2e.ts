@@ -52,7 +52,7 @@ describe.skipIf(!existsSync(dshBin))('sdk-minimal durability checkpoints', () =>
     ]))
     const harness = new DeepSeekHarness({
       dshBin, profile: 'sdk-minimal', dshHome: join(root, 'home'),
-      cwd: root, processCwd: root, patches: [patch],
+      cwd: root, processCwd: root, patches: [patch], provider: 'deepseek-official', model: 'deepseek-v4-flash',
       env: { ...process.env, DEEPSEEK_API_KEY: 'keyless-checkpoint-test', DEEPSEEK_BASE_URL: `http://127.0.0.1:${address.port}` },
     })
     onTestFinished(async () => { await harness.close() })

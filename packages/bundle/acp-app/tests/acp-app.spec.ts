@@ -24,9 +24,9 @@ describe('dsh-acp-app bundle', () => {
     expect(patches.find(patch => patch.id === 'session-title-llm')).toMatchObject({ disabled: true })
     const rows = patches.flatMap(patch => patch.insert ?? [])
     expect(rows.find(row => row.id === 'acp-app-startup')?.name).toBe('@deepseek-ai/dsh-acp-app')
-    expect(rows.find(row => row.id === 'acp')).toMatchObject({
-      inject: ['acpAppStartup'],
-      config: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
-    })
+    const acp = rows.find(row => row.id === 'acp')
+    expect(acp).toMatchObject({ inject: ['acpAppStartup'] })
+    // Sessions start on the profile's agent-default-model selection; the bundle preselects no vendor.
+    expect(acp?.config).toBeUndefined()
   })
 })

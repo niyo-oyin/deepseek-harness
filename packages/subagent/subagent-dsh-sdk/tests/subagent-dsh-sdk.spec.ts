@@ -7,7 +7,7 @@ import { mountWorkingDirectoryFixture } from '../../subagent/tests/working-direc
  * quiescent disposal are all exercised end to end. No model, no key.
  */
 
-import { startExternalActivation } from '../../subagent/tests/external-activation-helpers.ts'
+import { externalTestParent, startExternalActivation } from '../../subagent/tests/external-activation-helpers.ts'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -213,6 +213,39 @@ describe('dsh-subagent-dsh-sdk provider', () => {
         model: 'fake-model',
         maxTokens: 4096,
       }])
+      await ctx.fiber.dispose()
+    } finally {
+      rmSync(tmp, { recursive: true, force: true })
+    }
+  })
+
+  it('initializes an unconfigured child on the delegating parent route and fails without one', async () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'subagent-dsh-sdk-parent-route-'))
+    const recordFile = join(tmp, 'init.jsonl')
+    try {
+      const ctx = new Context()
+      await ctx.plugin(SessionProjectionRegistry)
+      await mountWorkingDirectoryFixture(ctx)
+      await ctx.plugin(SubagentRuntime)
+      await ctx.plugin(sdk, {
+        providerName: 'dsh-sdk', profile: 'sdk', patches: [], dshHome: process.cwd(), env: { FAKE_RECORD_INIT: recordFile },
+      })
+      expect(ctx.subagents.getProvider('dsh-sdk')?.agentRouteDefaults).toBeUndefined()
+
+      const parent = await externalTestParent(ctx, process.cwd())
+      Object.assign(parent.options, { provider: 'parent-provider', model: 'parent-model' })
+      const run = await startExternalActivation(ctx, 'dsh-sdk', { ...request('inherit'), parent })
+      await run.result
+      await run.dispose()
+      const { readFileSync } = await import('node:fs')
+      expect(JSON.parse(readFileSync(recordFile, 'utf8'))).toEqual({
+        cwd: process.cwd(),
+        provider: 'parent-provider',
+        model: 'parent-model',
+      })
+
+      await expect(startExternalActivation(ctx, 'dsh-sdk', request('no-route')))
+        .rejects.toThrow(expectedFailure('stage: initialize; category: configuration'))
       await ctx.fiber.dispose()
     } finally {
       rmSync(tmp, { recursive: true, force: true })
@@ -872,6 +905,17 @@ describe('dsh-subagent-dsh-sdk provider', () => {
     await expect(ctx.plugin(sdk, { ...base, shutdownTimeoutMs: 0 })).rejects.toThrow('shutdownTimeoutMs must be a positive finite number')
     await expect(ctx.plugin(sdk, { ...base, disposeEofGraceMs: -1 })).rejects.toThrow('disposeEofGraceMs must be a positive finite number')
     await expect(ctx.plugin(sdk, { ...base, disposeGraceMs: Number.NaN })).rejects.toThrow('disposeGraceMs must be a positive finite number')
+    await ctx.fiber.dispose()
+  })
+
+  it('rejects a route that names only one of provider and model at load', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionProjectionRegistry)
+    await mountWorkingDirectoryFixture(ctx)
+    await ctx.plugin(SubagentRuntime)
+    const base = { providerName: 'sdk', profile: 'sdk', patches: [], dshHome: process.cwd(), env: {} }
+    await expect(ctx.plugin(sdk, { ...base, provider: 'p' }))
+      .rejects.toThrow('subagent-dsh-sdk provider and model are set together, or both omitted to use the parent route')
     await ctx.fiber.dispose()
   })
 

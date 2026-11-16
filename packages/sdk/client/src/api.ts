@@ -22,25 +22,31 @@ export class DeepSeekHarness implements AsyncDisposable {
   private clientInstance: HarnessClient
   private readonly createClient: () => HarnessClient
   private readonly cwd: string
-  private readonly provider: string
-  private readonly model: string
+  private readonly provider: string | undefined
+  private readonly model: string | undefined
   private readonly reasoningEffort: DeepSeekHarnessOptions['reasoningEffort']
   private readonly maxTokens: number | undefined
   private readonly approvalRequests: boolean | undefined
   private initialized: Promise<void> | undefined
   private closed = false
 
-  /** @param options - dsh launch configuration plus the session route, effort, and output cap. */
+  /**
+   * @param options - dsh launch configuration plus the session route, effort, and output cap.
+   * @throws TypeError when only one of `provider` and `model` is set.
+   */
   constructor(options?: DeepSeekHarnessOptions)
   constructor(options: DeepSeekHarnessOptions = {}, clientFactory?: () => HarnessClient) {
+    if ((options.provider === undefined) !== (options.model === undefined)) {
+      throw new TypeError('DeepSeekHarness provider and model are set together, or both omitted to use the profile default model')
+    }
     this.createClient = clientFactory ?? (() => new HarnessClient(options))
     this.clientInstance = this.createClient()
     // Absolute before the handshake: the child spawns relative to THIS
     // process's cwd, but the wire cwd is resolved again inside the child — a
     // relative value would double-resolve (e.g. `worker` → `worker/worker`).
     this.cwd = resolve(options.cwd ?? options.processCwd ?? process.cwd())
-    this.provider = options.provider ?? 'deepseek-official'
-    this.model = options.model ?? 'deepseek-v4-flash'
+    this.provider = options.provider
+    this.model = options.model
     this.reasoningEffort = options.reasoningEffort
     this.maxTokens = options.maxTokens
     this.approvalRequests = options.approvalRequests
@@ -73,8 +79,8 @@ export class DeepSeekHarness implements AsyncDisposable {
         this.clientInstance.start()
         await this.clientInstance.initialize({
           cwd: this.cwd,
-          provider: this.provider,
-          model: this.model,
+          ...this.provider === undefined ? {} : { provider: this.provider },
+          ...this.model === undefined ? {} : { model: this.model },
           ...this.reasoningEffort === undefined ? {} : { reasoningEffort: this.reasoningEffort },
           ...this.maxTokens === undefined ? {} : { maxTokens: this.maxTokens },
           ...this.approvalRequests === undefined ? {} : { approvalRequests: this.approvalRequests },

@@ -889,8 +889,8 @@ async function runScenario(scenario: CorpusScenario): Promise<{
     ...childEnvironment,
     ...resumeReplayFile === undefined ? {} : { DSH_SNAPSHOT_OVERRIDE: resumeReplayFile },
   }
-  // A fixture the child cannot load leaves deepseek-official without its replay adapter, and the SDK server then
-  // mounts the live provider instead. Loading it here with the child's own loader fails the scenario before launch.
+  // A fixture the child cannot load leaves deepseek-official without its replay adapter, and SDK initialization then
+  // fails without naming the fixture. Loading it here with the child's own loader fails the scenario before launch.
   // Scenarios whose composition answers the model by other means (a fixture provider) load no fixture there.
   if (parentFixture !== undefined && mountsLlmReplay(patches)) {
     loadSessionScripts({

@@ -30,7 +30,9 @@ export DSH_HOME=/absolute/path/to/example-dsh-home
 dsh --profile sdk-minimal
 ```
 
-`DSH_CONTEXT_WINDOW` sets the fallback capacity for a model absent from the adapter's advisory catalog. `DSH_SYSTEM_PROMPT` replaces the default persona. The SDK initialization request is the sole model selection and overrides environment defaults.
+`DSH_CONTEXT_WINDOW` sets the fallback capacity for a model absent from the adapter's advisory catalog. `DSH_SYSTEM_PROMPT` replaces the default persona. The SDK initialization request is the sole model selection and must name both `provider` and `model`: the profile composes no `agent-default-model`, so a request without them fails.
+
+The tree's one model adapter is the DeepSeek API-key adapter in the `llm-deepseek` row, as the example provider for this explicit composition. To run another provider, a patch disables that row and inserts that provider's adapter row with its own credential configuration; the SDK client then names that provider.
 
 Use `dsh plugin --profile sdk-minimal` to manage persistent external dependencies. Profile, home, and ordered `--patch` files can replace rows or insert bundles above the complete default tree. The shipped template applies patches only at startup.
 

@@ -334,6 +334,21 @@ describe('DeepSeekHarness', () => {
     }])
   })
 
+  it('omits provider and model from the handshake when neither is configured', async () => {
+    const dir = await tempDir('sdk-client-default-route-')
+    const recordFile = join(dir, 'init.jsonl')
+    const harness = createProcessDeepSeekHarness(fakeLaunch({ FAKE_RECORD_INIT: recordFile }), { cwd: dir })
+    cleanups.push(() => harness.close())
+    await harness.start()
+    await harness.close()
+    expect(JSON.parse(await readFile(recordFile, 'utf8'))).toEqual({ cwd: dir })
+  })
+
+  it('rejects a route that names only one of provider and model before spawning', () => {
+    expect(() => createProcessDeepSeekHarness(fakeLaunch({}), { provider: 'only-provider' }))
+      .toThrow('DeepSeekHarness provider and model are set together, or both omitted to use the profile default model')
+  })
+
   it('resolves a relative launch cwd to an absolute workspace before the handshake', async () => {
     // vitest workers forbid chdir, so derive a RELATIVE path from the real
     // process cwd to a temp worker dir; resolution is lexical either way.

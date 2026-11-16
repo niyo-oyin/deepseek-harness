@@ -13,7 +13,8 @@ import { SdkUserQuestionBridge } from './user-questions.ts'
 import { queryCommand } from './query-input.ts'
 import { queryCommandImages, queryContent } from './query-content.ts'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentHandle, ModelSelection } from '@deepseek-ai/dsh-agent'
+import type {} from '@deepseek-ai/dsh-agent-default-model'
 import { admitEncodedImages, type EncodedImageAttachment, type ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import { createUserMessage, type ReasoningEffortId, type ContentBlock, type LlmRuntime } from '@deepseek-ai/dsh-llm'
 import type { SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
@@ -22,7 +23,6 @@ import type {} from '@deepseek-ai/dsh-user-approval'
 
 import type {} from '@deepseek-ai/dsh-schedule'
 import type { SubagentRunEndInfo } from '@deepseek-ai/dsh-subagent'
-import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek-api-key'
 import type {
   ApprovalRequestParams,
   CommandExecution,
@@ -88,11 +88,9 @@ function successStatus(reason: string, options: HarnessSdkJsonRpcServerOptions):
  */
 export class HarnessSdkJsonRpcServer {
   private cwd = process.cwd()
-  private provider = 'deepseek-official'
-  private model = 'deepseek-official'
-  private reasoningEffort: ReasoningEffortId | undefined
+  /** Route `initialize` resolved for every SDK-created agent; `undefined` until initialization succeeds. */
+  private route: ModelSelection | undefined
   private maxTokens: number | undefined
-  private llmFiber: { dispose(): Promise<void> } | undefined
   private readonly sessions = new Map<string, SessionRecord>()
   private readonly sessionCreations = new Map<string, Promise<SessionRecord>>()
   private readonly commandTasks = new Set<Promise<CommandExecution | undefined>>()
@@ -102,7 +100,6 @@ export class HarnessSdkJsonRpcServer {
   private readonly disposers: (() => void)[] = []
   private shutdownTask: Promise<Record<string, never>> | undefined
   private shuttingDown = false
-  private initialized = false
   private approvalRequests = false
   private readonly lifetime = new AbortController()
   private readonly userQuestions: SdkUserQuestionBridge
@@ -208,7 +205,8 @@ export class HarnessSdkJsonRpcServer {
   }
 
   /**
-   * Validate and configure the SDK route, mounting the DeepSeek fallback only when unowned.
+   * Validate and configure the SDK route. Omitted provider and model resolve
+   * through the composition's `agentDefaultModel` service when one is mounted.
    * @param params - SDK handshake parameters.
    * @returns server identity for the handshake.
    */
@@ -225,31 +223,29 @@ export class HarnessSdkJsonRpcServer {
       throw new TypeError('initialize maxTokens must be a positive safe integer')
     }
     const cwd = resolve(params.cwd)
-    const provider = params.provider
-    const model = params.model
+    const requested = this.requestedRoute(params)
     const reasoningEffort = params.reasoningEffort === undefined
-      ? undefined
+      ? requested.reasoningEffort
       : brandString<ReasoningEffortId>(params.reasoningEffort)
-    if (!this.hasAdapterFor(provider)) {
-      if (provider !== 'deepseek-official') throw new Error(`no adapter registered for provider "${provider}"`)
-      this.llmFiber = await this.ctx.plugin(LlmDeepSeek)
+    const route: ModelSelection = {
+      provider: requested.provider,
+      model: requested.model,
+      ...reasoningEffort === undefined ? {} : { reasoningEffort },
     }
-    // Adapter presence was read from this service above; a successful fallback mount also requires it.
+    if (!this.hasAdapterFor(route.provider)) {
+      throw new Error(`no adapter registered for provider "${route.provider}"; add that provider's adapter to the profile`)
+    }
+    // Adapter presence was read from this service above.
     const llm = this.ctx.get('llm') as LlmRuntime
     await llm.resolveCallConfig({
-      provider,
-      model,
-      ...reasoningEffort === undefined ? {} : { reasoningEffort },
+      ...route,
       ...params.maxTokens === undefined ? {} : { maxTokens: params.maxTokens },
     })
     this.cwd = cwd
-    this.provider = provider
-    this.model = model
-    this.reasoningEffort = reasoningEffort
+    this.route = route
     this.maxTokens = params.maxTokens
     this.approvalRequests = params.approvalRequests === true
     this.userQuestions.enabled = params.capabilities?.userQuestions === true
-    this.initialized = true
     this.initialization.resolve()
     return { serverInfo: { name: 'deepseek-harness-sdk-runtime', version: '0.0.1' } }
   }
@@ -260,7 +256,7 @@ export class HarnessSdkJsonRpcServer {
    * @returns the durable message identity.
    */
   async prompt(params: SessionPromptParams): Promise<SessionPromptResult> {
-    if (!this.initialized) throw new Error('SDK server is not initialized')
+    if (this.route === undefined) throw new Error('SDK server is not initialized')
     const rec = await this.getOrCreateSession(params.sessionId)
     this.lifetime.signal.throwIfAborted()
     // An agent-loop-only reload disposes the loop's agents while this record
@@ -287,7 +283,7 @@ export class HarnessSdkJsonRpcServer {
    * @throws on runtime failure; a recognized command failure never falls back to a prompt.
    */
   async query(params: SessionQueryParams): Promise<SessionQueryResult> {
-    if (!this.initialized) throw new Error('SDK server is not initialized')
+    if (this.route === undefined) throw new Error('SDK server is not initialized')
     if (this.shuttingDown) throw new Error('SDK server is shutting down')
     const text = params.contentBlocks.find(block => block.type === 'text')
     if (text?.text.trim().startsWith('/')) {
@@ -339,7 +335,7 @@ export class HarnessSdkJsonRpcServer {
    * @returns an empty result after the Agent is ready for prompts.
    */
   async resume(params: SessionResumeParams): Promise<Record<string, never>> {
-    if (!this.initialized) throw new Error('SDK server is not initialized')
+    if (this.route === undefined) throw new Error('SDK server is not initialized')
     if (this.shuttingDown) throw new Error('SDK server is shutting down')
     const sessionId = params.sessionId
     const restoration = this.scheduledSessions.get(sessionId)
@@ -364,7 +360,7 @@ export class HarnessSdkJsonRpcServer {
    * @returns an empty result after the root stays idle across the descendant check.
    */
   async wait(params: SessionWaitParams): Promise<Record<string, never>> {
-    if (!this.initialized) throw new Error('SDK server is not initialized')
+    if (this.route === undefined) throw new Error('SDK server is not initialized')
     const rec = this.sessions.get(params.sessionId)
     if (rec === undefined) throw new Error(`unknown SDK session: ${params.sessionId}`)
     const agent = rec.handle.agent
@@ -432,7 +428,7 @@ export class HarnessSdkJsonRpcServer {
   }
 
   private async workingDirectoryAgent(sessionId: string): Promise<Agent> {
-    if (!this.initialized) throw new Error('SDK server is not initialized')
+    if (this.route === undefined) throw new Error('SDK server is not initialized')
     const rec = await this.getOrCreateSession(sessionId)
     this.assertLiveAgent(rec, sessionId)
     return rec.handle.agent
@@ -478,9 +474,7 @@ export class HarnessSdkJsonRpcServer {
     const teardownResults = await Promise.allSettled([
       this.goalLifetime.dispose(),
       ...records.map(rec => Promise.resolve().then(() => rec.handle.dispose())),
-      ...(this.llmFiber === undefined ? [] : [Promise.resolve().then(() => this.llmFiber?.dispose())]),
     ])
-    this.llmFiber = undefined
     failures.push(...teardownResults
       .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
       .map(result => result.reason as unknown))
@@ -569,10 +563,10 @@ export class HarnessSdkJsonRpcServer {
     // rows in the host plane, so this agent reads them from the global layer. A
     // deployment that configures a roster has to join one here first
     // (@deepseek-ai/dsh-agent-preset-registry README, "Composing a child agent").
+    const route = this.route
+    if (route === undefined) throw new Error('SDK server is not initialized')
     const agentOptions = {
-      provider: this.provider,
-      model: this.model,
-      ...this.reasoningEffort === undefined ? {} : { reasoningEffort: this.reasoningEffort },
+      ...route,
       ...this.maxTokens === undefined ? {} : { maxTokens: this.maxTokens },
     }
     const handle = await (resume ? this.ctx.agents.resume({
@@ -597,6 +591,29 @@ export class HarnessSdkJsonRpcServer {
     const rec: SessionRecord = { handle, failure: undefined }
     this.sessions.set(sessionId, rec)
     return rec
+  }
+
+  /**
+   * Take the handshake's provider and model, or the composition default when both are omitted.
+   * @param params - SDK handshake parameters.
+   * @returns the requested route before adapter validation.
+   * @throws TypeError when only one of provider and model is supplied or either is empty.
+   * @throws Error when both are omitted and the composition supplies no default model.
+   */
+  private requestedRoute(params: InitializeParams): ModelSelection {
+    const { provider, model } = params
+    if (provider === undefined && model === undefined) {
+      const defaults = this.ctx.get('agentDefaultModel')
+      const selection = defaults?.currentSelection()
+      if (selection !== undefined) return selection
+      throw new Error(defaults === undefined
+        ? 'initialize requires provider and model: this profile composes no agent-default-model to supply a default'
+        : 'initialize requires provider and model: pass both, or set provider and model under agent-default-model in this profile')
+    }
+    if (typeof provider !== 'string' || provider.length === 0 || typeof model !== 'string' || model.length === 0) {
+      throw new TypeError('initialize provider and model are non-empty strings supplied together')
+    }
+    return { provider, model }
   }
 
   private hasAdapterFor(provider: string): boolean {
