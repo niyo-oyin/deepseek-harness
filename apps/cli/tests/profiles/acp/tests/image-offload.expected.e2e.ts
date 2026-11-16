@@ -142,7 +142,7 @@ it('pins Messages Files offload and inline fallback in assembled requests', asyn
     const imageHandle = `Image ${attachmentId}; request preview 1x1px.${normalizedAccess}`
     const runtimeContext = (cwd: string): string => '<system-reminder>\nThe following information describes your current session:\n\n'
       + `Current working directory: ${JSON.stringify(cwd)}.\n\n`
-      + 'Current DSH file policy: danger-full-access. The DSH file sandbox does not restrict file modifications by available operations.\n\n'
+      + 'Current NDSH file policy: danger-full-access. The NDSH file sandbox does not restrict file modifications by available operations.\n\n'
       + 'Approval prompts are disabled in this session: actions that require approval are rejected automatically — do not request sandbox escalation (do not set `sandbox_permissions`).\n\n'
       + 'You are the root agent. Your name is "lead".\n\n'
       + 'To message other agents, use send_message({ agent: "<agent-name>", message: "..." }).\n'

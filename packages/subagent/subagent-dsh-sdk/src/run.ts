@@ -98,7 +98,7 @@ interface SdkFailureFacts {
 /** Fixed safe failure text derived only from provider-owned structured facts. */
 function failureDiagnostic(facts: SdkFailureFacts): string {
   const fields = [
-    'provider: DSH SDK',
+    'provider: NDSH SDK',
     `stage: ${facts.stage}`,
     `category: ${facts.category}`,
   ]

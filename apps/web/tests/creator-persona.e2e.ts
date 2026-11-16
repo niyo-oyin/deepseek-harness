@@ -8,7 +8,7 @@ import { fixtureUserPrompts, launchWebScaffold } from './scaffold.ts'
 import { connectFreshWorkspace, newEnglishPage } from './support.ts'
 
 const FIXTURE = fileURLToPath(new URL('../../../snapshots/web/creator-persona/session.v4.jsonl', import.meta.url))
-const CUSTOMIZATION_INTENT = 'You help the user customize DeepSeek Harness itself.'
+const CUSTOMIZATION_INTENT = 'You help the user customize Not DeepSeek Harness itself.'
 
 it('sends the Creator customization intent without taking actions for an ordinary request', async () => {
   const scaffold = await launchWebScaffold({

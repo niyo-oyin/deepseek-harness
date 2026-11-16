@@ -12,7 +12,7 @@ export class UnsupportedBundlePlatformError extends Error {
    * @param platform Operating system of the DSH Host.
    */
   constructor(platforms: readonly string[], platform: string) {
-    super(`Bundle supports Host platforms ${platforms.join(', ')}; the DSH Host is running ${platform}`)
+    super(`Bundle supports Host platforms ${platforms.join(', ')}; the NDSH Host is running ${platform}`)
     this.name = 'UnsupportedBundlePlatformError'
   }
 }

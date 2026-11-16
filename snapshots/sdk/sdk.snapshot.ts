@@ -170,7 +170,7 @@ const SDK_ASSERTIONS: Readonly<Record<string, SdkAssertions>> = {
     expectedFinalResponse: 'SDK snapshot OK',
     runtimeContext: {
       includes: ['Current working directory:'],
-      excludes: ['Current DeepSeek Harness implementation checkout:', 'Current DeepSeek Harness Web GUI URL:'],
+      excludes: ['Current Not DeepSeek Harness implementation checkout:', 'Current Not DeepSeek Harness Web GUI URL:'],
     },
   },
   'desktop-ptc-context': { expectedFinalResponse: 'SDK snapshot OK' },
@@ -268,7 +268,7 @@ const SDK_ASSERTIONS: Readonly<Record<string, SdkAssertions>> = {
     expectedSystem: MINIMAL_SYSTEM_PROMPT,
     expectedToolDescriptions: { bash: MINIMAL_BASH_DESCRIPTION },
     runtimeContext: {
-      includes: ['Current working directory:', 'Current DSH file policy: danger-full-access', 'Approval prompts are disabled in this session'],
+      includes: ['Current working directory:', 'Current NDSH file policy: danger-full-access', 'Approval prompts are disabled in this session'],
       excludes: ['workspace-write'],
     },
   },
@@ -1459,7 +1459,7 @@ describe('TypeScript SDK snapshots over the jsonrpc runtime', () => {
         }
         const runtimeContexts = continuationMessages.filter(message => (message.source as JsonObject | undefined)?.kind === 'runtime-context')
         const runtimeText = JSON.stringify(runtimeContexts.at(-1))
-        expect(runtimeText).toContain('Current DSH file policy: read-only.')
+        expect(runtimeText).toContain('Current NDSH file policy: read-only.')
         const texts = continuationMessages.flatMap(message => message.content as JsonObject[])
           .flatMap(block => block.type === 'text' ? [block.text] : [])
         expect(texts).toContain('SDK_PERMISSION_READY')

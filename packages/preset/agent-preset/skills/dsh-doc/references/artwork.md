@@ -1,6 +1,6 @@
 # Plugin artwork
 
-Draw an icon that is recognizable at row size and belongs beside the icons of installed DSH plugins, and, when it helps, a feature image for the detail document. The display checklist in `references/host-plugin.md` owns manifest exports, accepted formats, size limits, and installed-display checks.
+Draw an icon that is recognizable at row size and belongs beside the icons of installed NDSH plugins, and, when it helps, a feature image for the detail document. The display checklist in `references/host-plugin.md` owns manifest exports, accepted formats, size limits, and installed-display checks.
 
 ## Establish the subject
 

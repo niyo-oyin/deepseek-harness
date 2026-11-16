@@ -192,7 +192,7 @@ describe('SDK subagent routing and diagnostics through the production profile', 
       expect(settlementText(events)).toEqual([
         'Its closing message:',
         'partial child loader answer',
-        'Subagent failure (provider: DSH SDK; stage: session-run; category: child-error)',
+        'Subagent failure (provider: NDSH SDK; stage: session-run; category: child-error)',
       ])
     } finally {
       await rm(child.childHome, { recursive: true, force: true })

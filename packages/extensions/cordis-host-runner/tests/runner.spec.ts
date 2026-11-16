@@ -491,7 +491,7 @@ describe('dynamic runner teardown', () => {
     const receipt = await runner.undefine(AGENT_A, brandString<CordisDynamicPluginId>('dyn-404'))
 
     expect(receipt).toMatchObject({ ok: false, reason: 'plugin-missing' })
-    expect((receipt as { message: string }).message).toContain('lost on DSH restart')
+    expect((receipt as { message: string }).message).toContain('lost on NDSH restart')
   })
 
   it('unwinds every host half when the runner itself is disposed', async () => {

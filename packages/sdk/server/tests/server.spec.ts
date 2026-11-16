@@ -1241,7 +1241,7 @@ describe('HarnessSdkJsonRpcServer', () => {
 
       await expect(server.handleRequest('does/not/exist', {}))
         .rejects
-        .toThrow('unknown DeepSeek Harness SDK runtime method: does/not/exist')
+        .toThrow('unknown Not DeepSeek Harness SDK runtime method: does/not/exist')
 
       await server.shutdown()
     } finally {
