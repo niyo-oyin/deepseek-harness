@@ -91,7 +91,7 @@ const RESET_TOOL: Tool = {
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 }
 
-const INSTRUCTIONS = 'DeepSeek Harness Computer Use: observe and operate desktop applications on this machine. '
+const INSTRUCTIONS = 'Not DeepSeek Harness Computer Use: observe and operate desktop applications on this machine. '
   + 'Start every conversation by calling cua_get_api_reference: it returns the complete cua API reference, and programs '
   + 'written without it guess the API wrong. Then call cua_run_code with a TypeScript program that uses the global cua '
   + 'object; program state persists across calls on this connection. A call may ask the user for application or pointer '

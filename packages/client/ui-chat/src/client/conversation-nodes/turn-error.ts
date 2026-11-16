@@ -41,7 +41,7 @@ function endFailure(reason: TurnEndReason): { readonly message: string; readonly
       // Cancellations show only the stopped turn summary.
       return undefined
     case 'interrupted':
-      return { message: 'The DSH process exited before this turn finished.', code: 'INTERRUPTED' }
+      return { message: 'The NDSH process exited before this turn finished.', code: 'INTERRUPTED' }
     default:
       // Completed, blocked, max-tokens, forked, and plugin-merged endings have no failure row.
       return undefined

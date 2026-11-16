@@ -26,14 +26,14 @@ afterEach(() => {
 
 describe('dsh path helpers', () => {
   it('owns the shared default DSH home directory name', () => {
-    expect(DSH_HOME_DIR_NAME).toBe('.dsh-fork')
-    expect(DEFAULT_DSH_HOME_DISPLAY).toBe('~/.dsh-fork')
-    expect(defaultDshHome()).toBe(join(homedir(), '.dsh-fork'))
+    expect(DSH_HOME_DIR_NAME).toBe('.ndsh')
+    expect(DEFAULT_DSH_HOME_DISPLAY).toBe('~/.ndsh')
+    expect(defaultDshHome()).toBe(join(homedir(), '.ndsh'))
   })
 
   it('expands tilde paths without changing non-tilde paths', () => {
     expect(expandHomePath('~')).toBe(homedir())
-    expect(expandHomePath('~/.dsh')).toBe(join(homedir(), '.dsh'))
+    expect(expandHomePath('~/.ndsh')).toBe(join(homedir(), '.ndsh'))
     expect(expandHomePath('~\\.dsh')).toBe(join(homedir(), '.dsh'))
     expect(expandHomePath('/tmp/.dsh')).toBe('/tmp/.dsh')
     expect(expandHomePath('~other/.dsh')).toBe('~other/.dsh')
@@ -59,7 +59,7 @@ describe('dsh path helpers', () => {
   })
 
   it('labels a resolved home by whether it is the default root', () => {
-    expect(dshHomeDisplay(resolve(defaultDshHome()))).toBe('~/.dsh-fork')
+    expect(dshHomeDisplay(resolve(defaultDshHome()))).toBe('~/.ndsh')
     expect(dshHomeDisplay('/some/other/root')).toBe('$DSH_HOME')
   })
 
@@ -88,9 +88,9 @@ describe('dsh path helpers', () => {
   })
 
   it.each([
-    [undefined, join(homedir(), '.dsh-fork')],
-    ['', join(homedir(), '.dsh-fork')],
-    ['   ', join(homedir(), '.dsh-fork')],
+    [undefined, join(homedir(), '.ndsh')],
+    ['', join(homedir(), '.ndsh')],
+    ['   ', join(homedir(), '.ndsh')],
     ['~/env-dsh', join(homedir(), 'env-dsh')],
     ['./relative-dsh', resolve('./relative-dsh')],
   ] as const)('resolves cache paths with DSH_HOME=%j', (home, expectedHome) => {
@@ -116,8 +116,8 @@ describe('dsh path helpers', () => {
   })
 
   it.each([
-    [undefined, join(homedir(), '.dsh-fork')],
-    ['', join(homedir(), '.dsh-fork')],
+    [undefined, join(homedir(), '.ndsh')],
+    ['', join(homedir(), '.ndsh')],
     ['~/env-dsh', join(homedir(), 'env-dsh')],
     ['./relative-dsh', resolve('./relative-dsh')],
   ] as const)('resolves category paths with DSH_HOME=%j', (home, expectedHome) => {

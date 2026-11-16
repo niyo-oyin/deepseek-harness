@@ -1,6 +1,6 @@
-# Upgrade across DSH releases
+# Upgrade across NDSH releases
 
-DSH upgrade guides describe breaks in DSH surfaces: commands, profile and `cordis.yml` keys, plugin configuration, package exports, services, events, Client slots, and persisted data. A third-party plugin's own changelog is separate; read it from that plugin's package or repository.
+NDSH upgrade guides describe breaks in NDSH surfaces: commands, profile and `cordis.yml` keys, plugin configuration, package exports, services, events, Client slots, and persisted data. A third-party plugin's own changelog is separate; read it from that plugin's package or repository.
 
 When the user asks what an upgrade affects, report the applicable guides and their migration steps. Apply a migration only when the user asks to change files or the profile.
 
@@ -14,7 +14,7 @@ When the user asks what an upgrade affects, report the applicable guides and the
 
 ## Find and read them
 
-- Installed DSH: `docs/upgrade-guide/README.md` under the installation directory lists every guide in one `## v<T>` section per version directory, with a summary and path. The index and its sections can exceed one read, so first print its section headings with their line numbers, then read each chosen section at most 12 lines per call with the file-read tool's offset and limit. With the runtime from `references/locate-docs.md`, in bash, or in PowerShell through its process form with this script and the index path as the argument:
+- Installed NDSH: `docs/upgrade-guide/README.md` under the installation directory lists every guide in one `## v<T>` section per version directory, with a summary and path. The index and its sections can exceed one read, so first print its section headings with their line numbers, then read each chosen section at most 12 lines per call with the file-read tool's offset and limit. With the runtime from `references/locate-docs.md`, in bash, or in PowerShell through its process form with this script and the index path as the argument:
 
   ```sh
   ELECTRON_RUN_AS_NODE=1 "$DSH_NODE_EXECUTABLE" -e "require('node:fs').readFileSync(process.argv[1], 'utf8').split(/\r?\n/).forEach((line, index) => { if (line.startsWith('## ')) console.log(index + 1, line) })" "$DSH_INSTALL_DIR/docs/upgrade-guide/README.md"

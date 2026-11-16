@@ -1,13 +1,13 @@
 # Not DeepSeek Harness
 
-Not DeepSeek Harness（`dsh`）は、すべてをプラグインとして組み立てるエージェントハーネスです。[DeepSeek AI](https://deepseek.com) が開発する [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) をもとに、手元で使うための変更を加えています。基盤には [Cordis](https://github.com/cordiverse/cordis) を使っていて、その設計は論文 [_A Programming Paradigm for Spatiotemporal Composability_](https://arxiv.org/abs/2608.25512) で説明されています。
+Not DeepSeek Harness（略称 NDSH、コマンド名 `dsh`）は、すべてをプラグインとして組み立てるエージェントハーネスです。[DeepSeek AI](https://deepseek.com) が開発する [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) をもとに、手元で使うための変更を加えています。基盤には [Cordis](https://github.com/cordiverse/cordis) を使っていて、その設計は論文 [_A Programming Paradigm for Spatiotemporal Composability_](https://arxiv.org/abs/2608.25512) で説明されています。
 
 まだ開発者プレビューの段階で、互換性を壊す変更が入ることがあります。実行する前に[安全に関する注意](SAFETY.md)を読んでください。
 
 ## 本家との違い
 
 - **ベンダーのサービスに送らない**：DeepSeek アカウントでのログイン、セッションログのアップロード、テレメトリ、プロダクト分析を取り除いています。モデルの利用には API キーを使います。
-- **データの置き場所が別**：設定やセッションは `~/.dsh-fork` に保存し、本家アプリの `~/.dsh` には触れません。デスクトップアプリの実行ファイルとインストール先は「DSH Fork」という名前で、画面上の表示名は「Not DeepSeek Harness」です。
+- **データの置き場所が別**：設定やセッションは `~/.ndsh` に保存し、本家アプリの `~/.dsh` には触れません。デスクトップアプリは実行ファイル、インストール先、ショートカットのいずれも「Not DeepSeek Harness」という名前で、アプリのデータは `ndsh-desktop` というフォルダに保存します。
 - **設定画面の追加**：プラグイン画面から、MCP サーバーとスキルを管理できます。スキルは ZIP でのインポートとエクスポートにも対応しています。
 - **特定のベンダーを前提にしない**：既定のモデルを決めずに出荷します。初めて起動すると、使いたいモデルのプロバイダーを追加する画面がアプリ内に表示されます。DeepSeek はその選択肢の一つで、ほかのプロバイダーと同じように追加・削除できます。会話画面で最初に選んだモデルが既定になります。
 - **安全のための確認**：シェルコマンドが `git push` を実行する前に、ユーザーに確認します。
