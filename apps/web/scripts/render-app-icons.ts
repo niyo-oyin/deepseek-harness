@@ -4,14 +4,13 @@
  *
  * A browser installs a Web App only with a raster 192px and a 512px icon, masks
  * the icon it puts on the home screen, and has no manifest support for iOS,
- * which reads `apple-touch-icon` instead. The whale favicon is the bare mark
- * drawn edge to edge: handed to a launcher directly it loses its fins to the
- * mask, and it carries neither the tile nor a background of its own. This
- * script rasterizes the official application tile (`apps/desktop/resources/icon.svg`,
+ * which reads `apple-touch-icon` instead. The favicon is a small rounded tile
+ * with its own corner radius, which a launcher mask would cut a second time.
+ * This script rasterizes the official application tile (`apps/desktop/resources/icon.svg`,
  * the artwork the desktop application ships) into the committed PNGs under
  * `public/`. Every variant crops the tile's drop shadow, which belongs to a
  * desktop window rather than a launcher; the maskable variant additionally
- * scales the whale inside the safe zone a platform mask may crop, leaving the
+ * scales the mark inside the safe zone a platform mask may crop, leaving the
  * tile's own gradient to fill the icon so no mask meets a seam.
  *
  * The committed PNGs are the output; rerun
@@ -61,10 +60,10 @@ export const MASKABLE_SAFE_RADIUS_RATIO = 0.4
 const SOURCE_ROOT = /^<svg[^>]*>/u
 
 /** The tile group's drop shadow; stripped because a launcher icon has no window around it. */
-const TILE_SHADOW_GROUP = '<g filter="url(#filter0_d_1637_371)">'
+const TILE_SHADOW_GROUP = '<g filter="url(#tile-shadow)">'
 
-/** The whale group inside the tile; the only element a maskable icon scales. */
-const TILE_ARTWORK_GROUP = '<g filter="url(#filter1_ddi_1637_371)">'
+/** The mark group inside the tile; the only element a maskable icon scales. */
+const TILE_ARTWORK_GROUP = '<g id="tile-artwork">'
 
 /** One committed install icon: the manifest or link member it serves and its edge in pixels. */
 export interface AppIconVariant {
@@ -123,7 +122,7 @@ export function tileDocument(source: string): string {
 /**
  * Rewrite the tile source into a maskable icon. The tile keeps its own gradient
  * and extent, so the icon's border is the real tile rather than an extension;
- * only the whale scales into the safe zone a platform mask may crop.
+ * only the mark scales into the safe zone a platform mask may crop.
  * @param source - complete `icon.svg` document.
  * @returns an SVG document whose artwork survives a circular mask whole.
  */
