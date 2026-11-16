@@ -18,15 +18,23 @@ vi.mock('../scripts/windows-sign.mjs', async importOriginal => ({
   ...await importOriginal<typeof import('../scripts/windows-sign.mjs')>(),
   createWindowsTokenSigner: () => async () => {},
   installWindowsNsisBootstrapSigner: () => {},
-  resolveWindowsUpdatePublisher: () => 'Fixture Publisher',
 }))
+// Each case packages its own prepared runtime tree in place of the target-owned one.
+const { dshSource } = vi.hoisted(() => ({ dshSource: { path: '' } }))
+vi.mock('../scripts/desktop-build-paths.mjs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../scripts/desktop-build-paths.mjs')>()
+  return {
+    ...actual,
+    desktopTargetBuildPaths: (...args: Parameters<typeof actual.desktopTargetBuildPaths>) =>
+      ({ ...actual.desktopTargetBuildPaths(...args), dsh: dshSource.path }),
+  }
+})
 vi.mock('../scripts/windows-runtime-signature.mjs', async importOriginal => ({
   ...await importOriginal<typeof import('../scripts/windows-runtime-signature.mjs')>(),
   signWindowsCode: async () => {},
 }))
 // Vite's root-relative IDs also resolve mocked build outputs on a clean checkout.
 vi.mock('/apps/desktop/lib/types/runtime-tree.js', () => ({ verifyDesktopRuntime: async () => {} }))
-vi.mock('/apps/desktop/lib/types/mandatory-update-policy.js', async () => import('../src/mandatory-update-policy.ts'))
 vi.mock('node:crypto', async importOriginal => ({
   ...await importOriginal<typeof import('node:crypto')>(),
   X509Certificate: class { fingerprint = 'AA:BB' },
@@ -47,11 +55,8 @@ afterEach(async () => {
 })
 
 function unsignedWindowsConfig(appId: string, source: string) {
-  return createElectronBuilderConfig({
-    DSH_DESKTOP_APP_ID: appId, DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://policy.example.com',
-    DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: JSON.stringify({ allowedAuthOrigins: ['https://login.example.com'] }),
-    DSH_DESKTOP_UNSIGNED: '1',
-  }, 'win32', 'x64', source)
+  dshSource.path = source
+  return createElectronBuilderConfig({ DSH_DESKTOP_APP_ID: appId, DSH_DESKTOP_UNSIGNED: '1' }, 'win32', 'x64')
 }
 
 async function fixture(external: boolean) {
@@ -221,13 +226,13 @@ it.each([true, false])('validates the real builder hook for unsigned=%s', async 
   const input = await fixture(true)
   const certificate = join(input.root, 'certificate.cer')
   await writeFile(certificate, 'fixture public certificate')
+  dshSource.path = input.source
   const config = createElectronBuilderConfig({
-    DSH_DESKTOP_APP_ID: 'com.example.unpack', DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://policy.example.com',
-    DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: JSON.stringify({ allowedAuthOrigins: ['https://login.example.com'] }),
+    DSH_DESKTOP_APP_ID: 'com.example.unpack',
     DSH_DESKTOP_TARGET_PLATFORM: 'win32', DSH_DESKTOP_TARGET_ARCH: 'x64', DSH_DESKTOP_UNSIGNED: unsigned ? '1' : '0',
-    DSH_DESKTOP_WINDOWS_CER_FILE: certificate, DOWNLOAD_TEST_ORIGIN: 'https://updates.example.com', DOWNLOAD_TEST_RELEASE_ID: '0123456789abcdef0123456789abcdef',
-  }, 'win32', 'x64', input.source)
-  // Qualification replaces files after creating the base configuration; builder owns a separate config object.
+    DSH_DESKTOP_WINDOWS_CER_FILE: certificate,
+  }, 'win32', 'x64')
+  // The builder owns a separate config object from the one this factory returns.
   input.config.asarUnpack = [...config.asarUnpack]
   await config.beforePack(input.context)
   await packageFixture(input)

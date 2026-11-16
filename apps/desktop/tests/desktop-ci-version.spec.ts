@@ -4,10 +4,10 @@ import { desktopCiVersion } from '../scripts/desktop-ci-version.mjs'
 import { desktopBuildVersionPrefix } from '../scripts/desktop-build-version.mjs'
 import { createElectronBuilderConfig } from '../scripts/electron-builder-config.mjs'
 
-it.each(['nightly', 'stable'] as const)('resolves every CI version mode independently of %s', (channel) => {
+it('resolves every CI version mode', () => {
   const now = new Date('2026-11-03T00:00:00Z')
   for (const version of ['1.2.3', '1.2.3-alpha.1', '1.2.3-rc.1']) {
-    const env = { DSH_DESKTOP_UPDATE_CHANNEL: channel, GITHUB_RUN_NUMBER: '7', GITHUB_RUN_ATTEMPT: '2' }
+    const env = { GITHUB_RUN_NUMBER: '7', GITHUB_RUN_ATTEMPT: '2' }
     const generated = `${desktopBuildVersionPrefix(version)}20261103.7.2`
     expect(desktopCiVersion({ ...env, PACKAGE_VERSION_MODE: 'follow-dsh' }, version, now)).toBe(version)
     for (const preset of ['test', 'production']) {
@@ -22,32 +22,26 @@ it.each(['nightly', 'stable'] as const)('resolves every CI version mode independ
   }
 })
 
-it.each(['arm64', 'x64'] as const)('embeds stable in a prerelease macOS %s package and provider', (arch) => {
+it.each(['arm64', 'x64'] as const)('embeds the build version in a signed macOS %s DMG without a publisher', (arch) => {
   const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }
   const version = `${desktopBuildVersionPrefix(manifest.version)}20261103.1`
   const config = createElectronBuilderConfig({
-    DSH_DESKTOP_APP_ID: 'com.example.channel-test',
-    DSH_DESKTOP_AUTO_UPDATE_ENV: 'production',
-    DSH_DESKTOP_UPDATE_CHANNEL: 'stable',
+    DSH_DESKTOP_APP_ID: 'com.example.version-test',
     DSH_DESKTOP_BUILD_VERSION: version,
-    DSH_DESKTOP_MANDATORY_UPDATE_PROD_ORIGIN: 'https://policy.example.com',
     DSH_DESKTOP_MACOS_SIGNING_IDENTITY: 'Example Company (TEAMID1234)',
     DSH_DESKTOP_MACOS_TEAM_ID: 'TEAMID1234',
-    APPLE_KEYCHAIN_PROFILE: 'channel-test',
+    APPLE_KEYCHAIN_PROFILE: 'version-test',
   }, 'darwin', arch)
-  expect(config.extraMetadata).toMatchObject({ version, dshDesktopUpdateChannel: 'stable' })
-  expect(config.publish).toEqual([{ provider: 'generic', url: `https://download.deepseek.com/dsh-desk/feeds/mac-${arch}/`, channel: 'stable' }])
+  expect(config.extraMetadata).toMatchObject({ version })
+  expect(config.publish).toBeNull()
 })
 
-it('accepts a stable prerelease in an unsigned Windows x64 configuration', () => {
+it('accepts a build version in an unsigned Windows x64 configuration without a publisher', () => {
   const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }
   const version = `${desktopBuildVersionPrefix(manifest.version)}20261103.1`
   const config = createElectronBuilderConfig({
-    DSH_DESKTOP_APP_ID: 'com.example.channel-test',
-    DSH_DESKTOP_AUTO_UPDATE_ENV: 'production',
-    DSH_DESKTOP_UPDATE_CHANNEL: 'stable',
+    DSH_DESKTOP_APP_ID: 'com.example.version-test',
     DSH_DESKTOP_BUILD_VERSION: version,
-    DSH_DESKTOP_MANDATORY_UPDATE_PROD_ORIGIN: 'https://policy.example.com',
     DSH_DESKTOP_UNSIGNED: '1',
   }, 'win32', 'x64')
   expect(config.extraMetadata).toMatchObject({ version })

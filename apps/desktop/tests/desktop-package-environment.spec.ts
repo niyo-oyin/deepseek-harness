@@ -7,10 +7,7 @@ import { resolveWindowsPackageSettings } from '../scripts/windows-package-settin
 
 const WINDOWS = { platform: 'win32', arch: 'x64' } as const
 const MACOS = { platform: 'darwin', arch: 'arm64' } as const
-const POLICY = { DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://policy.example.com',
-  DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: JSON.stringify({ allowedAuthOrigins: ['https://login.example.com'] }) }
-const RELEASE = { ...POLICY, DSH_DESKTOP_APP_ID: 'com.example.desktop', DOWNLOAD_TEST_ORIGIN: 'https://updates.example.com',
-  DOWNLOAD_TEST_RELEASE_ID: '0123456789abcdef0123456789abcdef' }
+const RELEASE = { DSH_DESKTOP_APP_ID: 'com.example.desktop' }
 const MAC_IDENTITY = { DSH_DESKTOP_MACOS_SIGNING_IDENTITY: 'Example Company (TEAMID1234)', DSH_DESKTOP_MACOS_TEAM_ID: 'TEAMID1234' }
 
 async function withDirectory(action: (directory: string) => Promise<void>): Promise<void> {
@@ -59,12 +56,12 @@ describe('Desktop local packaging configuration', () => {
       await mkdir(join(directory, 'presets'))
       const path = join(directory, 'presets', `${preset}.env`)
       const parent = { DSH_PACKAGING_CONFIG_DIR: directory, DSH_PACKAGING_PRESET: preset }
-      await writeFile(path, `DSH_DESKTOP_AUTO_UPDATE_ENV=${preset}\n`)
+      await writeFile(path, '')
       const load = (environment: NodeJS.ProcessEnv) => resolveWindowsPackageSettings(
         loadDesktopPackageEnvironment('win32', environment, directory, { unsigned: true }),
       ).compressionLevel
       expect(load(parent)).toBe(3)
-      await writeFile(path, `DSH_DESKTOP_AUTO_UPDATE_ENV=${preset}\nDSH_DESKTOP_WINDOWS_COMPRESSION_LEVEL=9\n`)
+      await writeFile(path, 'DSH_DESKTOP_WINDOWS_COMPRESSION_LEVEL=9\n')
       expect(load(parent)).toBe(9)
       expect(load({ ...parent, PACKAGE_WINDOWS_COMPRESSION_LEVEL: '3' })).toBe(3)
       expect(load({ ...parent, PACKAGE_WINDOWS_COMPRESSION_LEVEL: '7' })).toBe(7)
@@ -106,10 +103,8 @@ describe('Desktop local packaging configuration', () => {
     const parent = {
       PATH: 'build-tools', HTTPS_PROXY: 'http://proxy.example:8080', DSH_DESKTOP_NPM_REGISTRY: 'https://registry.npmmirror.com',
       DSH_DESKTOP_APP_ID: 'com.example.release', DSH_DESKTOP_UNSIGNED: '0',
-      DSH_DESKTOP_AUTO_UPDATE_ENV: 'production', DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: 'invalid-json',
-      DSH_DESKTOP_MANDATORY_UPDATE_PROD_ORIGIN: 'https://policy.example.com',
       DSH_DESKTOP_MACOS_SIGNING_IDENTITY: 'Release identity', CSC_LINK: 'missing.p12',
-      APPLE_API_KEY: 'missing.p8', DOWNLOAD_PROD_COS_SECRET_KEY: 'unused-secret',
+      APPLE_API_KEY: 'missing.p8',
     }
     const local = localMacOSPackageEnvironment(parent)
     expect(local).toEqual({
@@ -170,14 +165,8 @@ describe('Desktop local packaging configuration', () => {
       await writeFile(join(directory, '.env.macos'), 'DSH_DESKTOP_APP_ID=com.example.mac\nAPPLE_KEYCHAIN_PROFILE=release\nCSC_LINK=keys/signing.p12\nCSC_KEY_PASSWORD=" # literal "\n')
       const parent = {
         PATH: 'build-tools', DSH_DESKTOP_APP_ID: 'com.stale.desktop',
-        DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: '{"origin":"https://stale.example.com"}',
-        dsh_desktop_mandatory_update_config: 'stale-policy',
-        DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://stale.example.com',
-        dsh_desktop_mandatory_update_prod_origin: 'https://stale.example.com',
-        DSH_DESKTOP_WINDOWS_TOKEN_PIN: 'stale-pin', APPLE_ID: 'stale-apple-id',
-        CSC_LINK: 'stale-certificate', DOWNLOAD_TEST_ORIGIN: 'https://stale.example.com',
-        DOWNLOAD_TEST_RELEASE_ID: 'a'.repeat(32), download_test_release_id: 'b'.repeat(32),
-        dsh_desktop_windows_key_container: 'case-insensitive-stale-container',
+        DSH_DESKTOP_WINDOWS_TOKEN_PIN: 'stale-pin', APPLE_ID: 'stale-apple-id', CSC_LINK: 'stale-certificate',
+        dsh_desktop_windows_key_container: 'case-insensitive-stale-container', win_csc_link: 'stale-certificate',
       }
       expect(loadDesktopPackageEnvironment('win32', parent, directory)).toEqual({
         PATH: 'build-tools', DSH_DESKTOP_APP_ID: 'com.example.windows',
@@ -189,40 +178,7 @@ describe('Desktop local packaging configuration', () => {
         CSC_LINK: join(directory, 'keys/signing.p12'), CSC_KEY_PASSWORD: ' # literal ',
       })
       expect(parent.DSH_DESKTOP_WINDOWS_TOKEN_PIN).toBe('stale-pin')
-      expect(parent.dsh_desktop_mandatory_update_config).toBe('stale-policy')
-    })
-  })
-
-  it.each(['win32', 'darwin'] as const)('owns the %s release ID in its platform file', async (platform) => {
-    await withDirectory(async (directory) => {
-      const settings = Object.entries(RELEASE).map(([name, value]) => `${name}='${value}'`).join('\n') + '\n'
-      const file = join(directory, platform === 'win32' ? '.env.windows' : '.env.macos')
-      const parent = { DOWNLOAD_TEST_RELEASE_ID: 'a'.repeat(32) }
-      await writeFile(file, settings)
-      expect(loadDesktopPackageEnvironment(platform, parent, directory).DOWNLOAD_TEST_RELEASE_ID).toBe(RELEASE.DOWNLOAD_TEST_RELEASE_ID)
-      await writeFile(file, settings.replace(`DOWNLOAD_TEST_RELEASE_ID='${RELEASE.DOWNLOAD_TEST_RELEASE_ID}'\n`, ''))
-      const missing = loadDesktopPackageEnvironment(platform, parent, directory)
-      expect(missing.DOWNLOAD_TEST_RELEASE_ID).toBeUndefined()
-      expect(() => {
-        validateDesktopPackageEnvironment(missing, platform === 'win32' ? WINDOWS : MACOS)
-      }).toThrow(/DOWNLOAD_TEST_RELEASE_ID/u)
-      expect(parent.DOWNLOAD_TEST_RELEASE_ID).toBe('a'.repeat(32))
-    })
-  })
-
-  it('loads mandatory update origins and options only from the platform file without changing its parent', async () => {
-    await withDirectory(async (directory) => {
-      const windowsPolicy = JSON.stringify({ intervalMs: 5000, allowedPageOrigins: ['https://download.example.invalid'] })
-      const macPolicy = JSON.stringify({ intervalMs: 6000, allowedPageOrigins: ['https://download.example.invalid'] })
-      const origins = { DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://test.example.invalid',
-        DSH_DESKTOP_MANDATORY_UPDATE_PROD_ORIGIN: 'https://prod.example.invalid' }
-      const lines = Object.entries(origins).map(([key, value]) => `${key}=${value}\n`).join('')
-      await writeFile(join(directory, '.env.windows'), `${lines}DSH_DESKTOP_MANDATORY_UPDATE_CONFIG='${windowsPolicy}'\n`)
-      await writeFile(join(directory, '.env.macos'), `${lines}DSH_DESKTOP_MANDATORY_UPDATE_CONFIG='${macPolicy}'\n`)
-      const parent = { DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: 'stale-policy' }
-      expect(loadDesktopPackageEnvironment('win32', parent, directory)).toEqual({ ...origins, DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: windowsPolicy })
-      expect(loadDesktopPackageEnvironment('darwin', parent, directory)).toEqual({ ...origins, DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: macPolicy })
-      expect(parent).toEqual({ DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: 'stale-policy' })
+      expect(parent.DSH_DESKTOP_APP_ID).toBe('com.stale.desktop')
     })
   })
 
@@ -235,7 +191,7 @@ describe('Desktop local packaging configuration', () => {
     })
   })
 
-  it('checks application and update configuration before Windows credentials while preserving unsigned and preparation modes', () => {
+  it('checks application configuration before Windows credentials while preserving unsigned and preparation modes', () => {
     expect(() => {
       validateDesktopPackageEnvironment({}, WINDOWS, { unsigned: true })
     }).toThrow(/DSH_DESKTOP_APP_ID/u)
@@ -243,29 +199,24 @@ describe('Desktop local packaging configuration', () => {
       validateDesktopPackageEnvironment({ DSH_DESKTOP_APP_ID: 'invalid' }, WINDOWS)
     }).toThrow(/reverse-DNS/u)
     expect(() => {
-      validateDesktopPackageEnvironment({ ...POLICY, DSH_DESKTOP_APP_ID: RELEASE.DSH_DESKTOP_APP_ID }, WINDOWS)
-    }).toThrow(/DOWNLOAD_TEST_ORIGIN/u)
-    expect(() => {
       validateDesktopPackageEnvironment(RELEASE, WINDOWS)
     }).toThrow(/DSH_DESKTOP_WINDOWS_CER_FILE/u)
     expect(() => {
-      validateDesktopPackageEnvironment({ ...POLICY, DSH_DESKTOP_APP_ID: RELEASE.DSH_DESKTOP_APP_ID }, WINDOWS, { unsigned: true })
+      validateDesktopPackageEnvironment(RELEASE, WINDOWS, { unsigned: true })
     }).not.toThrow()
     expect(() => {
-      validateDesktopPackageEnvironment({ ...POLICY, DSH_DESKTOP_APP_ID: RELEASE.DSH_DESKTOP_APP_ID }, WINDOWS, { prepareOnly: true })
+      validateDesktopPackageEnvironment(RELEASE, WINDOWS, { prepareOnly: true })
     }).not.toThrow()
   })
 
-  it('accepts unsigned macOS configuration without Apple or update policy settings while keeping release validation', () => {
+  it('accepts unsigned macOS configuration without Apple settings while keeping release validation', () => {
     const local = localMacOSPackageEnvironment({})
     expect(() => { validateDesktopPackageEnvironment(local, MACOS, { unsigned: true }) }).not.toThrow()
-    expect(() => { validateDesktopPackageEnvironment(local, MACOS) })
-      .toThrow('DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN')
-    expect(() => { validateDesktopPackageEnvironment(RELEASE, MACOS) }).toThrow('DSH_DESKTOP_MACOS_SIGNING_IDENTITY')
+    expect(() => { validateDesktopPackageEnvironment(local, MACOS) }).toThrow('DSH_DESKTOP_MACOS_SIGNING_IDENTITY')
   })
 
   it('accepts one local npm registry mirror and rejects other registry forms', () => {
-    const release = { ...POLICY, DSH_DESKTOP_APP_ID: RELEASE.DSH_DESKTOP_APP_ID }
+    const release = RELEASE
     expect(() => {
       validateDesktopPackageEnvironment({ ...release, DSH_DESKTOP_NPM_REGISTRY: 'https://registry.npmmirror.com/' }, WINDOWS, { unsigned: true })
     }).not.toThrow()
@@ -352,39 +303,7 @@ it('skips Apple credentials but still requires signing credentials for unnotariz
   })
 })
 
-it('takes ZIP compression from the Mac file instead of ambient release settings', async () => {
-  await withDirectory(async (directory) => {
-    await writeFile(join(directory, '.env.macos'), 'DSH_DESKTOP_MACOS_ZIP_COMPRESSION_LEVEL=5\n')
-    const loaded = loadDesktopPackageEnvironment('darwin', { DSH_DESKTOP_MACOS_ZIP_COMPRESSION_LEVEL: '9' }, directory)
-    expect(loaded.DSH_DESKTOP_MACOS_ZIP_COMPRESSION_LEVEL).toBe('5')
-    await writeFile(join(directory, '.env.macos'), '')
-    expect(loadDesktopPackageEnvironment('darwin', { DSH_DESKTOP_MACOS_ZIP_COMPRESSION_LEVEL: '9' }, directory))
-      .not.toHaveProperty('DSH_DESKTOP_MACOS_ZIP_COMPRESSION_LEVEL')
-  })
-})
-
 it.each(['', 'relative-cache'])('rejects invalid build cache paths during preflight (%s)', (cache) => {
   expect(() => { validateDesktopPackageEnvironment({ ...RELEASE, DSH_DESKTOP_PACKAGE_CACHE_DIR: cache }, MACOS, { unsigned: true }) })
     .toThrow('DSH_DESKTOP_PACKAGE_CACHE_DIR must be a nonempty absolute directory')
-})
-
-it.each(['3', '7'])('applies the workflow ZIP choice %s over the Mac file setting', async (level) => {
-  await withDirectory(async (directory) => {
-    await writeFile(join(directory, '.env.macos'), 'DSH_DESKTOP_MACOS_ZIP_COMPRESSION_LEVEL=5\n')
-    const loaded = loadDesktopPackageEnvironment('darwin', { PACKAGE_MACOS_ZIP_COMPRESSION_LEVEL: level }, directory)
-    expect(loaded.DSH_DESKTOP_MACOS_ZIP_COMPRESSION_LEVEL).toBe(level)
-  })
-})
-
-it.each(['', '3', '7'])('rejects Mac workflow ZIP choice %j on Windows before reading settings', (level) => {
-  expect(() => loadDesktopPackageEnvironment('win32', { PACKAGE_MACOS_ZIP_COMPRESSION_LEVEL: level }, 'missing-settings'))
-    .toThrow('PACKAGE_MACOS_ZIP_COMPRESSION_LEVEL requires macOS')
-})
-
-it.each(['', '0', '9', 'invalid'])('rejects unsupported workflow ZIP choice %j', async (level) => {
-  await withDirectory(async (directory) => {
-    await writeFile(join(directory, '.env.macos'), '')
-    expect(() => loadDesktopPackageEnvironment('darwin', { PACKAGE_MACOS_ZIP_COMPRESSION_LEVEL: level }, directory))
-      .toThrow('workflow ZIP compression must be 3 or 7')
-  })
 })

@@ -1,38 +1,36 @@
 /**
- * Resolve the version one build publishes, which is not always the version the
+ * Resolve the version one build carries, which is not always the version the
  * repository declares.
  *
  * Desktop CI version mode `build-number` uses UTC date, workflow run number and attempt as
- * `.YYYYMMDD.run.attempt`; these identify unpublished builds, not release sequences.
+ * `.YYYYMMDD.run.attempt`; these identify CI builds, not release sequences.
  *
- * A production release publishes the version in the manifests, aligned with the
- * `dsh` npm package. A test build publishes a version that appends a date and a
- * sequence number, so one test feed can carry several builds of a single
- * product version: `0.1.6-alpha.1.20260916.1` from a prerelease base and
+ * A production build carries the version in the manifests, aligned with the
+ * `dsh` npm package. A test build carries a version that appends a date and a
+ * sequence number, so several builds of a single product version stay
+ * distinguishable: `0.1.6-alpha.1.20260916.1` from a prerelease base and
  * `0.1.6-test.20260916.1` from a stable one, as the release versions table in
  * `apps/desktop/packaging/README.md#release-versions` gives them. Passing that version here keeps it out
  * of the manifests, so the tracked version stays the product's while the build
- * version reaches electron-builder, the update feed, and the upload validation
- * as one input.
+ * version reaches electron-builder, the artifact names and the installed
+ * `app.getVersion()` as one input.
  *
- * `electron-updater` compares feed versions with `semver.gt` against the
- * installed `app.getVersion()`, so validation uses the same library. Sequence
- * numbers order builds within a feed under either form. The forms differ only
- * against the base itself: builds extending a prerelease outrank it, while
- * `0.1.6-test.1` ranks below `0.1.6`, which is why the stable form belongs to a
- * test feed that never serves the production release.
+ * Validation uses semver precedence. Sequence numbers order builds of one
+ * product version under either form. The forms differ only against the base
+ * itself: builds extending a prerelease outrank it, while `0.1.6-test.1` ranks
+ * below `0.1.6`, so a test build never outranks the production release.
  */
 
 import { parse } from 'semver'
 
-/** Environment variable that carries the build version through one packaging and upload run. */
+/** Environment variable that carries the build version through one packaging run. */
 export const DESKTOP_BUILD_VERSION_ENV = 'DSH_DESKTOP_BUILD_VERSION'
 
 /** Prerelease field that opens a test build's suffix on a stable product version. */
 const STABLE_TEST_FIELD = 'test'
 
 /**
- * Parse a version the updater would accept.
+ * Parse a semantic version without build metadata.
  * @param {string} version - Version to read.
  * @param {string} label - Description used in failures.
  * @returns {import('semver').SemVer} The parsed version.
@@ -41,7 +39,7 @@ function parseVersion(version, label) {
   const parsed = parse(version, { loose: false })
   if (parsed === null) throw new Error(`desktop build version: ${label} ${version} is not a version`)
   if (parsed.build.length > 0) {
-    // Build metadata does not participate in precedence, so two builds would compare equal to the updater.
+    // Build metadata does not participate in precedence, so two builds would compare equal.
     throw new Error(`desktop build version: ${label} ${version} cannot carry build metadata`)
   }
   return parsed
@@ -58,7 +56,7 @@ function requiredFields(product) {
 
 /**
  * Validate a build version against the product version it extends.
- * @param {string} buildVersion - Version this build publishes.
+ * @param {string} buildVersion - Version this build carries.
  * @param {string} productVersion - Version the manifests declare.
  * @returns {string} The version as semver normalizes it, which is what the artifacts will carry.
  */
@@ -81,8 +79,8 @@ export function validateDesktopBuildVersion(buildVersion, productVersion) {
 }
 
 /**
- * Resolve the version a build publishes.
- * @param {NodeJS.ProcessEnv} env - Packaging or upload environment.
+ * Resolve the version a build carries.
+ * @param {NodeJS.ProcessEnv} env - Packaging environment.
  * @param {string} productVersion - Version the manifests declare.
  * @returns {string} The build version when one is present, otherwise the product version.
  */

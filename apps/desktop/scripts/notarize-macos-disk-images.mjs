@@ -1,7 +1,6 @@
 /** Notarize and qualify macOS disk images after electron-builder creates them. */
 
 import { notarizeMacOS } from './notarize-macos.mjs'
-import { rmSync } from 'node:fs'
 import { resolveMacOSNotarizationEnvironment } from './desktop-release-environment.mjs'
 import { verifyMacOSDiskImage } from './verify-macos-signature.mjs'
 
@@ -21,8 +20,6 @@ export async function notarizeMacOSDiskImageArtifact(
   submit = notarizeMacOS,
   verify = verifyMacOSDiskImage,
 ) {
-  if (!artifact.file.endsWith('.dmg')) return
-  rmSync(`${artifact.file}.blockmap`, { force: true })
   const credentials = resolveMacOSNotarizationEnvironment(env)
   await submit({ appPath: artifact.file, ...credentials })
   verify(artifact.file, expected)

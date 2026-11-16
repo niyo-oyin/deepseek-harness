@@ -1,9 +1,10 @@
-/** Resolve a manual Windows build version and validate the selected machine preset. */
+/** Resolve a manual Windows build version, validate the selected machine preset, and name the installer to retain. */
 import { appendFileSync, readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { basename, resolve } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { desktopCiVersion as windowsCiVersion } from './desktop-ci-version.mjs'
 export { desktopCiVersion as windowsCiVersion } from './desktop-ci-version.mjs'
+import { desktopInstallerPath } from './desktop-build-paths.mjs'
 import { loadDesktopPackageEnvironment, validateDesktopPackageEnvironment } from './desktop-package-environment.mjs'
 import { resolveWindowsPackageSettings } from './windows-package-settings.mjs'
 
@@ -25,6 +26,7 @@ if (process.argv[1] !== undefined && resolve(process.argv[1]) === import.meta.fi
   validateDesktopPackageEnvironment(environment, { platform: 'win32', arch: 'x64' }, { unsigned: mode === 'unsigned' })
   console.log(`Windows installer compression level: ${resolveWindowsPackageSettings(environment).compressionLevel}`)
   if (!process.env.GITHUB_OUTPUT || !process.env.GITHUB_STEP_SUMMARY) throw new Error('Run this adapter from GitHub Actions')
-  appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`)
-  appendFileSync(process.env.GITHUB_STEP_SUMMARY, `Windows x64 ${mode} installer\n\nVersion: ${version}\n\nCommit: ${execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()}\n\nChannel: ${process.env.DSH_DESKTOP_UPDATE_CHANNEL}\n\nSource: ${process.env.PACKAGE_SOURCE_REF}\n\nPreset: ${process.env.DSH_PACKAGING_PRESET}\n`)
+  const installer = desktopInstallerPath('win-x64', version, { unsigned: mode === 'unsigned', skipNotarization: false }, environment)
+  appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\ninstaller=${installer}\ninstaller-name=${basename(installer)}\n`)
+  appendFileSync(process.env.GITHUB_STEP_SUMMARY, `Windows x64 ${mode} installer\n\nVersion: ${version}\n\nCommit: ${execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()}\n\nSource: ${process.env.PACKAGE_SOURCE_REF}\n\nPreset: ${process.env.DSH_PACKAGING_PRESET}\n`)
 }
