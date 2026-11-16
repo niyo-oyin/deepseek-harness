@@ -1,6 +1,7 @@
 # Agent Note: Isolate installed-update materials from releases and user data
 
 Status: implemented
+Archived: 2026-11-16
 
 ## Problem
 

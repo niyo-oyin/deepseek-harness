@@ -1,6 +1,7 @@
 # Agent Note: Qualify Desktop update downloads with an isolated local server
 
 Status: implemented
+Archived: 2026-11-16
 
 ## Problem
 

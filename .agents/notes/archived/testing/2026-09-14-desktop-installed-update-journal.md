@@ -1,6 +1,7 @@
 # Agent Note: Preserve installed Desktop update evidence across restarts
 
 Status: implemented
+Archived: 2026-11-16
 
 ## Problem
 

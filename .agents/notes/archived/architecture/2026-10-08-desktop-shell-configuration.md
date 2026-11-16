@@ -1,6 +1,7 @@
 # Agent Note: Desktop shell configuration independent of the Host
 
 Status: implemented
+Archived: 2026-11-16
 
 ## Problem
 

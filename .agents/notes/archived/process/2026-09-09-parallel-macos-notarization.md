@@ -1,6 +1,7 @@
 # Agent Note: Parallel macOS notarization from isolated App copies
 
 Status: implemented
+Archived: 2026-11-16
 
 ## Problem
 
