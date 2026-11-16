@@ -116,13 +116,6 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Reads the current catalog text of an official plugin card and enables the plugin through the profile plugin manager after a click.',
   },
   {
-    key: 'deepseekChatImport',
-    pkg: 'deepseek-chat-import',
-    title: 'DeepSeek chat export import',
-    mode: 'service',
-    note: 'Serves the owner-only upload route that imports each conversation of a DeepSeek chat export as a Session, and the upload limits the browser checks first.',
-  },
-  {
     key: 'headlessStartup',
     pkg: 'headless',
     title: 'Headless invocation options',
@@ -642,7 +635,7 @@ const SERVICE_ROLES: ServiceRole[] = [
     pkg: 'skill',
     title: 'Skill provider registry',
     mode: 'seam',
-    implementations: ['sandbox-windows-acl', 'skill-badge', 'skill-filesystem', 'skill-office'],
+    implementations: ['sandbox-windows-acl', 'skill-filesystem', 'skill-office'],
     consumers: ['tool-skill'],
     note: 'Merges provider skill catalogs; tool-skill renders the session-prefix catalog and loads complete skill bodies.',
   },

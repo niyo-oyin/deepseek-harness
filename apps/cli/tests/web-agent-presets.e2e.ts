@@ -138,10 +138,6 @@ async function bootWeb(
     // and the URL prompt line — surface glue, not anything that decides an
     // agent's capabilities, which is all this file asserts.
     { id: 'web-runtime', disabled: true },
-    // A deployment-level skill on the host registry's GLOBAL layer — the same
-    // registration shape a repository plugin's skill root uses. The layered
-    // skills test below proves it reaches preset-composed agents.
-    { insert: [{ id: 'skill-badge', name: import.meta.resolve('@deepseek-ai/dsh-skill-badge') }] },
     { id: 'modules', disabled: true },
     // The physical Connection row owns the disabled HTTP server. bootWeb
     // supplies only its in-process registries so Host services still prove
@@ -763,25 +759,25 @@ describe('the shipped Web composition', () => {
       // The host (global) view carries the deployment-level providers alone:
       // local discovery moved behind the presets with `skill-filesystem`.
       expect((await ctx.skills.list({ cwd: proj })).map(skill => skill.name)).toEqual([
-        'dsh-badge', 'office', 'office-docx', 'office-pptx', 'office-xlsx',
+        'office', 'office-docx', 'office-pptx', 'office-xlsx',
       ])
 
       // The standard agent's view merges the global layer with its preset's
       // own local discovery over the session cwd.
       const scoped = (await ctx.skills.list({ cwd: proj, scope: handle.agent })).map(skill => skill.name)
-      expect(scoped).toContain('dsh-badge')
+      expect(scoped).toContain('office')
       expect(scoped).toContain('project-proof')
 
       // The preset's own loader tool resolves the global-layer skill.
       const loaded = await executeToolFixture(ctx, {
         callId: brandString<ToolCallId>('preset-skills-load'),
         name: 'skill',
-        arguments: { name: 'dsh-badge' },
+        arguments: { name: 'office' },
         signal: new AbortController().signal,
         agent: handle.agent,
       })
       expect(loaded.isError).toBe(false)
-      expect(JSON.stringify(loaded.content)).toContain('powered by dsh')
+      expect(JSON.stringify(loaded.content)).toContain('Office task routing')
     } finally {
       await handle.dispose()
     }
@@ -796,7 +792,7 @@ describe('the shipped Web composition', () => {
       // Layer visibility is the registry's; whether an agent can USE skills
       // stays the preset's choice — minimal mounts no `tool-skill`, so its
       // tool table has no loader even though the global layer is readable.
-      expect((await ctx.skills.list({ scope: handle.agent })).map(skill => skill.name)).toContain('dsh-badge')
+      expect((await ctx.skills.list({ scope: handle.agent })).map(skill => skill.name)).toContain('office')
       expect(toolNames(ctx, handle.agent)).toEqual(['bash', 'read_image', 'team_task_create', 'team_task_get', 'team_task_list', 'team_task_update', 'working_directory'])
     } finally {
       await handle.dispose()
@@ -934,7 +930,7 @@ describe.each(['web', 'desktop'] as const)('%s native subagent bundles', (surfac
 })
 
 describe('the standard preset documentation skill', () => {
-  it.for([false, true])('loads the packaged skill without adding tools (badge skill: %s)', async (withBadge: boolean) => {
+  it.for([false, true])('loads the packaged skill without adding tools (Office skills: %s)', async (withOffice: boolean) => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-standard-doc-'))
     vi.stubEnv('DSH_HOME', join(root, 'home'))
     vi.stubEnv('DSH_AGENTS_HOME', join(root, 'agents-home'))
@@ -944,7 +940,7 @@ describe('the standard preset documentation skill', () => {
       const standard = composeEntries([webPatches('standard documentation')])
         .find(row => row.id === 'preset-standard')!.config as import('@deepseek-ai/dsh-agent-preset-registry').PresetDefinition
       docCtx = await bootWeb(root, [
-        { id: 'skill-badge', disabled: !withBadge },
+        { id: 'skill-office', disabled: !withOffice },
         { insert: [{
           id: 'preset-standard-without-doc', name: '@deepseek-ai/dsh-agent-preset',
           config: {

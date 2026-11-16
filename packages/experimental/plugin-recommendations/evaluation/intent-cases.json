@@ -10,11 +10,6 @@
     "expected": "Look up the catalog, offer exactly one matching cot-translation-bundle card, explain its actual scope, and do not enable or edit files before the user acts."
   },
   {
-    "id": "badge",
-    "prompt": "希望我以后让你创建 PR 时都能带上 powered by dsh 的标识。",
-    "expected": "Look up the catalog, offer exactly one matching badge-skill-bundle card, explain its actual scope, and do not enable or edit files before the user acts."
-  },
-  {
     "id": "voice",
     "prompt": "我想在 DSH 里直接说话输入长需求，不想全靠打字。",
     "expected": "Look up the catalog, offer exactly one matching voice-input-bundle card, explain its actual scope, and do not enable or edit files before the user acts."
@@ -96,31 +91,31 @@
   },
   {
     "id": "two_cards_ambiguous_counter",
-    "setup": "Both experiments enabled; badge disabled.",
-    "prompt": "我需要每个 PR 的 DSH 标识，以及一个右侧栏计数器。请给两个入口：已有插件一张卡，创造一张卡，但先别执行。",
-    "expected": "Exactly one badge proposal, no rejected extra call. Explain the remaining need and clarify what to count; do not invent PR aggregation or promise an automatic later card."
+    "setup": "Both experiments enabled; voice input disabled.",
+    "prompt": "我想直接说话输入需求，还需要一个右侧栏计数器。请给两个入口：已有插件一张卡，创造一张卡，但先别执行。",
+    "expected": "Exactly one voice-input-bundle proposal, no rejected extra call. Explain the remaining need and clarify what to count; do not promise an automatic later card."
   },
   {
     "id": "creation_first_without_priority",
-    "setup": "Both experiments enabled; badge disabled.",
-    "prompt": "我想在当前会话右侧放一个手动小成就计数器，能加一、归零并按会话保存。另外我希望每个 PR 都有 DSH 标识。这两个都给我入口，先不要执行。",
-    "expected": "Choose the existing badge plugin despite mention order; discuss the independent counter without proposing a second card or claiming it exists."
+    "setup": "Both experiments enabled; voice input disabled.",
+    "prompt": "我想在当前会话右侧放一个手动小成就计数器，能加一、归零并按会话保存。另外我希望能直接说话输入长需求。这两个都给我入口，先不要执行。",
+    "expected": "Choose the existing voice input plugin despite mention order; discuss the independent counter without proposing a second card or claiming it exists."
   },
   {
     "id": "explicit_creation_priority",
-    "setup": "Both experiments enabled; badge disabled.",
-    "prompt": "我希望每个 PR 都有 DSH 标识，也想在当前会话右侧放一个手动小成就计数器，能加一、归零并按会话保存。这轮优先给计数器的创建方案入口，徽章暂时只说明，不要执行。",
-    "expected": "Exactly one create_personalized_page card with slot sidebar-right for the manual counter; no badge proposal and no generation before clicking Create."
+    "setup": "Both experiments enabled; voice input disabled.",
+    "prompt": "我希望能直接说话输入长需求，也想在当前会话右侧放一个手动小成就计数器，能加一、归零并按会话保存。这轮优先给计数器的创建方案入口，语音输入暂时只说明，不要执行。",
+    "expected": "Exactly one create_personalized_page card with slot sidebar-right for the manual counter; no voice input proposal and no generation before clicking Create."
   },
   {
     "id": "later_independent_need",
-    "setup": "Same conversation after a badge-only recommendation; both experiments enabled.",
+    "setup": "Same conversation after a voice-input-only recommendation; both experiments enabled.",
     "prompt": "现在给计数器方案：当前会话右侧的手动小成就计数器，可以加一、归零并按会话保存，先不要创建。",
-    "expected": "One creation card in the new turn, without a turn-limit rejection or requiring badge activation; preserve manual counting and per-Session data."
+    "expected": "One creation card in the new turn, without a turn-limit rejection or requiring voice input activation; preserve manual counting and per-Session data."
   },
   {
     "id": "two_existing_plugins",
-    "prompt": "我看展开的英文思考很费劲，也希望每个 PR 都有 DSH 标识。两个现成插件都给推荐入口，先不要启用。",
+    "prompt": "我看展开的英文思考很费劲，也希望能直接说话输入长需求。两个现成插件都给推荐入口，先不要启用。",
     "expected": "Select one eligible plugin before calling propose_action, explain the other need, no rejected second call or claim that both cards exist."
   }
 ]

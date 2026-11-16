@@ -107,7 +107,6 @@
     "@deepseek-ai/dsh-experimental-voice-input-bundle": "workspace:*",
     "@deepseek-ai/dsh-experimental-auto-review": "workspace:*",
     "@deepseek-ai/dsh-experimental-cot-translation-bundle": "workspace:*",
-    "@deepseek-ai/dsh-experimental-badge-skill-bundle": "workspace:*",
     "@deepseek-ai/dsh-experimental-ralph-bundle": "workspace:*",
     "@deepseek-ai/dsh-experimental-session-titles-bundle": "workspace:*",
     "@deepseek-ai/dsh-experimental-terminal-bundle": "workspace:*",
@@ -119,12 +118,10 @@
     "@deepseek-ai/dsh-timeline": "workspace:*",
     "@deepseek-ai/dsh-experimental-plugin-market-bundle": "workspace:*",
     "@deepseek-ai/dsh-personalized-recommendations": "workspace:*",
-    "@deepseek-ai/dsh-experimental-forge-bundle": "workspace:*",
-    "@deepseek-ai/dsh-deepseek-chat-import": "workspace:*"
+    "@deepseek-ai/dsh-experimental-forge-bundle": "workspace:*"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-brand": "workspace:*",
-    "@deepseek-ai/dsh-skill-badge": "workspace:*",
     "@deepseek-ai/dsh-webhook-github": "workspace:*",
     "@deepseek-ai/dsh-webhook": "workspace:*",
     "@deepseek-ai/dsh-tool-ralph": "workspace:*",

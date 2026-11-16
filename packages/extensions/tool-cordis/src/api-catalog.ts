@@ -1005,20 +1005,6 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
-    key: 'deepseekChatImport',
-    summary: 'Serves the owner-only export upload route and the limits the browser checks first.',
-    description: 'Serves the owner-only export upload route and the limits the browser checks first.',
-    methods: [
-      {
-        signature: '@Remote limits(signal: AbortSignal): DeepseekChatImportLimits',
-        description: 'Report the limits the browser checks before uploading. Only the owner may import, so every other principal is refused.',
-        parameters: [{ name: 'signal', description: 'Client cancellation or Remote withdrawal.' }],
-        returns: 'the largest accepted archive size.',
-        throws: ['{RemoteError} `deepseekChatImport/owner-only` for a caller that is not the owner.'],
-      },
-    ],
-  },
-  {
     key: 'directoryPicker',
     summary: 'Abstract directory-picking service.',
     description: 'Abstract directory-picking service. Subclass, implement `capability()`, and load the subclass as a plugin — it registers as `ctx.directoryPicker` (one implementation per context; loading a second throws, cordis\' standard duplicate-service behavior). The capability object must be stable for the service lifetime: consumers may capture it across calls.',
