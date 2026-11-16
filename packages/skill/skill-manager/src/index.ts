@@ -49,7 +49,7 @@ declare module '@deepseek-ai/cordis' {
 
 /** Skill manager configuration. */
 export interface Config {
-  /** DeepSeek Harness config root; new skills are created in its `skills/` folder. Defaults to `$DSH_HOME` or `~/.dsh`. */
+  /** DeepSeek Harness config root; new skills are created in its `skills/` folder. Defaults to `$DSH_HOME` or `~/.ndsh`. */
   dshHome?: string
   /** Shared agent config root, whose `skills/` folder is the second user skill folder. Defaults to `$DSH_AGENTS_HOME` or `~/.agents`. */
   agentsHome?: string
