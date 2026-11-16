@@ -122,7 +122,7 @@ extern "C" void CALLBACK ShowRestartStatusW(HWND, HINSTANCE instance, LPWSTR raw
     layout.dialog.cy = 50;
     HWND window = CreateDialogIndirectParamW(instance, &layout.dialog, nullptr, restart_status::Dialog, 0);
     if (!window) return;
-    SetWindowTextW(window, L"DeepSeek Harness");
+    SetWindowTextW(window, L"Not DeepSeek Harness");
     const DWORD style = WS_CHILD | WS_VISIBLE;
     HWND image = CreateWindowW(L"STATIC", L"", style | SS_ICON, 0,0,0,0, window,
         reinterpret_cast<HMENU>(restart_banner::iconId), instance, nullptr);
@@ -134,7 +134,7 @@ extern "C" void CALLBACK ShowRestartStatusW(HWND, HINSTANCE instance, LPWSTR raw
     SendMessageW(image, STM_SETICON, reinterpret_cast<WPARAM>(large), 0);
     SendMessageW(window, WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(large));
     SendMessageW(window, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(smallIcon));
-    InstallerStyleRestartBanner(window, text, locale, L"Microsoft YaHei UI", 14,
+    InstallerStyleRestartBanner(window, text, locale, InstallerFontFaceFor(language), 14,
         dark ? RGB(21,21,23) : RGB(255,255,255), dark ? RGB(255,255,255) : RGB(15,17,21));
     if (GetPropW(window, restart_banner::stateKey)) {
         ShowWindow(window, SW_SHOWNOACTIVATE);

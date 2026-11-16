@@ -9,7 +9,7 @@
 
 extern "C" __declspec(dllimport) HRESULT __cdecl InstallerApplyFrame(HWND window);
 extern "C" __declspec(dllimport) HWND __cdecl InstallerShowProgress(HWND parent, HWND source,
-    BOOL dark, UINT dpi, DWORD controlHover, DWORD controlPressed, const WCHAR* brand, const WCHAR* preparing, const WCHAR* extracting,
+    BOOL dark, UINT dpi, int language, DWORD controlHover, DWORD controlPressed, const WCHAR* brand, const WCHAR* preparing, const WCHAR* extracting,
     const WCHAR* copying, const WCHAR* registering, const WCHAR* cleaning);
 extern "C" __declspec(dllimport) BOOL __cdecl InstallerFinishProgress(HWND window);
 
@@ -49,7 +49,7 @@ int wmain(int argc, wchar_t** argv) {
     SetPropW(window, L"HarnessInstaller.Stage", reinterpret_cast<HANDLE>(1));
     SetPropW(window, L"HarnessInstaller.ExtractProgress", reinterpret_cast<HANDLE>(50));
     const auto createProgress = [&]() {
-        return InstallerShowProgress(window, source, dark, static_cast<UINT>(dpi), hoverArgb, pressedArgb, argv[1],
+        return InstallerShowProgress(window, source, dark, static_cast<UINT>(dpi), MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US), hoverArgb, pressedArgb, argv[1],
             L"Preparing %d%%", L"Extracting %d%%", L"Copying %d%%", L"Registering %d%%", L"Cleaning %d%%");
     };
     ShowWindow(window, SW_SHOWNOACTIVATE);
@@ -59,7 +59,7 @@ int wmain(int argc, wchar_t** argv) {
         ClientToScreen(window, &point);
         clientFrame = SendMessageW(window, WM_NCHITTEST, 0, MAKELPARAM(point.x, point.y)) == HTCLIENT && clientFrame;
     }
-    HWND failed = InstallerShowProgress(window, source, dark, static_cast<UINT>(dpi), hoverArgb, pressedArgb, L"",
+    HWND failed = InstallerShowProgress(window, source, dark, static_cast<UINT>(dpi), MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US), hoverArgb, pressedArgb, L"",
         L"Preparing %d%%", L"Extracting %d%%", L"Copying %d%%", L"Registering %d%%", L"Cleaning %d%%");
     ShowWindow(stock, SW_SHOW);
     const bool failurePreservesStock = !failed && IsWindowVisible(stock);
