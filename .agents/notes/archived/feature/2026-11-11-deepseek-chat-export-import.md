@@ -1,6 +1,7 @@
 # Agent Note: Import DeepSeek website chat exports
 
 Status: implemented
+Archived: 2026-11-16
 
 ## Problem
 
