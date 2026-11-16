@@ -17,9 +17,12 @@ import { describe, expect, it, onTestFinished } from 'vitest'
 import type {} from '../src/index.ts'
 import { apply } from '../src/host/share-host.ts'
 
-const START = Date.parse('2026-10-15T00:00:00.000Z')
-const PAST = new Date(START).toISOString()
-const LIVE = new Date(START + 30 * 24 * 60 * 60_000).toISOString()
+// The host reads the real clock, so both horizons derive from it: PAST has passed and LIVE has not,
+// whenever the suite runs. Whole seconds keep the stored ISO strings in their canonical form.
+const NOW = Math.floor(Date.now() / 1000) * 1000
+const DAY = 24 * 60 * 60_000
+const PAST = new Date(NOW - DAY).toISOString()
+const LIVE = new Date(NOW + 30 * DAY).toISOString()
 const STORED_TOKEN = 'stored-payload.stored-signature'
 
 /**
