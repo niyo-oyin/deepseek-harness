@@ -283,6 +283,16 @@ describe('WebSearchCard', () => {
     expect(screen.getByText(en.pluginProviderHint)).toBeTruthy()
   })
 
+  it('shows no Search provider and explains automatic selection while none is chosen', () => {
+    const base = shipped()
+    renderPage({ ...base, search: { ...base.search, selected: '', kind: 'none', auto: true } })
+    expect(searchMenu().textContent).toBe(en.providerAuto)
+    expect(screen.getByText(en.searchAutoHint)).toBeTruthy()
+    expect(screen.queryByText(en.searchGuide)).toBeNull()
+    // The hint names the rule only for Search; Fetch keeps its composed provider and no hint.
+    expect(screen.getAllByText(en.searchAutoHint)).toHaveLength(1)
+  })
+
   it('offers automatic selection where the deployment composes no provider', () => {
     const base = shipped()
     const { actions } = renderPage({

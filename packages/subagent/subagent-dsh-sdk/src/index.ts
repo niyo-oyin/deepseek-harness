@@ -15,9 +15,14 @@ import type { Context } from '@deepseek-ai/cordis'
 import { statSync } from 'node:fs'
 import { isAbsolute, resolve } from 'node:path'
 import z from '@deepseek-ai/schemastery'
-import type { AgentOptions } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentOptions } from '@deepseek-ai/dsh-agent'
 import type { SubagentCapabilities, SubagentProvider, ResolvedSubagentStartRequest } from '@deepseek-ai/dsh-subagent'
-import { assertPositiveFinite, NO_START_CAPABILITIES, assertUsableCwd } from '@deepseek-ai/dsh-subagent'
+import {
+  assertPositiveFinite,
+  NO_START_CAPABILITIES,
+  assertUsableCwd,
+  parentAgentOptionsForDelegation,
+} from '@deepseek-ai/dsh-subagent'
 import {
   DEFAULT_DISPOSE_EOF_GRACE_MS,
   DEFAULT_DISPOSE_GRACE_MS,
@@ -42,10 +47,10 @@ export interface Config {
   patches: string[]
   /** Absolute isolated Harness home for every nested child process. */
   dshHome: string
-  /** Provider route the child runtime initializes with (default `deepseek-official`). */
-  provider: string
-  /** Model the child runtime initializes with (default `deepseek-v4-flash`). */
-  model: string
+  /** Provider route the child runtime initializes with; set together with `model`. Omitted: the delegating parent's route. */
+  provider?: string
+  /** Model the child runtime initializes with; set together with `provider`. Omitted: the delegating parent's route. */
+  model?: string
   /** Optional per-request output-token cap for the child runtime. */
   maxTokens?: number
   /**
@@ -73,8 +78,8 @@ export const Config: z<Config> = z.object({
   profile: z.string().default('sdk'),
   patches: z.array(z.string()).default([]),
   dshHome: z.string().required(),
-  provider: z.string().default('deepseek-official'),
-  model: z.string().default('deepseek-v4-flash'),
+  provider: z.string(),
+  model: z.string(),
   maxTokens: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER),
   env: z.dict(z.string()).default({}),
   shutdownTimeoutMs: z.number().default(DEFAULT_SHUTDOWN_TIMEOUT_MS),
@@ -82,8 +87,9 @@ export const Config: z<Config> = z.object({
   disposeGraceMs: z.number().default(DEFAULT_DISPOSE_GRACE_MS),
 })
 
-/** The shape after schemastery applied the defaults (`dshBin` and `maxTokens` have none). */
-type ResolvedConfig = Required<Omit<Config, 'maxTokens' | 'dshBin'>> & Pick<Config, 'maxTokens' | 'dshBin'>
+/** The shape after schemastery applied the defaults (`dshBin`, `provider`, `model`, and `maxTokens` have none). */
+type ResolvedConfig = Required<Omit<Config, 'maxTokens' | 'dshBin' | 'provider' | 'model'>>
+  & Pick<Config, 'maxTokens' | 'dshBin' | 'provider' | 'model'>
 
 /** Resolve one configured runtime file against the harness launch directory and require a regular file. */
 function resolveConfiguredFile(field: string, value: string): string {
@@ -102,18 +108,39 @@ const SDK_START_CAPABILITIES: SubagentCapabilities = Object.freeze({
   agentOptions: true,
 })
 
-/** Merge the request's supported route fields over this provider instance's defaults. */
-function resolveSdkRoute(config: ResolvedConfig, requested: AgentOptions | undefined): Pick<
+/**
+ * Merge the request's supported route fields over this provider instance's
+ * configured route, or over the delegating parent's route when none is configured.
+ * @param config - provider instance configuration.
+ * @param requested - the start request's Agent options.
+ * @param parent - delegating parent whose current route applies when none is configured.
+ * @returns the child runtime's handshake route.
+ * @throws Error when neither the request, the configuration, nor the parent supplies a provider and model.
+ */
+function resolveSdkRoute(config: ResolvedConfig, requested: AgentOptions | undefined, parent: Agent): Pick<
   SdkRunSpec,
   'provider' | 'model' | 'reasoningEffort' | 'maxTokens'
 > {
+  const base = configuredRoute(config) ?? parentAgentOptionsForDelegation(parent)
+  const provider = requested?.provider ?? base.provider
+  const model = requested?.model ?? base.model
+  if (provider === undefined || model === undefined) {
+    throw new Error('subagent-dsh-sdk: the child has no model route; set provider and model on this provider, or select a model for the parent')
+  }
   const maxTokens = requested?.maxTokens ?? config.maxTokens
   return {
-    provider: requested?.provider ?? config.provider,
-    model: requested?.model ?? config.model,
+    provider,
+    model,
     ...requested?.reasoningEffort === undefined ? {} : { reasoningEffort: requested.reasoningEffort },
     ...maxTokens === undefined ? {} : { maxTokens },
   }
+}
+
+/** The configured provider/model pair, or `undefined` when the configuration leaves the route to the parent. */
+function configuredRoute(config: ResolvedConfig): Readonly<{ provider: string; model: string }> | undefined {
+  return config.provider === undefined || config.model === undefined
+    ? undefined
+    : Object.freeze({ provider: config.provider, model: config.model })
 }
 
 /**
@@ -123,12 +150,13 @@ function resolveSdkRoute(config: ResolvedConfig, requested: AgentOptions | undef
  */
 class SdkSubagentProvider implements SubagentProvider {
   readonly capabilities = SDK_START_CAPABILITIES
-  readonly agentRouteDefaults: Readonly<{ provider: string; model: string }>
+  readonly agentRouteDefaults?: Readonly<{ provider: string; model: string }>
   // Context contract: an out-of-process SDK child starts fresh — no parent conversation crosses the process boundary.
   readonly inheritsParentContext = false
 
   constructor(readonly name: string, private readonly ctx: Context, private readonly config: ResolvedConfig) {
-    this.agentRouteDefaults = Object.freeze({ provider: config.provider, model: config.model })
+    const route = configuredRoute(config)
+    if (route !== undefined) this.agentRouteDefaults = route
   }
 
   start(request: ResolvedSubagentStartRequest) {
@@ -136,14 +164,15 @@ class SdkSubagentProvider implements SubagentProvider {
       throw new Error('subagent request was aborted before the SDK child started')
     }
     let cwd: string
+    let route: ReturnType<typeof resolveSdkRoute>
     try {
       cwd = assertUsableCwd('subagent-dsh-sdk', 'child cwd', request.cwd)
+      route = resolveSdkRoute(this.config, request.agentOptions, request.parent)
     } catch (error: unknown) {
       const failure = sdkConfigurationFailure(error)
       this.ctx.logger.warn(`subagent-dsh-sdk "${this.name}": child start failed: %o`, error)
       throw failure
     }
-    const route = resolveSdkRoute(this.config, request.agentOptions)
     const spec: SdkRunSpec = {
       ...this.config.dshBin === undefined ? {} : { dshBin: this.config.dshBin },
       profile: this.config.profile,
@@ -174,6 +203,9 @@ export function apply(ctx: Context, config: Config): void {
   assertPositiveFinite('subagent-dsh-sdk', 'disposeGraceMs', resolved.disposeGraceMs)
   if (resolved.maxTokens !== undefined && (!Number.isSafeInteger(resolved.maxTokens) || resolved.maxTokens <= 0)) {
     throw new TypeError('subagent-dsh-sdk maxTokens must be a positive safe integer')
+  }
+  if ((resolved.provider === undefined) !== (resolved.model === undefined)) {
+    throw new TypeError('subagent-dsh-sdk provider and model are set together, or both omitted to use the parent route')
   }
   if (!isAbsolute(resolved.dshHome)) throw new TypeError('subagent-dsh-sdk dshHome must be an absolute path')
   const launchPaths: ResolvedConfig = {

@@ -31,19 +31,19 @@ Choose it when automation should own the interaction: an out-of-process subagent
 
 ### Minimal configuration
 
-Every session the server creates uses the provider and model configured here. Both fields are optional so another agent or request listener can supply them; the runnable demo composition sets both. Stdout carries only protocol traffic, so keep logging off it.
+Every new session starts on the provider and model configured here. The two fields are set together; a config naming only one fails at load. When both are omitted, new sessions start on the composition's [`agent-default-model`](../../core/agent-default-model/README.md) selection, read at each `session/new`. Without either route, `session/new` fails with an error naming both settings. Resume keeps a Session's recorded selection and uses the same route only when the Session records none. Stdout carries only protocol traffic, so keep logging off it.
 
 ```yaml
 - name: '@deepseek-ai/dsh-acp'
   config:
-    provider: deepseek-official
-    model: deepseek-v4-pro
+    provider: my-provider
+    model: my-model
 ```
 
 | Field | Default | Meaning |
 |---|---|---|
-| `provider` | — | Provider route for every session's agent |
-| `model` | — | Model for every session's agent |
+| `provider` | `agent-default-model` provider | Provider route for every new session's agent |
+| `model` | `agent-default-model` model | Model for every new session's agent |
 | `sessionListPageSize` | `100` | Maximum summaries returned in one `session/list` page |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-acp) is the exhaustive source for every accepted field and its JSDoc.

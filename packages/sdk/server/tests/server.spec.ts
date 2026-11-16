@@ -14,6 +14,7 @@ import { randomUUID } from 'node:crypto'
 import AgentRegistry, { type Agent, type AgentHandle } from '@deepseek-ai/dsh-agent'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import AgentDefaultModelConfig from '@deepseek-ai/dsh-agent-default-model'
 import { mountAgentLoopTestDependencies, unsupportedInbox, unsupportedModel } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { MockAdapter, textResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 
@@ -283,6 +284,7 @@ describe('HarnessSdkJsonRpcServer', () => {
     vi.stubEnv('DEEPSEEK_API_KEY', 'test-key')
     vi.stubEnv('DEEPSEEK_BASE_URL', llmServer.url)
     const ctx = await makeHarness(storageDir)
+    await ctx.plugin(LlmDeepSeek)
     try {
       const transport = new FakeTransport()
       const server = new HarnessSdkJsonRpcServer(ctx, transport)
@@ -368,7 +370,7 @@ describe('HarnessSdkJsonRpcServer', () => {
     ctx.provide('agents', { create, get: (id: SessionId) => liveAgents.get(String(id)) })
     const server = new HarnessSdkJsonRpcServer(ctx, new FakeTransport())
     // This isolated prompt test begins after the handshake boundary.
-    ;(server as unknown as { initialized: boolean }).initialized = true
+    ;(server as unknown as { route: { provider: string; model: string } }).route = { provider: 'test', model: 'test' }
     const prompt = (sessionId: string, text: string) => server.prompt({
       sessionId,
       contentBlocks: [{ type: 'text', text }],
@@ -402,7 +404,7 @@ describe('HarnessSdkJsonRpcServer', () => {
     ctx.provide('attachments', { saveImages })
     const server = new HarnessSdkJsonRpcServer(ctx, new FakeTransport())
     // This isolated prompt test begins after the handshake boundary.
-    ;(server as unknown as { initialized: boolean }).initialized = true
+    ;(server as unknown as { route: { provider: string; model: string } }).route = { provider: 'test', model: 'test' }
 
     const text = entry === 'image-only' ? '' : entry === 'whitespace' ? '  ' : 'inspect'
     const image = { type: 'image' as const, data: 'AQ==', mimeType: 'image/png' as const, name: 'diagram.png' }
@@ -428,7 +430,7 @@ describe('HarnessSdkJsonRpcServer', () => {
     ctx.provide('agents', { create: vi.fn(async () => handle), get: () => agent })
     const server = new HarnessSdkJsonRpcServer(ctx, new FakeTransport())
     // This isolated prompt test begins after the handshake boundary.
-    ;(server as unknown as { initialized: boolean }).initialized = true
+    ;(server as unknown as { route: { provider: string; model: string } }).route = { provider: 'test', model: 'test' }
 
     await expect(server.prompt({
       sessionId: 'image',
@@ -457,7 +459,7 @@ describe('HarnessSdkJsonRpcServer', () => {
     ctx.provide('attachments', { saveImages })
     const server = new HarnessSdkJsonRpcServer(ctx, new FakeTransport())
     // This isolated prompt test begins after the handshake boundary.
-    ;(server as unknown as { initialized: boolean }).initialized = true
+    ;(server as unknown as { route: { provider: string; model: string } }).route = { provider: 'test', model: 'test' }
 
     const prompting = server.prompt({
       sessionId: 'image-race',
@@ -490,7 +492,7 @@ describe('HarnessSdkJsonRpcServer', () => {
     })
     const server = new HarnessSdkJsonRpcServer(ctx, new FakeTransport())
     // This isolated prompt test begins after the handshake boundary.
-    ;(server as unknown as { initialized: boolean }).initialized = true
+    ;(server as unknown as { route: { provider: string; model: string } }).route = { provider: 'test', model: 'test' }
     const prompt = (text: string) => server.prompt({
       sessionId: 'zombie',
       contentBlocks: [{ type: 'text', text }],
@@ -570,6 +572,7 @@ describe('HarnessSdkJsonRpcServer', () => {
     vi.stubEnv('DEEPSEEK_API_KEY', 'test-key')
     vi.stubEnv('DEEPSEEK_BASE_URL', llmServer.url)
     const ctx = await makeHarness(storageDir)
+    await ctx.plugin(LlmDeepSeek)
     try {
       const server = new HarnessSdkJsonRpcServer(ctx, new FakeTransport())
 
@@ -1046,7 +1049,7 @@ describe('HarnessSdkJsonRpcServer', () => {
     }
   })
 
-  it('does not re-register an LLM adapter whose provider already has an owner', async () => {
+  it('initializes on an adapter the composition registered', async () => {
     const storageDir = await mkdtemp(join(tmpdir(), 'dsh-jsonrpc-existing-llm-'))
     const ctx = await makeHarness(storageDir)
     vi.stubEnv('DEEPSEEK_API_KEY', 'test-key')
@@ -1067,7 +1070,23 @@ describe('HarnessSdkJsonRpcServer', () => {
     }
   })
 
-  it('rejects a missing non-DeepSeek provider when an LLM service already exists', async () => {
+  it('rejects an unregistered deepseek-official provider like any other unregistered provider', async () => {
+    const storageDir = await mkdtemp(join(tmpdir(), 'dsh-jsonrpc-no-adapter-'))
+    const ctx = await makeHarness(storageDir)
+    try {
+      const server = new HarnessSdkJsonRpcServer(ctx, new FakeTransport())
+
+      await expect(server.initialize({ cwd: storageDir, provider: 'deepseek-official', model: 'deepseek-flash' }))
+        .rejects.toThrow('no adapter registered for provider "deepseek-official"; add that provider\'s adapter to the profile')
+      expect(ctx.get('llm')?.listProviders().some(provider => provider.id === 'deepseek-official')).toBe(false)
+      await server.shutdown()
+    } finally {
+      await ctx.fiber.dispose()
+      await rm(storageDir, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects a provider that no registered adapter serves', async () => {
     const storageDir = await mkdtemp(join(tmpdir(), 'dsh-jsonrpc-new-llm-'))
     const ctx = await makeHarness(storageDir)
     vi.stubEnv('DEEPSEEK_API_KEY', 'test-key')
@@ -1200,8 +1219,9 @@ describe('HarnessSdkJsonRpcServer', () => {
     const storageDir = await mkdtemp(join(tmpdir(), 'dsh-jsonrpc-unsupported-reasoning-'))
     const ctx = await makeHarness(storageDir)
     vi.stubEnv('DEEPSEEK_API_KEY', 'test-key')
-    // A loopback endpoint keeps the fallback-mounted official route off the network; no request is sent.
+    // A loopback endpoint keeps the official route off the network; no request is sent.
     vi.stubEnv('DEEPSEEK_BASE_URL', 'http://127.0.0.1:9/anthropic')
+    await ctx.plugin(LlmDeepSeek)
     try {
       const server = new HarnessSdkJsonRpcServer(ctx, new FakeTransport())
       await expect(server.handleRequest('initialize', {
@@ -1262,9 +1282,11 @@ describe('HarnessSdkJsonRpcServer', () => {
     const ctx = testContext()
     ctx.provide('agents', { create, get: () => undefined })
     const server = new HarnessSdkJsonRpcServer(ctx, new FakeTransport()) as unknown as {
+      route: { provider: string; model: string }
       getOrCreateSession(sessionId: string): Promise<{ handle: AgentHandle }>
       shutdown(): Promise<Record<string, never>>
     }
+    server.route = { provider: 'test', model: 'test' }
 
     const first = server.getOrCreateSession('shared')
     const second = server.getOrCreateSession('shared')
@@ -1313,6 +1335,61 @@ describe('HarnessSdkJsonRpcServer', () => {
           maxTokens: 123,
         },
       }))
+    } finally {
+      await server.shutdown()
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('runs SDK sessions on the profile default model when initialize omits provider and model', async () => {
+    const ctx = new Context()
+    await mountAgentLoopTestDependencies(ctx)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    ctx.llm.registerAdapter(['mock'], new MockAdapter([textResponse('answer')], {
+      efforts: [{ id: brandString<ReasoningEffortId>('high'), name: 'High' }],
+    }))
+    await ctx.plugin(AgentDefaultModelConfig, { provider: 'mock', model: 'default-model', reasoningEffort: 'high' })
+    const create = vi.spyOn(ctx.agents, 'create')
+    const server = new HarnessSdkJsonRpcServer(ctx, new FakeTransport())
+    try {
+      await server.initialize({ cwd: '.' })
+      await server.prompt({ sessionId: 'defaulted', contentBlocks: [{ type: 'text', text: 'use the default' }] })
+      await server.wait({ sessionId: 'defaulted' })
+
+      expect(create).toHaveBeenCalledWith(expect.objectContaining({
+        agentOptions: { provider: 'mock', model: 'default-model', reasoningEffort: brandString<ReasoningEffortId>('high') },
+      }))
+    } finally {
+      await server.shutdown()
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it.each([
+    ['without agent-default-model', false, 'this profile composes no agent-default-model to supply a default'],
+    ['while agent-default-model has no selection', true, 'pass both, or set provider and model under agent-default-model in this profile'],
+  ])('rejects an initialize without provider and model %s', async (_label, mountDefault, message) => {
+    const ctx = new Context()
+    await mountAgentLoopTestDependencies(ctx)
+    ctx.llm.registerAdapter(['mock'], new MockAdapter([]))
+    if (mountDefault) await ctx.plugin(AgentDefaultModelConfig, {})
+    const server = new HarnessSdkJsonRpcServer(ctx, new FakeTransport())
+    try {
+      await expect(server.initialize({ cwd: '.' })).rejects.toThrow(message)
+      await expect(server.prompt({ sessionId: 'none', contentBlocks: [{ type: 'text', text: 'x' }] }))
+        .rejects.toThrow('SDK server is not initialized')
+    } finally {
+      await server.shutdown()
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('rejects an initialize that names only one of provider and model', async () => {
+    const ctx = new Context()
+    const server = new HarnessSdkJsonRpcServer(ctx, new FakeTransport())
+    try {
+      await expect(server.handleRequest('initialize', { cwd: '.', model: 'model' }))
+        .rejects.toThrow('initialize provider and model are non-empty strings supplied together')
     } finally {
       await server.shutdown()
       await ctx.fiber.dispose()

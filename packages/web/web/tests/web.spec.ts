@@ -251,42 +251,44 @@ describe('WebRuntime search readiness', () => {
     expect(deepseekAsked).toEqual([])
   })
 
-  it('asks the single usable provider when none is configured', async () => {
+  it('selects the only ready provider when none is configured', async () => {
     const { web } = await mountWeb()
-    web.registerSearchProvider(readyProvider('usable', available, false))
-    web.registerSearchProvider(readyProvider('unusable', unavailable, true))
-    await expect(web.searchReady(undefined)).resolves.toBe(false)
-  })
-
-  it('substitutes the only other ready provider when the selected provider cannot authenticate', async () => {
-    const { web } = await mountWeb({ searchProvider: 'deepseek' })
     web.registerSearchProvider(readyProvider('deepseek', available, false))
     web.registerSearchProvider(readyProvider('legacy', available, false))
     web.registerSearchProvider(readyProvider('exa', available, true))
+    web.registerSearchProvider(readyProvider('down', unavailable, true))
     await expect(web.searchReady('google')).resolves.toBe(true)
     await expect(web.search({ query: 'q' })).resolves.toMatchObject(searchResult('exa'))
   })
 
-  it('keeps the selected provider when more than one other provider is ready', async () => {
+  it.each([
+    ['nothing is registered', [], 'WEB_PROVIDER_UNAVAILABLE'],
+    ['no provider is ready', [readyProvider('deepseek', available, false)], 'WEB_PROVIDER_UNAVAILABLE'],
+    ['several providers are ready', [readyProvider('exa', available, true), readyProvider('deepseek', available, true)], 'WEB_PROVIDER_AMBIGUOUS'],
+  ] as const)('has no selection when none is configured and %s', async (_label, providers, code) => {
+    const { web } = await mountWeb()
+    for (const provider of providers) web.registerSearchProvider(provider)
+    await expect(web.searchReady('google')).resolves.toBe(false)
+    await expect(web.search({ query: 'q' })).rejects.toThrow(expect.objectContaining({ code }))
+  })
+
+  it('keeps a configured provider that cannot authenticate instead of substituting a ready one', async () => {
     const { web } = await mountWeb({ searchProvider: 'deepseek' })
     web.registerSearchProvider(readyProvider('deepseek', available, false))
     web.registerSearchProvider(readyProvider('exa', available, true))
-    web.registerSearchProvider(readyProvider('other', available, true))
     await expect(web.searchReady('google')).resolves.toBe(false)
     await expect(web.search({ query: 'q' })).resolves.toMatchObject(searchResult('deepseek'))
   })
 
-  it('treats a selected provider without ready() as ready', async () => {
+  it('treats a provider without ready() as ready', async () => {
     const { web } = await mountWeb()
     web.registerSearchProvider(makeSearchProvider('plain', available, () => Promise.resolve(searchResult('plain'))))
     await expect(web.searchReady('deepseek-official')).resolves.toBe(true)
   })
 
   it.each([
-    ['nothing is registered', {}, []],
     ['the configured provider is not registered', { searchProvider: 'missing' }, [readyProvider('other', available, false)]],
     ['the configured provider is unavailable', { searchProvider: 'down' }, [readyProvider('down', unavailable, false)]],
-    ['several usable providers are registered', {}, [readyProvider('a', available, false), readyProvider('b', available, false)]],
   ] as const)('answers true when %s, leaving search() to report the failure', async (_label, config, providers) => {
     const { web } = await mountWeb(config)
     for (const provider of providers) web.registerSearchProvider(provider)

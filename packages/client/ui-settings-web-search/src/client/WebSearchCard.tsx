@@ -74,7 +74,8 @@ export function WebSearchCard(props: WebSearchCardProps) {
           description={describe(search)}
           hint={search.kind === 'deepseek'
             ? <a className={styles.link} href={t('searchGuideUrl')} target="_blank" rel="noopener noreferrer">{t('searchGuide')}</a>
-            : search.kind === 'plugin' ? t('pluginProviderHint') : undefined} />
+            : search.kind === 'plugin' ? t('pluginProviderHint')
+              : search.selected === '' ? t('searchAutoHint') : undefined} />
         {search.kind === 'deepseek' && (
           <div className={styles.panel}>
             <SettingsValueField id="plugin-config-web-search-count" label={t('count')} hint={t('countHint')} numeric

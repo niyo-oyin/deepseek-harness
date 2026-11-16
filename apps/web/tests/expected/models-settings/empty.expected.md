@@ -11,10 +11,10 @@
   - paragraph: 填入各提供商的 API 密钥即可使用其模型。
   - list
   - tablist "添加方式":
-    - tab "第三方模型提供商" [selected]
+    - tab "模型提供商" [selected]
     - tab "自定义模型 API"
   - paragraph: 从内置目录中选择 OpenAI、Anthropic、Kimi 等提供商，填入其 API 密钥即可使用。
-  - tabpanel "第三方模型提供商":
+  - tabpanel "模型提供商":
     - text: 提供商
     - combobox "提供商":
       - option "amazon-bedrock"

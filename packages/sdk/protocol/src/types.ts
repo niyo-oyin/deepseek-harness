@@ -20,10 +20,10 @@ export interface InitializeParams {
   cwd: string
   /** Enable server-to-client approval/request calls; omission leaves existing answerers in control. */
   approvalRequests?: boolean
-  /** Provider route every SDK-created agent runs on. */
-  provider: string
-  /** Model name every SDK-created agent runs on (the server may mount a fallback adapter; see `HarnessSdkJsonRpcServer.initialize`). */
-  model: string
+  /** Provider route every SDK-created agent runs on; set together with `model`, or omit both to use the profile's default model. */
+  provider?: string
+  /** Model name every SDK-created agent runs on; set together with `provider`, or omit both to use the profile's default model. */
+  model?: string
   /** Optional adapter-owned reasoning effort for the selected provider/model route. */
   reasoningEffort?: ReasoningEffortId
   /** Optional positive output-token cap inherited by SDK-created agents and their in-process descendants. */

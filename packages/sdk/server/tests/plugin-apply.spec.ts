@@ -14,6 +14,7 @@ import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-test
 import { LlmAdapter } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
+import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek-api-key'
 import * as jsonrpc from '../src/index.ts'
 
 /**
@@ -174,6 +175,7 @@ describe('dsh-sdk-jsonrpc-server plugin apply', () => {
     const storageDir = await mkdtemp(join(tmpdir(), 'dsh-jsonrpc-apply-init-'))
     vi.stubEnv('DEEPSEEK_API_KEY', 'test-key')
     const harness = await mountPlugin(storageDir)
+    await harness.ctx.plugin(LlmDeepSeek)
     try {
       harness.send({ jsonrpc: '2.0', id: 'init-1', method: 'initialize', params: { cwd: storageDir, provider: 'deepseek-official', model: 'apply-model' } })
 
@@ -251,6 +253,7 @@ describe('dsh-sdk-jsonrpc-server plugin apply', () => {
     vi.stubEnv('DEEPSEEK_API_KEY', 'test-key')
     vi.stubEnv('DEEPSEEK_BASE_URL', llmServer.url)
     const harness = await mountPlugin(storageDir)
+    await harness.ctx.plugin(LlmDeepSeek)
     try {
       harness.send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { cwd: storageDir, provider: 'deepseek-official', model: 'dsagent-model' } })
       await harness.waitForFrame(frame => frame.id === 1, 'initialize response')

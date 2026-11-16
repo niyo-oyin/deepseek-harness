@@ -16,14 +16,14 @@ Each package entry labels its data with three identifiers: `inject` lists the se
 
 - `inject`: `agents` · `llm` · `sessionPersistence` · `sessions`
 - `refs`: `Stream` (`@agentclientprotocol/sdk`)
-- `source`: [`packages/acp/acp/src/index.ts:74`](../packages/acp/acp/src/index.ts)
+- `source`: [`packages/acp/acp/src/index.ts:76`](../packages/acp/acp/src/index.ts)
 
 ```ts config-catalog
 /** Plugin config: the provider/model selection used for each ACP-created agent. */
 export interface AcpConfig {
-  /** Provider route for created agents. */
+  /** Provider route for created agents; set together with `model`. Omitted: the `agentDefaultModel` selection. */
   provider?: string
-  /** Model name for created agents. */
+  /** Model name for created agents; set together with `provider`. Omitted: the `agentDefaultModel` selection. */
   model?: string
   /** Maximum summaries returned by one session/list page. */
   sessionListPageSize?: number
@@ -3698,7 +3698,7 @@ export type CodexPermissionMode =
 ## `@deepseek-ai/dsh-subagent-dsh-sdk`
 
 - `inject`: `subagents`
-- `source`: [`packages/subagent/subagent-dsh-sdk/src/index.ts:34`](../packages/subagent/subagent-dsh-sdk/src/index.ts)
+- `source`: [`packages/subagent/subagent-dsh-sdk/src/index.ts:39`](../packages/subagent/subagent-dsh-sdk/src/index.ts)
 
 ```ts config-catalog
 /** Config: how to spawn and drive the child SDK runtime process. */
@@ -3713,10 +3713,10 @@ export interface Config {
   patches: string[]
   /** Absolute isolated Harness home for every nested child process. */
   dshHome: string
-  /** Provider route the child runtime initializes with (default `deepseek-official`). */
-  provider: string
-  /** Model the child runtime initializes with (default `deepseek-v4-flash`). */
-  model: string
+  /** Provider route the child runtime initializes with; set together with `model`. Omitted: the delegating parent's route. */
+  provider?: string
+  /** Model the child runtime initializes with; set together with `provider`. Omitted: the delegating parent's route. */
+  model?: string
   /** Optional per-request output-token cap for the child runtime. */
   maxTokens?: number
   /**
@@ -4756,7 +4756,7 @@ export type ApprovalPolicy = 'ask' | 'never'
  * fields rather than introduce a hidden priority chain.
  */
 export interface WebRuntimeConfig {
-  /** Explicit search provider id. Omitted = auto-select when exactly one usable. */
+  /** Explicit search provider id. Omitted = auto-select when exactly one is usable and ready. */
   readonly searchProvider: Volatile<string | undefined>
   /** Explicit fetch provider id. Omitted = auto-select when exactly one usable. */
   readonly fetchProvider: Volatile<string | undefined>

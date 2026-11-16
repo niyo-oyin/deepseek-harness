@@ -4446,7 +4446,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   {
     key: 'web',
     summary: 'The web access service.',
-    description: 'The web access service. Registered as `ctx.web` (one instance per context) and exposed to Clients as the `web` Remote namespace (`listProviders`).\n\nSelection semantics (resolved at execution time, never order-dependent):\n\n- A configured id that is registered and `available()` → that provider.\n- A configured id not registered → `WEB_PROVIDER_CONFIGURED_MISSING`.\n- A configured id registered but unavailable → `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`.\n- No id configured, exactly one registered usable provider → that provider.\n- No id configured, multiple usable providers → `WEB_PROVIDER_AMBIGUOUS`.\n- No id configured, no usable provider → `WEB_PROVIDER_UNAVAILABLE`.\n\nSearch then substitutes the only other available and ready provider when the selected provider\'s `ready()` answers false, so an installed search provider serves without an explicit selection while the default provider has no credential.',
+    description: 'The web access service. Registered as `ctx.web` (one instance per context) and exposed to Clients as the `web` Remote namespace (`listProviders`).\n\nSelection semantics (resolved at execution time, never order-dependent):\n\n- A configured id that is registered and `available()` → that provider.\n- A configured id not registered → `WEB_PROVIDER_CONFIGURED_MISSING`.\n- A configured id registered but unavailable → `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`.\n- No id configured, exactly one registered usable provider → that provider.\n- No id configured, multiple usable providers → `WEB_PROVIDER_AMBIGUOUS`.\n- No id configured, no usable provider → `WEB_PROVIDER_UNAVAILABLE`.\n\nSearch counts only usable providers that are also ready when no id is configured, so automatic selection never picks a provider without a credential; with none or several ready, search has no selection and `searchReady()` answers false. A configured provider is never replaced.',
     methods: [
       {
         signature: 'registerSearchProvider(provider: WebSearchProvider): () => void',
@@ -4474,9 +4474,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'async searchReady(llmProvider?: string): Promise<boolean>',
-        description: 'Whether the provider `search()` would select can authenticate a search made for a model request on the `llmProvider` chat route. Asks only that provider\'s `ready()`; one without `ready()` counts as ready. Makes no network calls. A selection failure answers true, because `search()` reports that failure as a structured `WebError`.',
+        description: 'Whether search has a provider that can authenticate a search made for a model request on the `llmProvider` chat route. With a configured id, asks only that provider\'s `ready()`, and a selection failure answers true because `search()` reports it as a structured `WebError`. Without one, answers whether exactly one usable provider is ready. A provider without `ready()` counts as ready. Makes no network calls.',
         parameters: [{ name: 'llmProvider', description: 'the provider route id of the model request, when known.' }],
-        returns: 'false only when the selected provider reports that it cannot authenticate.',
+        returns: 'false when the configured provider cannot authenticate, or when no id is configured and zero or several providers are ready.',
       },
       {
         signature: 'async fetch(request: WebFetchRequest, signal?: AbortSignal): Promise<WebFetchResult>',

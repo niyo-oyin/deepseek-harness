@@ -8,7 +8,7 @@ export type WebSearchSettingsLocaleKey =
   | 'providerDeepSeek' | 'providerLocal' | 'providerDeepSeekFetch' | 'providerMissing' | 'providerAuto'
   | 'providerLegacy' | 'legacyKeyHint' | 'maxUses' | 'maxUsesHint' | 'invalidMaxUses'
   | 'providersFailed' | 'retry'
-  | 'pluginProviderHint' | 'searchGuide' | 'searchGuideUrl'
+  | 'pluginProviderHint' | 'searchAutoHint' | 'searchGuide' | 'searchGuideUrl'
   | 'credential' | 'apiKeySet' | 'apiKeyUnsetApi'
   | 'baseUrl' | 'baseUrlHint'
   | 'count' | 'countHint'
@@ -34,6 +34,7 @@ export const en: Record<WebSearchSettingsLocaleKey, string> = {
   providersFailed: "Couldn't load the provider list, so this menu may be incomplete.",
   retry: 'Retry',
   pluginProviderHint: 'Configure this provider in its own plugin settings.',
+  searchAutoHint: 'No provider is chosen. Web search uses the one provider that is set up; while none or several are, web search is off until you choose one here.',
   credential: 'API key',
   baseUrl: 'Base URL',
   baseUrlHint: 'Include the API prefix. Leave blank to use the official address. The provider appends {path}.',
@@ -73,6 +74,7 @@ export const zh: Record<WebSearchSettingsLocaleKey, string> = {
   providersFailed: '无法读取提供方列表，此菜单可能不完整',
   retry: '重试',
   pluginProviderHint: '请在该插件自己的设置中配置',
+  searchAutoHint: '尚未选择提供方。网页搜索会使用唯一已配置好的提供方；没有或有多个时，网页搜索将关闭，直到你在此处选择一个。',
   credential: 'API Key',
   baseUrl: 'Base URL',
   baseUrlHint: '填写含 API 前缀的地址；留空时使用官方地址；程序追加 {path}',
@@ -121,6 +123,7 @@ export const ja = {
   'providersFailed': 'プロバイダー一覧を読み込めなかったため、このメニューは不完全な可能性があります。',
   'retry': '再試行',
   'pluginProviderHint': 'このプロバイダーは、そのプラグイン自身の設定で構成してください。',
+  'searchAutoHint': 'プロバイダーが選択されていません。設定済みのプロバイダーが1つだけならそれを使います。1つもないか複数ある場合は、ここで選択するまでWeb検索は無効になります。',
   'credential': 'API キー',
   'baseUrl': 'ベース URL',
   'baseUrlHint': 'API プレフィックスを含めてください。空欄の場合は公式アドレスを使用します。プロバイダーは {path} を追加します。',
@@ -160,6 +163,7 @@ export const es = {
   providersFailed: 'No se pudo cargar la lista de proveedores, por lo que este menú puede estar incompleto.',
   retry: 'Reintentar',
   pluginProviderHint: 'Configure este proveedor en la configuración de su propio complemento.',
+  searchAutoHint: 'No se ha elegido ningún proveedor. La búsqueda web usa el único proveedor configurado; si no hay ninguno o hay varios, la búsqueda web queda desactivada hasta que elija uno aquí.',
   credential: 'Clave de API',
   baseUrl: 'URL base',
   baseUrlHint: 'Incluya el prefijo de la API. Déjelo en blanco para usar la dirección oficial. El proveedor agrega {path}.',
@@ -199,6 +203,7 @@ export const fr = {
   providersFailed: 'Impossible de charger la liste des fournisseurs ; ce menu peut être incomplet.',
   retry: 'Réessayer',
   pluginProviderHint: 'Configurez ce fournisseur dans les paramètres de son propre plugin.',
+  searchAutoHint: 'Aucun fournisseur n’est choisi. La recherche web utilise le seul fournisseur configuré ; s’il n’y en a aucun ou plusieurs, la recherche web est désactivée jusqu’à ce que vous en choisissiez un ici.',
   credential: 'Clé API',
   baseUrl: 'URL de base',
   baseUrlHint: "Incluez le préfixe de l'API. Laissez vide pour utiliser l'adresse officielle. Le fournisseur ajoute {path}.",
@@ -238,6 +243,7 @@ export const de = {
   providersFailed: 'Die Anbieterliste konnte nicht geladen werden, daher ist dieses Menü möglicherweise unvollständig.',
   retry: 'Erneut versuchen',
   pluginProviderHint: 'Konfigurieren Sie diesen Anbieter in den Einstellungen seines eigenen Plugins.',
+  searchAutoHint: 'Es ist kein Anbieter ausgewählt. Die Websuche verwendet den einzigen eingerichteten Anbieter; ist keiner oder sind mehrere eingerichtet, bleibt die Websuche aus, bis Sie hier einen auswählen.',
   credential: 'API-Schlüssel',
   baseUrl: 'Basis-URL',
   baseUrlHint: 'Fügen Sie das API-Präfix ein. Leer lassen, um die offizielle Adresse zu verwenden. Der Anbieter hängt {path} an.',
@@ -277,6 +283,7 @@ export const ru = {
   providersFailed: 'Не удалось загрузить список поставщиков, поэтому это меню может быть неполным.',
   retry: 'Повторить',
   pluginProviderHint: 'Настройте этого поставщика в настройках его собственного плагина.',
+  searchAutoHint: 'Поставщик не выбран. Веб-поиск использует единственного настроенного поставщика; если их нет или несколько, веб-поиск отключён, пока вы не выберете одного здесь.',
   credential: 'Ключ API',
   baseUrl: 'Базовый URL',
   baseUrlHint: 'Включите префикс API. Оставьте пустым, чтобы использовать официальный адрес. Поставщик добавляет {path}.',
@@ -316,6 +323,7 @@ export const pt = {
   providersFailed: 'Não foi possível carregar a lista de provedores, por isso este menu pode estar incompleto.',
   retry: 'Tentar novamente',
   pluginProviderHint: 'Configure este provedor nas configurações do próprio plugin.',
+  searchAutoHint: 'Nenhum provedor foi escolhido. A pesquisa na web usa o único provedor configurado; se não houver nenhum ou houver vários, a pesquisa na web fica desativada até você escolher um aqui.',
   credential: 'Chave de API',
   baseUrl: 'URL base',
   baseUrlHint: 'Inclua o prefixo da API. Deixe em branco para usar o endereço oficial. O provedor anexa {path}.',

@@ -8,7 +8,7 @@ The web service selects search and fetch providers through two independent field
 
 ## Decision
 
-Users choose search and fetch providers independently from the Host's registered provider lists. The shipped composition selects the Search API for search and local HTTP fetch for fetch, and the DeepSeek Search and Fetch APIs follow the conversation's DeepSeek credential.
+Users choose search and fetch providers independently from the Host's registered provider lists. The shipped composition chooses no search provider and selects local HTTP fetch for fetch, and the DeepSeek Search and Fetch APIs follow the conversation's DeepSeek credential.
 
 ### Registered providers are observable; availability is not
 
@@ -36,9 +36,11 @@ The [credential helpers](../../../../packages/llm/llm-deepseek/src/credential.ts
 
 ### Defaults and stored selections
 
-The [base composition](../../../../packages/bundle/base/cordis.patch.yml) sets `searchProvider: deepseek-search-api` and `fetchProvider: http`. Search defaults to the Search API because it returns sources without Harness starting an auxiliary model request. Fetch defaults to local HTTP fetch because it has no per-request API charge, applies Harness's own URL validation and resource limits, and reaches intranet and local addresses. The Fetch API remains one menu choice away.
+The [base composition](../../../../packages/bundle/base/cordis.patch.yml) sets `fetchProvider: http` and no `searchProvider`. Fetch defaults to local HTTP fetch because it has no per-request API charge, applies Harness's own URL validation and resource limits, and reaches intranet and local addresses. The Fetch API remains one menu choice away.
 
-A stored selection, whether in the settings document or in a deployment's own composition, wins over the shipped default, and an upgrade does not rewrite it. A selection is never replaced at execution: when the selected provider is missing, unavailable, or fails, the operation fails with its structured error and does not fall back to another search or fetch provider. A fallback would send the query and credential to an endpoint the user did not choose and change billing without notice.
+Search has no shipped provider because every search provider sends the query to a vendor that bills for it, and the product does not prefer one vendor. Without a configured id, search uses the one registered provider that is available and ready; with none or several ready, it has no selection, `searchReady()` answers false, and `web_search` is withheld. Readiness narrows automatic selection only: adding a credential for a second provider ends automatic selection instead of moving searches and their billing to that provider. A user with a DeepSeek key has both the Search API and Messages search ready and chooses once. The settings page shows **Automatic** with a line stating this rule and names no provider, because readiness is not observable from the Client (see below).
+
+A stored selection, whether in the settings document or in a deployment's own composition, wins over automatic selection, and an upgrade does not rewrite it. A selection is never replaced at execution: when the selected provider is missing, unavailable, not ready, or fails, the operation fails with its structured error, or `web_search` is withheld, and does not fall back to another search or fetch provider. A fallback would send the query and credential to an endpoint the user did not choose and change billing without notice.
 
 ### Legacy Messages search
 
@@ -72,9 +74,13 @@ The Messages provider owns and writes `web/deepseek-search-llm-request`. The dec
 
 **Send the account token whenever the user is signed in, whatever the conversation's route.** It would bill web access to the account during conversations on the API-key route or on another provider, which the user did not choose for them.
 
+**Ship a default search provider, substituting another ready provider when it has no credential.** A user who installed another vendor's provider would search through it until they added a DeepSeek key for chat, and then silently through DeepSeek at DeepSeek's charges; the settings page would also show DeepSeek as selected while another provider served.
+
+**Exempt legacy Messages search from automatic selection**, so a DeepSeek key alone selects the Search API. It needs a provider flag that only one provider uses, and it is the same vendor preference in another form.
+
 ## Consequences
 
-Users without a stored search selection search through the Search API: their queries go to the Search endpoint of the DeepSeek API-key route, cost a Search API request each, and send up to 128 characters of the latest human prompt as `ori_question` unless `sendOriginalQuestion` is off. Deployments whose gateway has no `/v1/tools` routes get search failures until they select Messages search or set `searchBaseURL` to a base that serves them. A stored `deepseek-official` selection uses Messages search. Users without a stored fetch selection fetch through local HTTP fetch.
+Users without a stored search selection search only when exactly one provider is set up; a DeepSeek-only user chooses between the Search API and Messages search once. Through the Search API, queries go to the Search endpoint of the DeepSeek API-key route, cost a Search API request each, and send up to 128 characters of the latest human prompt as `ori_question` unless `sendOriginalQuestion` is off. Deployments whose gateway has no `/v1/tools` routes get search failures until they select Messages search or set `searchBaseURL` to a base that serves them. A stored `deepseek-official` selection uses Messages search. Users without a stored fetch selection fetch through local HTTP fetch.
 
 A plugin provider, including one written in creator mode, appears in the matching menu as soon as it registers, under its `title`. The menus can offer a provider that cannot run for the current request; the failure appears when a search or fetch runs. Each registry change costs one forwarded event and one list read in each Client that observes it.
 

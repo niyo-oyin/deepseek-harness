@@ -18,10 +18,10 @@
       "path": "../../llm/llm"
     },
     {
-      "path": "../../llm/llm-deepseek-api-key"
+      "path": "../../core/agent"
     },
     {
-      "path": "../../core/agent"
+      "path": "../../core/agent-default-model"
     },
     {
       "path": "../../attachment/attachment"

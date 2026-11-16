@@ -117,7 +117,7 @@ describe('web e2e: Models settings page configures a dormant provider', () => {
     // The card opens on the third-party mode, whose panel carries the select.
     const modes = dialog.getByRole('tablist', { name: '添加方式' })
     await modes.waitFor({ timeout: 10_000 })
-    expect(await modes.getByRole('tab', { name: '第三方模型提供商' }).getAttribute('aria-selected')).toBe('true')
+    expect(await modes.getByRole('tab', { name: '模型提供商' }).getAttribute('aria-selected')).toBe('true')
     const pick = dialog.getByLabel('提供商', { exact: true })
     await pick.waitFor({ timeout: 10_000 })
     await expect.poll(async () => pick.locator('option').count(), { timeout: 10_000 }).toBeGreaterThan(30)

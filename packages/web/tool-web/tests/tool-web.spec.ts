@@ -493,7 +493,7 @@ describe('web_fetch presentation meta and result view', () => {
 
 describe('tool-web registration', () => {
   it('registers both tools by default', async () => {
-    const { fiber, ctx, agent } = await mountTools()
+    const { fiber, ctx, agent } = await mountTools({ search: searchProvider({ sources: [], truncated: false }) })
     const names = ctx.tools.schemas().map(s => s.name)
     expect(names).toContain('web_search')
     expect(names).toContain('web_fetch')
@@ -522,13 +522,12 @@ describe('tool-web registration', () => {
     await fiber.dispose()
   })
 
-  it('registers web_search even when no provider is available (schema follows enablement, not availability)', async () => {
+  it('keeps web_search registered but withholds it from steps while no search provider is selected', async () => {
     const { fiber, ctx, call } = await mountTools()
     expect(ctx.tools.schemas().map(s => s.name)).toContain('web_search')
-    // No provider is registered: the schema stays visible and execution reports
-    // the structured unavailability instead.
+    // No provider is configured or ready, so search has no selection and the step does not admit the tool.
     const out = await call('web_search', { queries: ['q'] })
-    expect(out.error?.info?.code).toBe('WEB_PROVIDER_UNAVAILABLE')
+    expect(out.error?.info?.code).toBe('UNKNOWN_TOOL')
     await fiber.dispose()
   })
 
@@ -755,20 +754,19 @@ describe('tool-web execution through the real registry', () => {
     await fiber.dispose()
   })
 
-  it('surfaces a structured WebError when no provider is available', async () => {
-    const { fiber, call } = await mountTools()
+  it('surfaces a structured WebError when the configured provider is not registered', async () => {
+    const { fiber, call } = await mountTools({ webConfig: { searchProvider: 'missing' } })
     const out = await call('web_search', { queries: ['q'] })
     expect(out.isError).toBe(true)
-    expect(out.error?.info?.code).toBe('WEB_PROVIDER_UNAVAILABLE')
+    expect(out.error?.info?.code).toBe('WEB_PROVIDER_CONFIGURED_MISSING')
     await fiber.dispose()
   })
 
-  it('surfaces WEB_PROVIDER_AMBIGUOUS for multiple unconfigured providers', async () => {
+  it('withholds web_search while several unconfigured providers are ready', async () => {
     const { ctx, fiber, call } = await mountTools({ search: searchProvider({ sources: [], truncated: false }) })
     ctx.web.registerSearchProvider({ id: 'other', available: () => available, search: () => Promise.resolve({ sources: [], truncated: false }) })
     const out = await call('web_search', { queries: ['q'] })
-    expect(out.isError).toBe(true)
-    expect(out.error?.info?.code).toBe('WEB_PROVIDER_AMBIGUOUS')
+    expect(out.error?.info?.code).toBe('UNKNOWN_TOOL')
     await fiber.dispose()
   })
 

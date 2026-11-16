@@ -7,7 +7,7 @@ kind: "package-bundle"
 
 ## Summary
 
-The automation-only ACP stdio application as a `dsh` profile bundle over [`dsh-base`](../base/README.md). It inherits the base's disabled module-HMR policy; its patch sets the coding-agent persona and default model route, mounts an app-owned zero-option command provider, and starts [`dsh-acp`](../../acp/acp/README.md) only after that provider accepts the invocation. `dsh --profile acp --help` therefore writes help and exits without claiming stdin or stdout.
+The automation-only ACP stdio application as a `dsh` profile bundle over [`dsh-base`](../base/README.md). It inherits the base's disabled module-HMR policy; its patch sets the coding-agent persona, mounts an app-owned zero-option command provider, and starts [`dsh-acp`](../../acp/acp/README.md) only after that provider accepts the invocation. `dsh --profile acp --help` therefore writes help and exits without claiming stdin or stdout.
 
 ## Table of Contents
 
@@ -24,7 +24,7 @@ The automation-only ACP stdio application as a `dsh` profile bundle over [`dsh-b
 
 The startup provider binds stdin EOF to the launcher's bounded successful shutdown. ACP connection close, SIGINT, and SIGTERM drain the bridge-owned agents and the root profile tree before exit. Stdout is reserved for newline-delimited ACP JSON-RPC frames. The bundle disables model-generated session titles because ACP exposes no title surface; deterministic fallback titles remain durable without an auxiliary model request. The inherited projection cache checkpoints ACP-created sessions for later consumers; its durability barrier flushes each covered log prefix before publishing the cache row and may split otherwise coalesced JSONL runs. A deployment selects a different complete composition through profile bundles and patch files, not another app bin.
 
-The shipped row creates sessions with `deepseek-official` and `deepseek-v4-flash`; a later patch can replace that row's complete config. The base profile owns adapters, tools, persistence, policy, settings, credentials, and the per-session workspace supplied by the ACP client.
+The shipped row preselects no provider or model: sessions start on the profile's [`agent-default-model`](../../core/agent-default-model/README.md) selection, which the `acp` profile sets with `provider` and `model` under that entry. Until it does, `session/new` fails and names the setting. A later patch can instead set `provider` and `model` on the `acp` row. The base profile owns adapters, tools, persistence, policy, settings, credentials, and the per-session workspace supplied by the ACP client.
 
 -----
 
