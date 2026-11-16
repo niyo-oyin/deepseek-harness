@@ -56,7 +56,7 @@ export default defineConfig([
     entry: ['lib/types/main.js'],
     plugins: [packagedImportsPlugin(mainProcessImports)],
     define: clientVersionDefine,
-    // The update and mandatory-update shell documents share the product's platform stylesheet.
+    // The shell-dialog document shares the product's platform stylesheet.
     onSuccess: async () => {
       await mkdir(fileURLToPath(new URL('lib/shell', import.meta.url)), { recursive: true })
       await copyFile(
@@ -73,7 +73,7 @@ export default defineConfig([
     clean: false,
     deps: { neverBundle: ['electron'] },
   },
-  ...(['preload-app', 'preload-mandatory', 'preload-update-dialog'] as const).map(name => ({
+  ...(['preload-app', 'preload-shell-dialog'] as const).map(name => ({
     // Sandboxed Electron preloads run as CommonJS even though the application package is ESM.
     entry: { [name]: `lib/types/${name}.js` },
     plugins: [packagedImportsPlugin(preloadImports)],

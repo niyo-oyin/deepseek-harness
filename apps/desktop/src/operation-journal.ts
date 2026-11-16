@@ -83,7 +83,7 @@ export class OperationJournal {
   }
 
   /**
-   * Wait for queued records during shutdown or installer handoff without holding the application indefinitely.
+   * Wait for queued records during shutdown without holding the application indefinitely.
    * @param timeoutMs - Waiting budget before disabling the writer and cancelling subsequent I/O.
    * @returns True after the queue settles successfully; false immediately when disabled, or on failure or deadline.
    * False does not confirm that an issued OS request has settled.

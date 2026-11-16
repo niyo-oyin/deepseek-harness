@@ -86,7 +86,7 @@ it('prunes only the oldest crash reports and leaves other files alone', async ()
   const names = Array.from({ length: CRASH_REPORTS_RETAINED + 3 }, (_, index) =>
     crashReportFileName(new Date(Date.UTC(2026, 8, 1 + index)), 'main'))
   for (const name of names) await writeFile(join(root, name), '')
-  const foreign = ['crash-notes.txt', 'crash-notes.log', 'crash-2026-09-01T00-00-00-000Z-unknown.log', 'update-journal.jsonl']
+  const foreign = ['crash-notes.txt', 'crash-notes.log', 'crash-2026-09-01T00-00-00-000Z-unknown.log', 'operations.jsonl']
   for (const name of foreign) await writeFile(join(root, name), '')
   await pruneCrashReports(root)
   const remaining = (await readdir(root)).sort()

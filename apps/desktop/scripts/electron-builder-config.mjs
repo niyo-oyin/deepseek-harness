@@ -17,40 +17,28 @@ import { verifyMacOSDiskImageSignature, verifyMacOSSignatureAfterSign } from './
 import {
   createWindowsTokenSigner,
   installWindowsNsisBootstrapSigner,
-  resolveWindowsUpdatePublisher,
   scrubWindowsSigningEnvironment,
 } from './windows-sign.mjs'
-import { resolveDesktopAutoUpdateConfig } from '@deepseek-ai/dsh-desktop-publisher/desktop-auto-update-environment.mjs'
 import { resolveDesktopBuildCommit } from './desktop-build-commit.mjs'
 import { resolveDesktopBuildVersion } from './desktop-build-version.mjs'
-import { resolveDesktopPolicyEnvironment } from './desktop-policy-environment.mjs'
 import { DESKTOP_PACKAGE_NAME, DESKTOP_PRODUCT_NAME } from './desktop-product.mjs'
 import { desktopArtifactOutput, desktopTargetBuildPaths, resolveDesktopBuildTarget } from './desktop-build-paths.mjs'
 import { installWindowsDirectoryInstaller } from './windows-directory-installer.mjs'
 import { preserveWindowsRuntimeSignature, signWindowsCode } from './windows-runtime-signature.mjs'
 import { prepareWindowsAsarUnpack, verifyWindowsAsarUnpack } from './windows-asar-unpack.mjs'
 import { recordPackagingEvent } from './packaging-run.mjs'
-import {
-  resolveMacOSAppUpdateFeed,
-  verifyMacOSAppUpdateConfig,
-  writeMacOSAppUpdateConfig,
-} from './macos-app-update-config.mjs'
 
 /**
  * Create electron-builder configuration from one release environment.
  * @param {NodeJS.ProcessEnv} env - Packaging environment.
  * @param {NodeJS.Platform} hostPlatform - Build-host platform used when no explicit target is present.
  * @param {string} hostArch - Build-host architecture used when no explicit target is present.
- * @param {string | undefined} preparedRuntime - Verified private dsh tree for installed-update qualification; ordinary releases use the target tree.
- * @param {string | undefined} preparedRuntimeVersion - Version that private tree declares, which qualification rewrites away from the product version.
  * @returns {object} electron-builder configuration.
  */
 export function createElectronBuilderConfig(
   env = process.env,
   hostPlatform = process.platform,
   hostArch = process.arch,
-  preparedRuntime = undefined,
-  preparedRuntimeVersion = undefined,
 ) {
   const appId = resolveDesktopAppId(env)
   const targetPlatform = env.DSH_DESKTOP_TARGET_PLATFORM
@@ -67,7 +55,6 @@ export function createElectronBuilderConfig(
   if (skipNotarization && (unsigned || resolvedPlatform !== 'darwin')) throw new Error('Skipping notarization requires a signed macOS build')
   const packagesMacOS = targetPlatform === 'darwin' || (targetPlatform === undefined && hostPlatform === 'darwin')
   const packagesWindows = resolvedPlatform === 'win32'
-  const policy = unsigned ? undefined : resolveDesktopPolicyEnvironment(env)
   if (resolvedPlatform === 'win32') installWindowsDirectoryInstaller()
   const macOSSigning = packagesMacOS && !unsigned ? resolveMacOSSigningEnvironment(env) : undefined
   if (packagesMacOS && !unsigned && !skipNotarization) resolveMacOSNotarizationEnvironment(env)
@@ -103,10 +90,8 @@ export function createElectronBuilderConfig(
   if (windowsSigner !== undefined) {
     installWindowsNsisBootstrapSigner({ sign: windowsSigner })
   }
-  const update = unsigned ? undefined : resolveDesktopAutoUpdateConfig(env, resolvedPlatform, resolvedArch)
-  if (preparedRuntime !== undefined) buildPaths.dsh = preparedRuntime
   // electron-builder merges extraMetadata into the packaged manifest, so a build version here reaches
-  // the artifact names, the update feed, and the installed app.getVersion() the updater compares against.
+  // the artifact names and the installed app.getVersion().
   const productVersion = JSON.parse(readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8')).version
   const buildVersion = resolveDesktopBuildVersion(env, productVersion)
   const packaged = resolveDesktopBuildCommit(env)
@@ -115,9 +100,6 @@ export function createElectronBuilderConfig(
     protocols: [{ name: DESKTOP_PRODUCT_NAME, schemes: ['dsh'] }],
     extraMetadata: {
       name: DESKTOP_PACKAGE_NAME,
-      dshDesktopAppId: appId,
-      dshDesktopUpdateChannel: update?.channel ?? 'nightly',
-      ...(policy === undefined ? {} : { dshMandatoryUpdatePolicy: policy }),
       ...buildVersion === productVersion ? {} : { version: buildVersion },
       ...packaged === undefined ? {} : { dshBuildCommit: packaged.commit, dshBuildDirty: packaged.dirty },
     },
@@ -149,8 +131,7 @@ export function createElectronBuilderConfig(
       'lib/operation-report-worker.js',
       'lib/shell/**/*',
       'lib/preload-app.cjs',
-      'lib/preload-mandatory.cjs',
-      'lib/preload-update-dialog.cjs',
+      'lib/preload-shell-dialog.cjs',
       'renderer/**/*',
       'package.json',
       '!node_modules/**/*.{js,cjs,mjs,ts,cts,mts,css}.map',
@@ -183,11 +164,12 @@ export function createElectronBuilderConfig(
       // Prepared runtime files retain their signatures; PAK resources are sealed by their enclosing bundle.
       signIgnore: ['/Contents/Resources/app\\.asar\\.unpacked/dsh(?:/|$)', '/Contents/Resources/runtime/primary-runtime(?:/|$)', '\\.pak$'],
       notarize: !unsigned && !skipNotarization,
-      target: unsigned ? ['dmg'] : ['dmg', 'zip'],
+      target: ['dmg'],
     },
     dmg: {
       format: 'ULMO',
       sign: !unsigned,
+      // The DMG blockmap serves only differential updates.
       writeUpdateInfo: false,
     },
     beforePack: async context => {
@@ -200,21 +182,11 @@ export function createElectronBuilderConfig(
         primaryRuntimeDestination = join(context.appOutDir, 'resources', 'runtime', 'primary-runtime')
         dshDestination = join(context.appOutDir, 'resources', 'app.asar.unpacked', 'dsh')
       }
-      if (policy === undefined) return
-      const { resolveDesktopPolicyConfig } = await import('../lib/types/mandatory-update-policy.js')
-      resolveDesktopPolicyConfig(policy)
     },
     afterPack: async context => {
       const { verifyDesktopRuntime } = await import('../lib/types/runtime-tree.js')
       const resourcesDir = context.packager.getResourcesDir(context.appOutDir)
-      if (resolvedPlatform === 'darwin' && update !== undefined) {
-        await writeMacOSAppUpdateConfig(resourcesDir, resolveMacOSAppUpdateFeed(context.packager.config.publish),
-          context.packager.appInfo.updaterCacheDirName)
-      }
-      // The bundled runtime declares whichever version prepared it: the product version for an ordinary
-      // release, and a rewritten one for installed-update qualification.
-      await verifyDesktopRuntime(buildPaths.dsh,
-        preparedRuntimeVersion ?? productVersion, { platform: resolvedPlatform, arch: resolvedArch })
+      await verifyDesktopRuntime(buildPaths.dsh, productVersion, { platform: resolvedPlatform, arch: resolvedArch })
       // Unsigned Windows builds skip electron-builder's afterSign hook.
       if (packagesWindows && unsigned) await verifyWindowsAsarUnpack(buildPaths.dsh, resourcesDir, windowsCode)
     },
@@ -228,11 +200,6 @@ export function createElectronBuilderConfig(
         await verifyWindowsAsarUnpack(buildPaths.dsh, context.packager.getResourcesDir(context.appOutDir), windowsCode)
       }
       if (context.electronPlatformName !== 'darwin' || unsigned) return
-      const appPath = join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`)
-      if (update !== undefined) {
-        await verifyMacOSAppUpdateConfig(appPath, resolveMacOSAppUpdateFeed(context.packager.config.publish),
-          context.packager.appInfo.updaterCacheDirName)
-      }
       verifyMacOSSignatureAfterSign(context, macOSSigning ?? resolveMacOSSigningEnvironment(env))
     },
     artifactBuildCompleted: artifact => {
@@ -252,7 +219,6 @@ export function createElectronBuilderConfig(
       forceCodeSigning: !unsigned,
       signtoolOptions: {
         sign: windowsSigner,
-        publisherName: windowsSigner === undefined ? undefined : resolveWindowsUpdatePublisher(env.DSH_DESKTOP_WINDOWS_CER_FILE),
         signingHashAlgorithms: ['sha256'],
       },
       target: ['nsis'],
@@ -271,9 +237,11 @@ export function createElectronBuilderConfig(
       allowElevation: false,
       allowToChangeInstallationDirectory: false,
       installerLanguages: readInstallerLocales().map(locale => locale.id),
-      differentialPackage: true,
+      // Blockmaps serve only differential updates; without one the installer is a plain solid archive.
+      differentialPackage: false,
     },
-    detectUpdateChannel: false,
-    publish: update === undefined ? null : [{ provider: 'generic', url: update.publicUrl, channel: update.channel }],
+    // null, unlike an omitted value, stops electron-builder from inferring a publisher from GH_TOKEN or the
+    // repository, so no app-update.yml or update metadata is written and no artifact is uploaded.
+    publish: null,
   }
 }

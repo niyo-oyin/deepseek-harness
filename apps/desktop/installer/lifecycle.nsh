@@ -35,9 +35,6 @@ Function InstallerGuiInit
 FunctionEnd
 
 Function InstallerWelcome
-    ${If} ${isUpdated}
-        Abort
-    ${EndIf}
     StrCpy $InstallerPhase "welcome"
     Call InstallerCreate
 FunctionEnd

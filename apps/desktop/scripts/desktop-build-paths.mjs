@@ -126,3 +126,16 @@ export function desktopArtifactOutput(paths, mode) {
   if (mode.skipNotarization) return { directory: paths.unnotarizedArtifacts, suffix: '-unnotarized' }
   return { directory: paths.artifacts, suffix: '' }
 }
+
+/**
+ * Locate the installer electron-builder writes for one target, build version, and packaging mode.
+ * @param {'mac-arm64' | 'mac-x64' | 'win-x64'} target - Supported Desktop target name.
+ * @param {string} version - Build version the installer name carries.
+ * @param {{ unsigned: boolean, skipNotarization: boolean }} mode - Validated packaging mode.
+ * @param {NodeJS.ProcessEnv} environment - Packaging environment with an optional absolute cache directory.
+ * @returns {string} Absolute installer path: an NSIS executable on Windows, a DMG on macOS.
+ */
+export function desktopInstallerPath(target, version, mode, environment = process.env) {
+  const output = desktopArtifactOutput(desktopTargetBuildPaths(target, environment), mode)
+  return join(output.directory, `deepseek-harness-${version}-${target}${output.suffix}.${target === 'win-x64' ? 'exe' : 'dmg'}`)
+}

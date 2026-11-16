@@ -24,7 +24,6 @@ import {
 import type { ConnectionIndicatorState } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SettingsRootComponentProps, SettingsSectionRow } from './shell-contract.ts'
 import css from './SettingsRoot.module.css'
-import { DesktopUpdateIndicator } from './DesktopUpdateIndicator.tsx'
 
 const RECOVERY_CONFIRMATION_MS = 2_000
 
@@ -120,7 +119,7 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
 export function SettingsRoot(props: SettingsRootComponentProps) {
   const {
     wide, reconnect, useConnectionState, useSections, useOnboardingSteps, useSessions, renderSlot, t,
-    useDesktopUpdate, openDesktopUpdate, useStore, actions, useShortcuts,
+    useStore, actions, useShortcuts,
   } = props
   const { open, activeId } = useStore(state => state)
   const shortcut = useShortcuts(rows => rows.find(row => row.id === 'settings.open'))
@@ -135,7 +134,6 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
   // freshly localized text on locale change, and the trigger/header/close
   // seats re-render through their own outlets' subscriptions.
   const rows = useSections(s => s)
-  const desktopUpdate = useDesktopUpdate(state => state)
   const connectionState = useConnectionState(state => state)
   const previousConnectionState = useRef(connectionState)
   const onboardingSteps = useOnboardingSteps(s => s)
@@ -243,7 +241,7 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
           </button>
         </Tooltip> })}
         <ConnectionIndicator
-          state={wide && desktopUpdate.presentation?.phase !== 'installing' ? connectionIndicator : undefined}
+          state={wide ? connectionIndicator : undefined}
           disconnectedLabel={t('connection.error')}
           connectingLabel={t('connection.connecting')}
           recoveredLabel={t('connection.connected')}
@@ -251,8 +249,6 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
           restartActionLabel={t('connection.restart')}
           onReconnect={reconnect}
         />
-        <DesktopUpdateIndicator wide={wide} hidden={connectionIndicator !== undefined && desktopUpdate.presentation?.phase !== 'installing'}
-          t={t} view={desktopUpdate} onOpen={openDesktopUpdate} />
       </div>
       {open && (
         <SettingsPanel

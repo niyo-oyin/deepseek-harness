@@ -47,10 +47,6 @@ try {
     DSH_DESKTOP_APP_ID: `com.deepseek.harness.installertest.n${id}`,
     DSH_DESKTOP_TARGET_PLATFORM: 'win32', DSH_DESKTOP_TARGET_ARCH: 'x64',
     DSH_DESKTOP_UNSIGNED: '1', CSC_IDENTITY_AUTO_DISCOVERY: 'false', ELECTRON_BUILDER_7Z_FILTER: 'BCJ',
-    DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: signingEnvironment.DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN
-      ?? 'https://test.example.com',
-    DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: signingEnvironment.DSH_DESKTOP_MANDATORY_UPDATE_CONFIG
-      ?? JSON.stringify({ allowedAuthOrigins: ['https://login.example.com'] }),
     ...signingRun ? { DSH_DESKTOP_PACKAGING_RUN_DIR: signingRun.directory } : {},
   })
   const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
@@ -108,17 +104,6 @@ SectionEnd
   const compiler = await getMakeNsisPath()
   await execute(compiler.path, ['/V2', payloadSource], { ...childOptions, env: { ...childOptions.env, ...compiler.env } })
   if (sign) await sign({ path: join(payload, `${productName}.exe`), hash: 'sha256', isNest: false })
-  if (!uninstallOnly && !process.argv.includes('--compile-only')) {
-    const owner = join(output, 'restart-status-owner.exe')
-    await execute(compiler.path, ['/V2', `/DOWNER_EXE=${owner}`,
-      `/DBANNER_INCLUDE=${join(appRoot, 'scripts', 'restart-banner.nsh')}`,
-      `/DSTATUS_DLL=${join(output, 'ui', 'window-frame.dll')}`,
-      join(appRoot, 'tests', 'fixtures', 'restart-status-owner.nsi')],
-    { ...childOptions, env: { ...childOptions.env, ...compiler.env } })
-    if (sign) await sign({ path: owner, hash: 'sha256', isNest: false })
-    await execute('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
-      join(appRoot, 'tests', 'windows-restart-status.ps1'), '-OwnerExe', owner], childOptions)
-  }
   for (const locale of readInstallerLocales()) {
     const language = locale.id
     const config = createElectronBuilderConfig()

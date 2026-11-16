@@ -237,14 +237,14 @@ try {
     $otherProcess = Start-Process -FilePath $otherApp -PassThru -WindowStyle Hidden
     $processes.Add($otherProcess)
     [void](Wait-Control $otherProcess 'Installer test application is running.' -Dialog)
-    Run-Silent '/S --updated' 0
+    Run-Silent '/S' 0
     if ($otherProcess.HasExited) { throw 'Unrelated installation was stopped' }
     Dismiss $otherProcess 'Installer test application is running.'
     if (-not $otherProcess.WaitForExit(10000)) { throw 'Unrelated test application did not exit' }
-    if (-not (Test-Path -LiteralPath $appPath)) { throw 'Silent update moved the registered installation' }
+    if (-not (Test-Path -LiteralPath $appPath)) { throw 'Silent reinstall moved the registered installation' }
     $registration = Get-ItemProperty ('HKCU:\Software\' + $RegistryKey)
-    if ($registration.InstallLocation.TrimEnd('\') -ne $installPath) { throw 'Silent update changed InstallLocation' }
-    $results.Add('silent-update-retains-directory-and-ignores-unrelated-process')
+    if ($registration.InstallLocation.TrimEnd('\') -ne $installPath) { throw 'Silent reinstall changed InstallLocation' }
+    $results.Add('silent-reinstall-retains-directory-and-ignores-unrelated-process')
     Run-Silent ('/S /allusers /D=' + $installPath) 2
     $foreign = Join-Path $OutputDirectory 'Foreign App'
     New-Item -ItemType Directory -Path $foreign | Out-Null

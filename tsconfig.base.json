@@ -28,7 +28,6 @@
     // not declaration path aliases, keep each package/vendor source compiled
     // under its own tsconfig boundary.
     "paths": {
-      "@deepseek-ai/dsh-desktop-publisher/*": ["./apps/desktop-publisher/src/*"],
       "@deepseek-ai/dsh-client-script-realm": ["./packages/client/script-realm/src/index.ts"],
       "@deepseek-ai/dsh-client-script-realm/client": ["./packages/client/script-realm/src/client/index.ts"],
       "@deepseek-ai/dsh-client-script-realm-iframe": ["./packages/client/script-realm-iframe/src/index.ts"],
@@ -355,7 +354,6 @@
       "@deepseek-ai/dsh-client-ui-theme/brand-font.css": ["./packages/client/ui-theme/src/styles/brand-font.css"],
       "@deepseek-ai/dsh-client-ui-settings": ["./packages/client/ui-settings/src"],
       "@deepseek-ai/dsh-client-ui-settings-general": ["./packages/client/ui-settings-general/src"],
-      "@deepseek-ai/dsh-client-ui-settings-general/types": ["./packages/client/ui-settings-general/src/types.ts"],
       "@deepseek-ai/dsh-client-ui-settings-models": ["./packages/client/ui-settings-models/src"],
       "@deepseek-ai/dsh-client-ui-plugin-manager": ["./packages/client/ui-plugin-manager/src"],
       "@deepseek-ai/dsh-client-ui-plugin-market": ["./packages/client/ui-plugin-market/src"],

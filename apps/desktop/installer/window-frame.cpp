@@ -27,8 +27,6 @@ static HRESULT ApplyInstallerDwmFrame(HWND window) {
 }
 
 #include "font.h"
-#include "restart-banner.h"
-#include "restart-status.h"
 #include "progress.h"
 #include "extract.h"
 #include "extract-report.h"

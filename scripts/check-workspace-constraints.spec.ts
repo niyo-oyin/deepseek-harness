@@ -453,7 +453,7 @@ describe('package payload constraints', () => {
     },
   )
 
-  it.each(['apps/plugin-market-generator', 'apps/desktop-publisher'])('exempts private tool %s from release rules in its own directory only', (dir) => {
+  it.each(['apps/plugin-market-generator'])('exempts private tool %s from release rules in its own directory only', (dir) => {
     const manifest = JSON.parse(readFileSync(new URL(`../${dir}/package.json`, import.meta.url), 'utf8')) as WorkspaceManifest['manifest']
     expect(checkWorkspaceManifest({ dir, manifest })).toEqual([])
     expect(checkWorkspaceManifest({ dir: 'apps/other-tool', manifest })).not.toEqual([])
