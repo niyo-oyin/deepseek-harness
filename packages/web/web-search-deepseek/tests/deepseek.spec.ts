@@ -628,18 +628,18 @@ describe('web-search-deepseek search readiness', () => {
     return ctx
   }
 
-  it('is not ready on an API-key route without a search key', async () => {
+  it('is not ready without a search key', async () => {
     const ctx = await compose()
-    expect(await ctx.web.searchReady('deepseek-official')).toBe(false)
+    expect(await ctx.web.searchReady()).toBe(false)
   })
 
   it('becomes ready once a search key is stored', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'dsh-web-search-ready-'))
     try {
       const ctx = await compose({ credentialsDir: dir })
-      expect(await ctx.web.searchReady('deepseek-official')).toBe(false)
+      expect(await ctx.web.searchReady()).toBe(false)
       await ctx.credentials.set(credentialRef('DEEPSEEK_API_KEY'), 'stored-key')
-      expect(await ctx.web.searchReady('deepseek-official')).toBe(true)
+      expect(await ctx.web.searchReady()).toBe(true)
     } finally {
       await rm(dir, { recursive: true, force: true })
     }
@@ -647,37 +647,13 @@ describe('web-search-deepseek search readiness', () => {
 
   it('is ready when the provider config carries a literal key', async () => {
     const ctx = await compose({ config: { apiKey: 'ds-key' } })
-    expect(await ctx.web.searchReady('deepseek-official')).toBe(true)
+    expect(await ctx.web.searchReady()).toBe(true)
   })
 
   it('is ready when the launch environment supplies the key', async () => {
     process.env.DEEPSEEK_API_KEY = 'env-key'
     const ctx = await compose()
-    expect(await ctx.web.searchReady('deepseek-official')).toBe(true)
-  })
-
-  it.each<[string, Record<string, unknown>, Record<string, string>, boolean]>([
-    ['the DeepSeek key', {}, { DEEPSEEK_API_KEY: 'env-key' }, true],
-    ['a literal key', { apiKey: 'ds-key' }, {}, true],
-    ['no key', {}, {}, false],
-  ])('answers for a model request on another provider route with %s, as on any route', async (_label, config, env, expected) => {
-    const saved = Object.fromEntries(Object.keys(env).map(name => [name, process.env[name]]))
-    Object.assign(process.env, env)
-    try {
-      const ctx = await compose({ config })
-      expect(await ctx.web.searchReady('openai')).toBe(expected)
-    } finally {
-      for (const [name, value] of Object.entries(saved)) {
-        if (value === undefined) Reflect.deleteProperty(process.env, name)
-        else process.env[name] = value
-      }
-    }
-  })
-
-  it('is ready without a model route when a search key exists', async () => {
-    process.env.DEEPSEEK_API_KEY = 'env-key'
-    const ctx = await compose()
-    expect(await ctx.web.searchReady(undefined)).toBe(true)
+    expect(await ctx.web.searchReady()).toBe(true)
   })
 
   it('is not ready when the credential store cannot be read', async () => {
@@ -686,7 +662,7 @@ describe('web-search-deepseek search readiness', () => {
       const ctx = await compose({ credentialsDir: dir })
       await ctx.credentials.set(credentialRef('DEEPSEEK_API_KEY'), 'stored-key')
       vi.spyOn(ctx.credentials, 'describe').mockRejectedValue(new Error('credential store unreadable'))
-      expect(await ctx.web.searchReady('deepseek-official')).toBe(false)
+      expect(await ctx.web.searchReady()).toBe(false)
     } finally {
       await rm(dir, { recursive: true, force: true })
     }

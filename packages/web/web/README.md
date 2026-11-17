@@ -111,12 +111,12 @@ A search or fetch backend outside the shipped composition is a plugin package th
 <a id="search-readiness"></a>
 ### Search and fetch readiness
 
-`searchReady(llmProvider?)` and `fetchReady(llmProvider?)` ask the provider that `search()` or `fetch()` would select whether an operation made for a model request on that chat route has a credential to send; [`dsh-tool-web`](../tool-web/README.md#search-readiness) uses the answers to decide whether each model step admits `web_search` and `web_fetch`. A provider answers through its optional `ready(llmProvider)`, a configuration-only check that must not make network calls; a provider without it counts as ready. When selection of a configured id fails, the readiness method answers true, because the operation reports that failure as a structured `WebError`. Without a configured search id, `searchReady()` answers whether exactly one usable search provider is ready, so `web_search` is withheld while none or several are.
+`searchReady()` and `fetchReady()` ask the provider that `search()` or `fetch()` would select whether its next operation has a credential to send; [`dsh-tool-web`](../tool-web/README.md#search-readiness) uses the answers to decide whether each model step admits `web_search` and `web_fetch`. A provider answers through its optional `ready()`, a configuration-only check that must not make network calls; a provider without it counts as ready. When selection of a configured id fails, the readiness method answers true, because the operation reports that failure as a structured `WebError`. Without a configured search id, `searchReady()` answers whether exactly one usable search provider is ready, so `web_search` is withheld while none or several are.
 
 ```text
-// false only when the selected provider cannot authenticate this route's operations:
-const searchOffered = await ctx.web.searchReady('deepseek-official')
-const fetchOffered = await ctx.web.fetchReady('deepseek-official')
+// false only when the selected provider cannot authenticate its next operation:
+const searchOffered = await ctx.web.searchReady()
+const fetchOffered = await ctx.web.fetchReady()
 ```
 
 ### Failures and recovery

@@ -110,9 +110,9 @@ async function operate(ctx: Context, operation: Operation, route?: string): Prom
   return await ctx.agents.withInitiator({ session } as Agent, run)
 }
 
-/** Ask whether one operation is ready for a model request on `route`. */
-function ready(ctx: Context, operation: Operation, route: string | undefined): Promise<boolean> {
-  return operation === 'search' ? ctx.web.searchReady(route) : ctx.web.fetchReady(route)
+/** Ask whether one operation is ready. */
+function ready(ctx: Context, operation: Operation): Promise<boolean> {
+  return operation === 'search' ? ctx.web.searchReady() : ctx.web.fetchReady()
 }
 
 const officialRoute = (config: Record<string, unknown> = { baseURL: 'https://route.deepseek.test/anthropic' }): RouteRow =>
@@ -123,7 +123,7 @@ describe.each(OPERATIONS)('%s on any conversation route', (operation) => {
 
   it.each(routes)('sends the key of the DeepSeek API-key route to its origin for route %s', async (route) => {
     const { ctx, sent } = await mount({ routes: [officialRoute()], environment: { DEEPSEEK_API_KEY: 'chat-key' } })
-    expect(await ready(ctx, operation, route)).toBe(true)
+    expect(await ready(ctx, operation)).toBe(true)
     await operate(ctx, operation, route)
     expect(sent()).toEqual([{ endpoint: `${ROUTE}/${operation}`, authorization: 'Bearer chat-key' }])
   })
@@ -132,7 +132,7 @@ describe.each(OPERATIONS)('%s on any conversation route', (operation) => {
     const subject = operation === 'search' ? 'Search' : 'Fetch'
     const { ctx, sent } = await mount({ routes: [officialRoute()] })
     for (const route of routes) {
-      expect(await ready(ctx, operation, route)).toBe(false)
+      expect(await ready(ctx, operation)).toBe(false)
       await expect(operate(ctx, operation, route)).rejects.toMatchObject({
         code: 'WEB_PROVIDER_CREDENTIAL_MISSING',
         message: `DeepSeek ${subject} API sends the DeepSeek API key, and no key is configured for "DEEPSEEK_API_KEY". Guide`
@@ -148,7 +148,7 @@ describe.each(OPERATIONS)('%s on any conversation route', (operation) => {
       routes: [officialRoute()],
       credentials: { describe: () => Promise.reject(new Error('store locked')), resolve: () => Promise.reject(new Error('store locked')) },
     })
-    expect(await ready(ctx, operation, 'moonshotai')).toBe(false)
+    expect(await ready(ctx, operation)).toBe(false)
     await expect(operate(ctx, operation, 'moonshotai')).rejects.toMatchObject({
       code: 'WEB_PROVIDER_ERROR', message: 'DeepSeek web credential resolution failed: Error: store locked',
     })
@@ -161,7 +161,7 @@ describe.each(OPERATIONS)('%s on any conversation route', (operation) => {
       credentials: { describe: async (ref: string) => ({ configured: ref === 'TEAM_KEY' }), resolve: async (ref: string) => ref === 'TEAM_KEY' ? { value: 'team-key' } : undefined },
       environment: { DEEPSEEK_API_KEY: 'chat-key', DEEPSEEK_BASE_URL: 'https://internal.deepseek.test/anthropic' },
     })
-    expect(await ready(ctx, operation, 'deepseek-official')).toBe(true)
+    expect(await ready(ctx, operation)).toBe(true)
     await operate(ctx, operation, 'deepseek-official')
     expect(sent()).toEqual([{ endpoint: `https://internal.deepseek.test/v1/tools/${operation}`, authorization: 'Bearer team-key' }])
   })
@@ -176,7 +176,7 @@ describe.each(OPERATIONS)('%s on any conversation route', (operation) => {
       ...routes === undefined ? {} : { routes },
       environment: { DEEPSEEK_API_KEY: 'chat-key', TEAM_KEY: 'team-key', DEEPSEEK_BASE_URL: 'https://internal.deepseek.test/anthropic' },
     })
-    expect(await ready(ctx, operation, 'deepseek-official')).toBe(true)
+    expect(await ready(ctx, operation)).toBe(true)
     await operate(ctx, operation, 'deepseek-official')
     expect(sent()).toEqual([{ endpoint: `${OFFICIAL}/${operation}`, authorization: 'Bearer chat-key' }])
   })
@@ -197,7 +197,7 @@ describe.each(OPERATIONS)('%s on any conversation route', (operation) => {
       environment: { DEEPSEEK_API_KEY: 'chat-key', TEAM_KEY: 'team-key' },
     })
     for (const route of ['deepseek-official', 'moonshotai', undefined]) {
-      expect(await ready(ctx, operation, route)).toBe(false)
+      expect(await ready(ctx, operation)).toBe(false)
       await expect(operate(ctx, operation, route)).rejects.toMatchObject({
         code: 'WEB_PROVIDER_MISCONFIGURED',
         message: `DeepSeek ${subject} API sends that provider's API key to the origin of the DeepSeek API-key model provider,`
@@ -214,14 +214,14 @@ describe.each(OPERATIONS)('%s on any conversation route', (operation) => {
       config: { [`${operation}BaseURL`]: OWN },
       routes: [officialRoute({ thinking: 'disabled', reasoningEffort: 'high' })], environment: { DEEPSEEK_API_KEY: 'chat-key' },
     })
-    expect(await ready(ctx, operation, 'deepseek-official')).toBe(true)
+    expect(await ready(ctx, operation)).toBe(true)
     await operate(ctx, operation, 'deepseek-official')
     expect(sent()).toEqual([{ endpoint: `${OWN}/${operation}`, authorization: 'Bearer chat-key' }])
   })
 
   it('is not ready when the credential store cannot be read', async () => {
     const { ctx } = await mount({ routes: [officialRoute()], credentials: { describe: () => Promise.reject(new Error('store locked')) } })
-    expect(await ready(ctx, operation, 'deepseek-official')).toBe(false)
+    expect(await ready(ctx, operation)).toBe(false)
   })
 
   it('follows a route change at the next operation', async () => {
@@ -260,7 +260,7 @@ describe.each(OPERATIONS)('%s with its own endpoint settings', (operation) => {
       config, routes: [officialRoute()], environment: { DEEPSEEK_API_KEY: 'chat-key', OWN_KEY: 'own-key' },
     })
     for (const route of ['deepseek-official', 'moonshotai', undefined]) {
-      expect(await ready(ctx, operation, route)).toBe(true)
+      expect(await ready(ctx, operation)).toBe(true)
       await operate(ctx, operation, route)
     }
     expect(sent()).toEqual([expected, expected, expected])
@@ -270,7 +270,7 @@ describe.each(OPERATIONS)('%s with its own endpoint settings', (operation) => {
     const { ctx, sent } = await mount({
       config: { [apiKeyEnv]: 'OWN_KEY' }, routes: [officialRoute()], environment: { DEEPSEEK_API_KEY: 'chat-key' },
     })
-    expect(await ready(ctx, operation, 'deepseek-official')).toBe(false)
+    expect(await ready(ctx, operation)).toBe(false)
     await expect(operate(ctx, operation, 'deepseek-official')).rejects.toMatchObject({
       code: 'WEB_PROVIDER_CREDENTIAL_MISSING',
       message: `DeepSeek ${subject} API sends the API key under "OWN_KEY" to its own endpoint, and no key is configured for`
@@ -310,7 +310,7 @@ describe('independent capabilities', () => {
 
   it('reports one capability not ready while the other is ready', async () => {
     const { ctx } = await mount({ config: { fetchApiKeyEnv: 'UNSET_KEY' }, routes: [officialRoute()], environment: { DEEPSEEK_API_KEY: 'chat-key' } })
-    expect([await ready(ctx, 'search', undefined), await ready(ctx, 'fetch', undefined)]).toEqual([true, false])
+    expect([await ready(ctx, 'search'), await ready(ctx, 'fetch')]).toEqual([true, false])
   })
 })
 

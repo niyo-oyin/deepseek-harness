@@ -223,32 +223,32 @@ describe('WebRuntime execution resolution', () => {
 })
 
 describe('WebRuntime search readiness', () => {
-  /** A search provider whose readiness answer is scripted and whose calls are recorded. */
-  function readyProvider(id: string, isAvailable: boolean, ready: boolean, asked: (string | undefined)[] = []): WebSearchProvider {
+  /** A search provider whose readiness answer is scripted and whose calls are counted. */
+  function readyProvider(id: string, isAvailable: boolean, ready: boolean, asked = { count: 0 }): WebSearchProvider {
     return {
       ...makeSearchProvider(id, isAvailable, () => Promise.resolve(searchResult(id))),
-      ready: (llmProvider) => {
-        asked.push(llmProvider)
+      ready: () => {
+        asked.count += 1
         return Promise.resolve(ready)
       },
     }
   }
 
-  it('answers from the selected provider and passes it the request route', async () => {
+  it('answers from the selected provider', async () => {
     const { web } = await mountWeb({ searchProvider: 'deepseek' })
-    const asked: (string | undefined)[] = []
+    const asked = { count: 0 }
     web.registerSearchProvider(readyProvider('deepseek', available, false, asked))
-    await expect(web.searchReady('deepseek-official')).resolves.toBe(false)
-    expect(asked).toEqual(['deepseek-official'])
+    await expect(web.searchReady()).resolves.toBe(false)
+    expect(asked.count).toBe(1)
   })
 
   it('does not ask a provider that search() would not select', async () => {
     const { web } = await mountWeb({ searchProvider: 'exa' })
-    const deepseekAsked: (string | undefined)[] = []
+    const deepseekAsked = { count: 0 }
     web.registerSearchProvider(readyProvider('exa', available, true))
     web.registerSearchProvider(readyProvider('deepseek', available, false, deepseekAsked))
-    await expect(web.searchReady('deepseek-official')).resolves.toBe(true)
-    expect(deepseekAsked).toEqual([])
+    await expect(web.searchReady()).resolves.toBe(true)
+    expect(deepseekAsked.count).toBe(0)
   })
 
   it('selects the only ready provider when none is configured', async () => {
@@ -257,7 +257,7 @@ describe('WebRuntime search readiness', () => {
     web.registerSearchProvider(readyProvider('legacy', available, false))
     web.registerSearchProvider(readyProvider('exa', available, true))
     web.registerSearchProvider(readyProvider('down', unavailable, true))
-    await expect(web.searchReady('google')).resolves.toBe(true)
+    await expect(web.searchReady()).resolves.toBe(true)
     await expect(web.search({ query: 'q' })).resolves.toMatchObject(searchResult('exa'))
   })
 
@@ -268,7 +268,7 @@ describe('WebRuntime search readiness', () => {
   ] as const)('has no selection when none is configured and %s', async (_label, providers, code) => {
     const { web } = await mountWeb()
     for (const provider of providers) web.registerSearchProvider(provider)
-    await expect(web.searchReady('google')).resolves.toBe(false)
+    await expect(web.searchReady()).resolves.toBe(false)
     await expect(web.search({ query: 'q' })).rejects.toThrow(expect.objectContaining({ code }))
   })
 
@@ -276,14 +276,14 @@ describe('WebRuntime search readiness', () => {
     const { web } = await mountWeb({ searchProvider: 'deepseek' })
     web.registerSearchProvider(readyProvider('deepseek', available, false))
     web.registerSearchProvider(readyProvider('exa', available, true))
-    await expect(web.searchReady('google')).resolves.toBe(false)
+    await expect(web.searchReady()).resolves.toBe(false)
     await expect(web.search({ query: 'q' })).resolves.toMatchObject(searchResult('deepseek'))
   })
 
   it('treats a provider without ready() as ready', async () => {
     const { web } = await mountWeb()
     web.registerSearchProvider(makeSearchProvider('plain', available, () => Promise.resolve(searchResult('plain'))))
-    await expect(web.searchReady('deepseek-official')).resolves.toBe(true)
+    await expect(web.searchReady()).resolves.toBe(true)
   })
 
   it.each([
@@ -292,7 +292,7 @@ describe('WebRuntime search readiness', () => {
   ] as const)('answers true when %s, leaving search() to report the failure', async (_label, config, providers) => {
     const { web } = await mountWeb(config)
     for (const provider of providers) web.registerSearchProvider(provider)
-    await expect(web.searchReady('deepseek-official')).resolves.toBe(true)
+    await expect(web.searchReady()).resolves.toBe(true)
     await expect(web.search({ query: 'q' })).rejects.toBeInstanceOf(WebError)
   })
 })
@@ -348,38 +348,38 @@ describe('WebRuntime fetch capability', () => {
 })
 
 describe('WebRuntime fetch readiness', () => {
-  /** A fetch provider whose readiness answer is scripted and whose calls are recorded. */
-  function readyFetchProvider(id: string, isAvailable: boolean, ready: boolean, asked: (string | undefined)[] = []): WebFetchProvider {
+  /** A fetch provider whose readiness answer is scripted and whose calls are counted. */
+  function readyFetchProvider(id: string, isAvailable: boolean, ready: boolean, asked = { count: 0 }): WebFetchProvider {
     return {
       ...makeFetchProvider(id, isAvailable, fetchResult(id)),
-      ready: (llmProvider) => {
-        asked.push(llmProvider)
+      ready: () => {
+        asked.count += 1
         return Promise.resolve(ready)
       },
     }
   }
 
-  it('answers from the provider fetch() selects and passes it the request route', async () => {
+  it('answers from the provider fetch() selects', async () => {
     const { web } = await mountWeb({ fetchProvider: 'deepseek' })
-    const asked: (string | undefined)[] = []
-    const httpAsked: (string | undefined)[] = []
+    const asked = { count: 0 }
+    const httpAsked = { count: 0 }
     web.registerFetchProvider(readyFetchProvider('deepseek', available, false, asked))
     web.registerFetchProvider(readyFetchProvider('http', available, true, httpAsked))
-    await expect(web.fetchReady('deepseek-official')).resolves.toBe(false)
-    expect(asked).toEqual(['deepseek-official'])
-    expect(httpAsked).toEqual([])
+    await expect(web.fetchReady()).resolves.toBe(false)
+    expect(asked.count).toBe(1)
+    expect(httpAsked.count).toBe(0)
   })
 
   it('treats a selected provider without ready() as ready', async () => {
     const { web } = await mountWeb()
     web.registerFetchProvider(makeFetchProvider('http', available, fetchResult('http')))
-    await expect(web.fetchReady('deepseek-official')).resolves.toBe(true)
+    await expect(web.fetchReady()).resolves.toBe(true)
   })
 
   it('answers true when no provider qualifies, leaving fetch() to report the failure', async () => {
     const { web } = await mountWeb({ fetchProvider: 'down' })
     web.registerFetchProvider(readyFetchProvider('down', unavailable, false))
-    await expect(web.fetchReady('deepseek-official')).resolves.toBe(true)
+    await expect(web.fetchReady()).resolves.toBe(true)
     await expect(web.fetch({ url: 'https://example.com' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_CONFIGURED_UNAVAILABLE' })
   })
 })

@@ -99,7 +99,7 @@ describe('web-deepseek-api over the real model routes', () => {
     const { ctx, sent } = await bootComposition({}, {
       DEEPSEEK_API_KEY: 'chat-key', DEEPSEEK_BASE_URL: 'https://internal.deepseek.test/anthropic',
     })
-    expect([await ctx.web.searchReady(undefined), await ctx.web.fetchReady(undefined)]).toEqual([true, true])
+    expect([await ctx.web.searchReady(), await ctx.web.fetchReady()]).toEqual([true, true])
     await ctx.web.search({ query: 'q' })
     await ctx.web.fetch({ url: 'https://example.test/' })
     expect(sent()).toEqual([
@@ -123,7 +123,7 @@ describe('web-deepseek-api over the real model routes', () => {
 
   it('withholds both capabilities without a key on any conversation route', async () => {
     const { ctx, sent } = await bootComposition({}, { DEEPSEEK_BASE_URL: 'https://internal.deepseek.test/anthropic' })
-    expect([await ctx.web.searchReady('moonshotai'), await ctx.web.fetchReady('deepseek-official')]).toEqual([false, false])
+    expect([await ctx.web.searchReady(), await ctx.web.fetchReady()]).toEqual([false, false])
     await expect(ctx.web.search({ query: 'q' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_CREDENTIAL_MISSING' })
     expect(sent()).toEqual([])
   })
@@ -133,7 +133,7 @@ describe('web-deepseek-api over the real model routes', () => {
       DEEPSEEK_API_KEY: 'chat-key', DEEPSEEK_BASE_URL: 'https://internal.deepseek.test/anthropic',
     })
     await entry(ctx, 'llm-deepseek').dispose()
-    expect(await ctx.web.searchReady(undefined)).toBe(true)
+    expect(await ctx.web.searchReady()).toBe(true)
     await ctx.web.search({ query: 'q' })
     expect(sent()).toEqual([{ endpoint: 'https://api.deepseek.com/v1/tools/search', authorization: 'Bearer chat-key' }])
     await entry(ctx, 'web-deepseek-api').dispose()
