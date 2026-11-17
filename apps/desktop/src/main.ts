@@ -576,7 +576,7 @@ async function main(): Promise<void> {
   })
   ipcMain.handle(DESKTOP_IPC.localeBootstrap, async (event) => {
     if (event.sender !== mainWindow?.webContents || event.senderFrame !== mainWindow.webContents.mainFrame
-      || new URL(event.senderFrame.url).origin !== new URL(applicationUrl).origin) {
+      || !event.senderFrame.url.startsWith(applicationUrl)) {
       throw new Error('desktop preferences: rejected locale request from an unowned frame')
     }
     if (preferences === undefined) throw new Error('desktop preferences: backend unavailable')
@@ -810,16 +810,15 @@ async function main(): Promise<void> {
     })
     return window
   }
-  const enterWorkspace = async ({ activate = true }: { activate?: boolean } = {}): Promise<void> => {
+  const enterWorkspace = async (): Promise<void> => {
     if (quitting) return
     const window = mainWindow ?? createMainWindow()
     await navigateMain(applicationUrl)
     if (isQuitting() || recovery.active || window.isDestroyed()) return
     if (process.platform === 'win32') window.setBackgroundColor(chromeFallbackFill())
-    if (activate) window.show()
-    else window.showInactive()
+    window.show()
     enteredWorkspace = true
-    if (activate && development && process.env.DSH_DESKTOP_OPEN_DEVTOOLS !== '0') {
+    if (development && process.env.DSH_DESKTOP_OPEN_DEVTOOLS !== '0') {
       window.webContents.openDevTools({ mode: 'detach' })
     }
   }
@@ -843,8 +842,8 @@ async function main(): Promise<void> {
       void (backend.state.phase === 'ready' ? openInitialWindow() : navigateMain(applicationUrl)).catch((error: unknown) => { reportFatal(error, 'main') })
       return
     }
-    // Startup and sign-out select the visible window before activation may reveal the workspace.
-    if (window === mainWindow && !enteredWorkspace) return
+    // Until the workspace first opens, startup decides when the window appears; activation must not reveal it early.
+    if (!enteredWorkspace) return
     if (window.isMinimized()) window.restore()
     window.show()
     window.focus()

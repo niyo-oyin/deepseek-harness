@@ -121,12 +121,10 @@ const harness = await vi.hoisted(async () => {
       if (event.preventDefault.mock.calls.length === 0) this.destroy()
     }
   }
-  const views: FakeView[] = []
   class FakeView extends FakeWindow {
     constructor() {
       super({ show: false })
       windows.pop()
-      views.push(this)
       Object.assign(this.webContents, {
         loadURL: (url: string) => this.loadURL(url),
         close: () => { this.destroy(); this.webContents.emit('destroyed') },
@@ -136,7 +134,7 @@ const harness = await vi.hoisted(async () => {
   class FakeHost {
     readonly inspectQuit = vi.fn(async () => ({ activeTasks: false, scheduledTasks: false }))
     url = 'http://127.0.0.1:3080/'
-    fetch = vi.fn(async () => Response.json({ hasApiKey: true, writable: true, localePreference: null, themePreference: 'system' }))
+    fetch = vi.fn(async () => Response.json({ localePreference: null, themePreference: 'system' }))
     readonly ready = deferred()
     readonly exited = deferred()
     readonly stopping = deferred()
@@ -196,7 +194,7 @@ const harness = await vi.hoisted(async () => {
   const shellDialog = { isOpen: false, focus: vi.fn() }
   return {
     failWindow(error: Error) { windowFailure = error },
-    windows, views, hosts, handlers, app, FakeWindow, FakeView, FakeHost, powerMonitor, nativeTheme,
+    windows, hosts, handlers, app, FakeWindow, FakeView, FakeHost, powerMonitor, nativeTheme,
     trays, FakeTray, backgroundNotice, shellDialog,
     menu, popup, socketHeaders: vi.fn(), connectPreferences: vi.fn(), removeLegacyHostCookies: vi.fn(async () => {}), hostCookies: {},
     loginShell, readLoginShell,
@@ -213,14 +211,12 @@ const harness = await vi.hoisted(async () => {
     get preparing() { return preparing }, get prepared() { return prepared },
     get hostStarted() { return hostStarted }, get navigated() { return navigated },
     get dialogShown() { return dialogShown }, get quitCompleted() { return quitCompleted },
-    nextNavigation() { navigated = deferred(); return navigated.promise },
-    nextHostStart() { hostStarted = deferred(); return hostStarted.promise },
     get pluginsEnabled() { return pluginsEnabled },
     set pluginsEnabled(value: boolean) { pluginsEnabled = value },
     set closeWindowsOnQuit(value: boolean) { closeWindowsOnQuit = value },
     reset() {
       windows.length = 0
-      views.length = 0; hosts.length = 0; handlers.clear(); app.removeAllListeners()
+      hosts.length = 0; handlers.clear(); app.removeAllListeners()
       trays.length = 0
       backgroundNotice.markerPath = undefined
       shellDialog.isOpen = false
@@ -297,7 +293,8 @@ vi.mock('../src/desktop-preferences.ts', () => ({
   connectDesktopPreferences: (...args: unknown[]) => {
     harness.connectPreferences(...args)
     return {
-      readLocalePreference: async () => null,
+      readLocalePreference: async (): Promise<unknown> =>
+        ((await (await harness.hosts.at(-1)!.fetch()).json()) as { localePreference: unknown }).localePreference,
       read: async (): Promise<unknown> => (await harness.hosts.at(-1)!.fetch()).json() as Promise<unknown>,
     }
   },
@@ -543,6 +540,25 @@ describe('desktop main startup', () => {
     }
   })
 
+  it('answers the locale bootstrap with the Host preference only for the application main frame', async () => {
+    const host = await readyWorkspace()
+    // The startup preference read has finished once the workspace is shown.
+    await vi.waitFor(() => { expect(harness.windows[0]!.show).toHaveBeenCalledOnce() })
+    const sender = harness.windows[0]!.webContents
+    const handler = harness.handlers.get(DESKTOP_IPC.localeBootstrap)!
+    host.fetch.mockResolvedValueOnce(Response.json({ localePreference: 'zh', themePreference: 'system' }))
+    const reads = host.fetch.mock.calls.length
+    await expect(handler({ sender, senderFrame: sender.mainFrame })).resolves.toEqual({ languages: ['en-US'], preference: 'zh' })
+    await expect(handler({ sender: {}, senderFrame: sender.mainFrame })).rejects.toThrow('unowned frame')
+    // A custom scheme has an opaque origin, so a sibling shell page must be rejected by its URL rather than its origin.
+    for (const url of ['http://127.0.0.1:40000/', 'dsh-app://shell/index.html']) {
+      sender.mainFrame.url = url
+      await expect(handler({ sender, senderFrame: sender.mainFrame })).rejects.toThrow('unowned frame')
+    }
+    // Rejected requests never reach the Host.
+    expect(host.fetch).toHaveBeenCalledTimes(reads + 1)
+  })
+
   it.each(['darwin', 'win32', 'linux'] as const)('limits native titlebar styling to macOS on %s', async (platform) => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue(platform)
     await import('../src/main.ts')
@@ -588,7 +604,7 @@ describe('desktop main startup', () => {
       harness.prepared.resolve()
       await harness.hostStarted.promise
       const host = harness.hosts[0]!
-      host.fetch.mockResolvedValue(Response.json({ hasApiKey: true, localePreference: null, themePreference: source }))
+      host.fetch.mockResolvedValue(Response.json({ localePreference: null, themePreference: source }))
       window.show.mockImplementation(() => {
         expect(harness.nativeTheme.themeSource).toBe(source)
         if (platform === 'win32') expect(window.setBackgroundColor).toHaveBeenLastCalledWith(color)
@@ -1038,6 +1054,17 @@ describe('desktop main startup', () => {
     expect(harness.trays[0]!.setContextMenu.mock.calls.length).toBe(relabels + 1)
   })
 
+  it('reopens the workspace in a new window when a second launch finds the main window destroyed', async () => {
+    const host = await readyWorkspace()
+    const window = harness.windows[0]!
+    await vi.waitFor(() => { expect(window.show).toHaveBeenCalledOnce() })
+    window.destroy()
+    harness.app.emit('second-instance')
+    await vi.waitFor(() => { expect(harness.windows[1]?.show).toHaveBeenCalledOnce() })
+    expect(harness.windows[1]!.urls).toEqual(['dsh-app://app/'])
+    expect(harness.hosts).toEqual([host])
+  })
+
   it('keeps the workspace visible while acknowledgement is pending and ignores a destroyed window', async () => {
     await readyWorkspace()
     const window = harness.windows[0]!
@@ -1201,6 +1228,20 @@ describe('desktop main startup', () => {
     await vi.waitFor(() => { expect(console.error).toHaveBeenCalledWith(failure) })
     expect(harness.app.quit).toHaveBeenCalledOnce()
     host.exited.resolve()
+    await harness.quitCompleted.promise
+    expect(harness.app.quit).toHaveBeenCalledTimes(2)
+  })
+
+  it('completes a normal quit only after file-drag cleanup settles', async () => {
+    const host = await readyBackend()
+    const cleanup = Promise.withResolvers<undefined>()
+    fileDrag.dispose.mockReturnValueOnce(cleanup.promise)
+    harness.app.quit()
+    await host.stopping.promise
+    host.exited.resolve()
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(harness.app.quit).toHaveBeenCalledOnce()
+    cleanup.resolve(undefined)
     await harness.quitCompleted.promise
     expect(harness.app.quit).toHaveBeenCalledTimes(2)
   })
@@ -1576,7 +1617,7 @@ describe('desktop main startup', () => {
     host.exited.resolve()
     host.onFailure!(new Error('backend exited during startup preferences'))
     await harness.dialogShown.promise
-    preferences.resolve(Response.json({ hasApiKey: true, localePreference: null }))
+    preferences.resolve(Response.json({ localePreference: null }))
     await startup
     expect(harness.windows[0]!.urls).not.toContain('http://127.0.0.1:3080/')
     const failureDialog = harness.dialog.showMessageBox.mock.calls[0]![0] as { detail: string }
