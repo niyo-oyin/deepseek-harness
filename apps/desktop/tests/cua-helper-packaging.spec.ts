@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { dotnetSdkFailure, probeDesktopToolchain } from '../scripts/desktop-toolchain-preflight.ts'
 import { prepareCuaWindowsHelper, type CuaHelperCommand } from '../scripts/prepare-cua-helper.ts'
 import { cuaHelperFileProblems } from '../scripts/smoke-cua-helper.ts'
@@ -94,15 +94,11 @@ describe('.NET SDK requirement', () => {
 
   it('reports dotnet for a Windows target when it is not on PATH', async () => {
     const empty = await scratch()
-    const saved = { PATH: process.env.PATH, Path: process.env.Path }
-    try {
-      Object.assign(process.env, { PATH: empty, Path: empty })
-      const failures = await probeDesktopToolchain('win32', {})
-      expect(failures.find(failure => failure.tool === 'dotnet')?.detail).toBe('dotnet is not on PATH; the Windows Computer Use'
-        + ' helper needs the .NET 10 SDK from https://dotnet.microsoft.com/download/dotnet/10.0')
-    }
-    finally {
-      Object.assign(process.env, saved)
-    }
+    // Windows matches environment names case-insensitively, so this also covers Path.
+    vi.stubEnv('PATH', empty)
+    onTestFinished(() => { vi.unstubAllEnvs() })
+    const failures = await probeDesktopToolchain('win32', {})
+    expect(failures.find(failure => failure.tool === 'dotnet')?.detail).toBe('dotnet is not on PATH; the Windows Computer Use'
+      + ' helper needs the .NET 10 SDK from https://dotnet.microsoft.com/download/dotnet/10.0')
   })
 })

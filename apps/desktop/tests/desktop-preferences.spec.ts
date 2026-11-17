@@ -1,5 +1,5 @@
 /** Startup preferences read from the owned Host before the workspace becomes visible. */
-import { expect, it, vi } from 'vitest'
+import { expect, it, onTestFinished, vi } from 'vitest'
 import { connectDesktopPreferences } from '../src/desktop-preferences.ts'
 
 function hostAnswering(namespaces: unknown[]) {
@@ -24,13 +24,13 @@ it('reads the language and theme over settings/describe with the private cookie 
 
 it('falls back to the system appearance and no saved language', async () => {
   const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  onTestFinished(() => { warn.mockRestore() })
   await expect(connectDesktopPreferences('http://127.0.0.1:1/', 'c', hostAnswering([{ ns: 'locale', value: {} }])).read())
     .resolves.toEqual({ localePreference: null, themePreference: 'system' })
   await expect(connectDesktopPreferences('http://127.0.0.1:1/', 'c', hostAnswering([
     { ns: 'locale', value: {} }, { ns: 'ui-theme', value: { preference: 'sepia' } },
   ])).read()).resolves.toEqual({ localePreference: null, themePreference: 'system' })
   expect(warn).toHaveBeenCalledOnce()
-  warn.mockRestore()
 })
 
 it('refuses a failed or malformed answer', async () => {
