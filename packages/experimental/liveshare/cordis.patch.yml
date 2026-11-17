@@ -9,5 +9,5 @@
         ownerIdentitySubject: !!js process.env.LIVESHARE_OWNER_SUBJECT_ID
         ownerIdentityDisplayName: !!js process.env.LIVESHARE_OWNER_DISPLAY_NAME
         allowedSubjectIds: !!js (process.env.LIVESHARE_ALLOWED_SUBJECTS ?? '').split(',').map((value) => value.trim()).filter((value) => value !== '')
-        ownerStateFile: !!js process.env.LIVESHARE_OWNER_STATE_FILE
+        ownerStateFile: !!js process.env.LIVESHARE_OWNER_STATE_FILE || dshHomePath('liveshare', 'owner-shares.json')
         ownerCredentialFile: !!js process.env.LIVESHARE_OWNER_CREDENTIAL_FILE

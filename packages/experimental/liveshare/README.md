@@ -49,7 +49,7 @@ Enable it by inserting its one entry into the active profile's patch file, `$DSH
         ownerStateFile: /path/to/owner-shares.json
 ```
 
-Replace every `<...>` placeholder with the deployment's own value: the identity provider, tenant, and subject are the ones its Liveshare server deployment was configured with, and the example holdings are placeholders rather than real identities. The environment layer works too: set `LIVESHARE_*` in `$DSH_HOME/.env` and keep the bundle's own `!!js process.env.…` expressions. The Liveshare server address is not part of this configuration: the owner enters it in the Share dialog on first use, as Owner configuration below describes.
+Replace every `<...>` placeholder with the deployment's own value: the identity provider, tenant, and subject are the ones its Liveshare server deployment was configured with, and the example holdings are placeholders rather than real identities. The environment layer works too: set `LIVESHARE_*` in `$DSH_HOME/.env` and keep the bundle's own `!!js process.env.…` expressions. `ownerStateFile` is required at mount: the bundle's expression falls back to `$DSH_HOME/liveshare/owner-shares.json` when `LIVESHARE_OWNER_STATE_FILE` is unset, and a hand-written entry names the file itself. The Liveshare server address is not part of this configuration: the owner enters it in the Share dialog on first use, as Owner configuration below describes.
 
 The profile can select the bundle instead of patching it: add `"@deepseek-ai/dsh-experimental-liveshare"` to `dsh.profile.bundles` in `$DSH_HOME/profiles/<profile>/package.json`, which is the write the card's switch performs once the card is listed.
 

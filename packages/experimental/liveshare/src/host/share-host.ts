@@ -1,6 +1,5 @@
 /** Web-only host plugin: owner sign-in routes, the share-management Remote, and gateway lifetime. */
 
-import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remote-access'
@@ -87,7 +86,10 @@ export interface Config {
   readonly ownerIdentitySubject?: string
   /** Owner identity display name used when `ownerIdentity` is assembled from fields. */
   readonly ownerIdentityDisplayName?: string
-  /** Owner-local JSON file retaining share metadata and gateway tokens across host restarts. */
+  /**
+   * Owner-local JSON file retaining share metadata and gateway tokens across host restarts.
+   * Required at mount; the bundle patch derives it from the product home.
+   */
   readonly ownerStateFile?: string
   /**
    * Owner credential file. Defaults beside the owner state file; it holds the Relay-issued
@@ -156,10 +158,8 @@ export async function apply(ctx: Context, config: Config): Promise<() => Promise
     throw new Error('liveshare-share-host: allowedSubjectIds must not contain an empty subject')
   }
   const ownerStateFile = config.ownerStateFile
-    ?? nonEmpty(process.env.LIVESHARE_OWNER_STATE_FILE)
-    ?? defaultOwnerStateFile()
-  if (ownerStateFile === '') {
-    throw new Error('liveshare-share-host: ownerStateFile must not be empty')
+  if (ownerStateFile === undefined || ownerStateFile === '') {
+    throw new Error('liveshare-share-host: ownerStateFile must name a file')
   }
   const ownerState = loadOwnerState(ownerStateFile)
   // One host owns this state at a time. A second host that restored the same shares would move their
@@ -671,11 +671,6 @@ function takeOwnerStateClaim(dir: string): OwnerHostClaim | undefined {
     console.warn(`[liveshare] the owner state is held by dsh pid ${String(error.holderPid)}; this instance reads the shares without registering them`)
     return undefined
   }
-}
-
-function defaultOwnerStateFile(): string {
-  const dshHome = nonEmpty(process.env.DSH_HOME) ?? join(homedir(), '.ndsh')
-  return join(dshHome, 'liveshare', 'owner-shares.json')
 }
 
 function nonEmpty(value: string | undefined): string | undefined {

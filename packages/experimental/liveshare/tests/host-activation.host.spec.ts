@@ -6,8 +6,11 @@
  * declared, which is how a released composition ended up with no owner surface at all.
  */
 
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import { describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it } from 'vitest'
 import type { Config } from '../src/host/share-host.ts'
 import * as ShareHost from '../src/host/share-host.ts'
 
@@ -25,8 +28,11 @@ function connection(paths: string[]) {
   }
 }
 
+const root = mkdtempSync(join(tmpdir(), 'liveshare-host-activation-'))
+afterAll(() => { rmSync(root, { recursive: true, force: true }) })
+
 /** A host loads without any Relay address: the owner saves one in the Share dialog. */
-const config: Config = {}
+const config: Config = { ownerStateFile: join(root, 'owner-shares.json') }
 
 describe('liveshare host activation', () => {
   it('registers its owner routes when the declared dependencies are present', async () => {
