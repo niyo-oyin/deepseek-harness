@@ -15,10 +15,12 @@
  * version reaches electron-builder, the artifact names and the installed
  * `app.getVersion()` as one input.
  *
- * Validation uses semver precedence. Sequence numbers order builds of one
- * product version under either form. The forms differ only against the base
- * itself: builds extending a prerelease outrank it, while `0.1.6-test.1` ranks
- * below `0.1.6`, so a test build never outranks the production release.
+ * Validation accepts only a semver version without build metadata that repeats
+ * the product version's prerelease fields, or `test` for a stable product
+ * version, before its own date and sequence. Every installer name and installed
+ * version therefore names the product version it was built from, and the stable
+ * form keeps `-test` in the name so a test build cannot pass for the production
+ * release.
  */
 
 import { parse } from 'semver'
