@@ -6,6 +6,7 @@ import { RemoteError, SlotTestRuntime } from '@deepseek-ai/dsh-client-test-runti
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ModelSelection } from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import { ComposerBlockRegistry } from '@deepseek-ai/dsh-client-ui-conversation/src/client/input/blocks.ts'
 import type { ComponentProps } from 'react'
 import type { OwnerOf } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelDirectoryState } from '../src/client/directory.ts'
@@ -1157,5 +1158,35 @@ describe('a Session with no model to send to', () => {
       directory={createSnapshotStore(state({ current: { provider: 'gone', model: 'old' }, groups, routable: false }))} load={vi.fn()}
       resolveText={resolveText} block={block} select={vi.fn()} t={t} />)
     expect(block).not.toHaveBeenCalledWith(expect.any(String))
+  })
+
+  it('neither replaces nor clears a block another plugin raised on the same Session', () => {
+    const registry = new ComposerBlockRegistry()
+    const session = brandString<SessionId>('shared')
+    const shown = registry.storeFor(session)
+    const block = (reason: string | undefined): void => {
+      registry.set(session, 'ui-model-selection', reason === undefined ? undefined : { reason })
+    }
+    const seat = () => <ModelSelect renderSlot={renderLabel} locked={false} available
+      directory={createSnapshotStore(state({ current: null, groups }))} load={vi.fn()}
+      resolveText={resolveText} block={block} select={vi.fn()} t={t} />
+
+    // Another plugin's block raised before the seat mounts survives the seat's mount and unmount.
+    registry.set(session, 'liveshare', { reason: 'view only' })
+    const first = render(seat())
+    expect(shown.getSnapshot()).toEqual({ reason: 'view only' })
+    first.unmount()
+    expect(shown.getSnapshot()).toEqual({ reason: 'view only' })
+    registry.set(session, 'liveshare', undefined)
+    expect(shown.getSnapshot()).toBeUndefined()
+
+    // The seat's own block survives another plugin raising and clearing its block.
+    const second = render(seat())
+    registry.set(session, 'liveshare', { reason: 'view only' })
+    expect(shown.getSnapshot()).toEqual({ reason: zh['block.noModel'] })
+    registry.set(session, 'liveshare', undefined)
+    expect(shown.getSnapshot()).toEqual({ reason: zh['block.noModel'] })
+    second.unmount()
+    expect(shown.getSnapshot()).toBeUndefined()
   })
 })

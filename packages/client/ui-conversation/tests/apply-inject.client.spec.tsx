@@ -243,7 +243,7 @@ describe('Conversation inject API', () => {
           await b.runtime.sessions.setProjection(ROOT, 'inbox', { 'next-turn': [createUserMessage({ content: [{ type: 'text', text: 'queued' }], source: { kind: 'user' } })], 'next-step': [] })
           break
         case 'block':
-          b.runtime.ctx.conversation.blocks.set(ROOT, { reason: 'Choose a model' })
+          b.runtime.ctx.conversation.blocks.set(ROOT, 'test', { reason: 'Choose a model' })
           break
         case 'attachment':
           expect(composer.addFiles?.([new File([Uint8Array.of(1)], 'draft.pdf', { type: 'application/pdf' })])).toBeNull()

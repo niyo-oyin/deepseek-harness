@@ -59,7 +59,7 @@ async function bench(
       return {
         get: () => ({
           blocks: {
-            set: (_sessionId: string, block: BlockRecord | undefined) => {
+            set: (_sessionId: string, _owner: string, block: BlockRecord | undefined) => {
               blocks.set(sessionId, block)
             },
           },
