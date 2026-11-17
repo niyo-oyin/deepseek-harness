@@ -15,7 +15,7 @@ Use `--skip-build` when the required `lib/` artifacts already exist, or `--targe
 
 ## Validate the SDK
 
-Keep the virtual environment outside `python/`, install the test group, and run the Python suite:
+Keep the virtual environment outside `python/`, install the test group, and run the Python suite. The `python/sdk` and `python/sdk-runtime` projects declare the vetted `https://pypi.flatt.tech/simple/` mirror as their default uv index, and `python/sdk/uv.lock` records it; do not resolve from another index on the command line:
 
 ```sh
 export UV_PROJECT_ENVIRONMENT="$PWD/tmp/py-sdk-venv"
@@ -61,6 +61,8 @@ Repository contributors can select either development route; both execute the no
 
 - Set `DSH_RUNTIME_MODE=node` to use the built Node carrier on system Node `>=24.9`. The build script refreshes this carrier, but distributions never include or auto-select it.
 - Set `dsh_bin` to the absolute built `apps/cli/lib/bin.js` path to exercise the checkout's CLI directly. Supply an explicit `dsh_home`, plus `profile` and ordered `patches` as needed.
+
+The SDK sends no model route of its own. Tests and smokes that reach a model pass `provider` and `model` explicitly, because a fresh `sdk` home has no `agent-default-model` selection and `sdk-minimal` has no default-model service.
 
 `python/sdk/tests/manual_sdk_agent_smoke.py` uses the internal `_launch_args` test adapter to exercise the unbuilt TypeScript CLI under tsx. Arbitrary argv replacement is intentionally absent from the public SDK.
 

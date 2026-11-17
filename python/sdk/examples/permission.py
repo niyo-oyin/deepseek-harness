@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 from pathlib import Path
 
 from deepseek_harness import DeepSeekHarness, RunResult
@@ -23,9 +22,11 @@ def main() -> None:
     parser.add_argument("--dsh-home", required=True, type=Path)
     parser.add_argument("--workspace", type=Path, default=Path.cwd())
     parser.add_argument("--preset", required=True)
-    parser.add_argument("--provider", default="deepseek-official")
-    parser.add_argument("--model", default=os.environ.get("DSH_MODEL", "deepseek-v4-flash"))
+    parser.add_argument("--provider", help="Provider route; pass with --model, or omit both for the profile default model")
+    parser.add_argument("--model", help="Model; pass with --provider, or omit both for the profile default model")
     args = parser.parse_args()
+    if (args.provider is None) != (args.model is None):
+        parser.error("--provider and --model are set together, or both omitted to use the profile default model")
     if not args.preset.strip():
         parser.error("--preset must be non-blank")
 

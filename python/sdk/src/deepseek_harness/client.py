@@ -39,6 +39,22 @@ class HarnessConfig:
     on_user_question: UserQuestionHandler | None = None
 
 
+def _model_route(provider: str | None, model: str | None) -> JsonObject:
+    """Return the ``initialize`` route keys: both when set, none when both are omitted.
+
+    Raises:
+        TypeError: Only one of ``provider`` and ``model`` is set, or either is empty.
+    """
+    if provider is None and model is None:
+        return {}
+    if not provider or not model:
+        raise TypeError(
+            "provider and model are non-empty strings set together, "
+            "or both omitted to use the profile default model"
+        )
+    return {"provider": provider, "model": model}
+
+
 class HarnessClient:
     """Synchronous JSON-RPC client for the DeepSeek Harness SDK runtime over stdio."""
 
@@ -152,23 +168,25 @@ class HarnessClient:
         self,
         *,
         cwd: str,
-        provider: str,
-        model: str,
+        provider: str | None = None,
+        model: str | None = None,
         reasoning_effort: str | None = None,
         max_tokens: int | None = None,
         approval_requests: bool = False,
     ) -> InitializeResponse:
         """Initialize the runtime; approval_requests enables approval/request reception.
 
-        When enabled, drain next_request() concurrently with blocking waits and
-        return one-operation decisions through respond(). Omission preserves the
-        runtime's composed approval answerers.
+        Pass ``provider`` and ``model`` together, or omit both to run SDK-created
+        agents on the profile's ``agent-default-model`` selection. A profile
+        without one rejects the handshake with a JsonRpcError naming the setting.
+        When approval_requests is enabled, drain next_request() concurrently with
+        blocking waits and return one-operation decisions through respond().
+        Omission preserves the runtime's composed approval answerers.
+
+        Raises:
+            TypeError: Only one of ``provider`` and ``model`` is set, or either is empty.
         """
-        payload: JsonObject = {
-            "cwd": str(Path(cwd).resolve()),
-            "provider": provider,
-            "model": model,
-        }
+        payload: JsonObject = {"cwd": str(Path(cwd).resolve()), **_model_route(provider, model)}
         if approval_requests:
             payload["approvalRequests"] = True
         if reasoning_effort is not None:

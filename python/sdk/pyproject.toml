@@ -37,3 +37,9 @@ core-metadata-version = "2.4"
 # of freezing a wheel snapshot.
 [tool.uv.sources]
 deepseek-harness-runtime-bin = { path = "../sdk-runtime", editable = true }
+
+# Resolve from the security-vetted mirror instead of pypi.org (repository policy).
+[[tool.uv.index]]
+name = "flatt"
+url = "https://pypi.flatt.tech/simple/"
+default = true

@@ -166,6 +166,7 @@ for line in sys.stdin:
 
     with DeepSeekHarness(
         approval_requests=True,
+        provider="deepseek-official",
         model="deepseek-v4-flash",
         reasoning_effort="max",
         max_tokens=4096,
@@ -219,6 +220,64 @@ for line in sys.stdin:
         "reasoningEffort": "max",
         "maxTokens": 4096,
     }
+
+
+def test_omitted_route_initializes_on_the_profile_default_model(tmp_path: Path) -> None:
+    script = tmp_path / "fake_runtime.py"
+    init_dump = tmp_path / "init.json"
+    script.write_text(
+        """
+import json
+import sys
+
+for line in sys.stdin:
+    msg = json.loads(line)
+    if msg.get("method") == "initialize":
+        json.dump(msg.get("params"), open(sys.argv[1], "w"))
+        print(json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": {"serverInfo": {"name": "fake-runtime"}}}), flush=True)
+    elif msg.get("method") == "shutdown":
+        print(json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": {}}), flush=True)
+        break
+""".strip()
+    )
+
+    with DeepSeekHarness(cwd=str(tmp_path), _launch_args=(sys.executable, str(script), str(init_dump))):
+        pass
+
+    assert json.loads(init_dump.read_text()) == {"cwd": str(tmp_path)}
+
+
+@pytest.mark.parametrize("route", [
+    {"provider": "deepseek-official"},
+    {"model": "deepseek-v4-flash"},
+    {"provider": "", "model": "deepseek-v4-flash"},
+    {"provider": "deepseek-official", "model": ""},
+])
+def test_partial_route_is_rejected_before_initialize(tmp_path: Path, route: dict[str, str]) -> None:
+    with pytest.raises(TypeError, match="provider and model are non-empty strings set together"):
+        DeepSeekHarness(**route)
+
+    script = tmp_path / "recording_runtime.py"
+    methods = tmp_path / "methods.txt"
+    script.write_text(
+        """
+import json
+import sys
+
+for line in sys.stdin:
+    msg = json.loads(line)
+    with open(sys.argv[1], "a") as methods:
+        methods.write(msg["method"] + "\\n")
+    if msg["method"] == "shutdown":
+        print(json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": {}}), flush=True)
+        break
+""".strip()
+    )
+    with HarnessClient(_launch_args=(sys.executable, str(script), str(methods))) as client:
+        with pytest.raises(TypeError, match="provider and model are non-empty strings set together"):
+            client.initialize(cwd=str(tmp_path), **route)
+
+    assert methods.read_text().split() == ["shutdown"]
 
 
 def test_session_run_invokes_notification_callback_before_returning(tmp_path: Path) -> None:

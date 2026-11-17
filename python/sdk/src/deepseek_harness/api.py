@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Literal
 
-from .client import HarnessClient, HarnessConfig, UserQuestionHandler
+from .client import HarnessClient, HarnessConfig, UserQuestionHandler, _model_route
 from .errors import SdkProtocolError
 from .models import CommandExecution, JsonObject, Notification
 
@@ -14,15 +14,23 @@ from .models import CommandExecution, JsonObject, Notification
 class DeepSeekHarnessConfig:
     """Configuration for launching the local DeepSeek Harness SDK runtime.
 
-    The runtime inherits the caller's environment by default, so existing
-    DEEPSEEK_API_KEY and DEEPSEEK_BASE_URL settings keep working. Use ``env`` to
-    intentionally override or inject variables for a subprocess.
+    ``provider`` and ``model`` select the route of SDK-created agents. Set
+    both, or omit both to use the runtime profile's ``agent-default-model``
+    selection; ``initialize`` fails with a message naming that setting when the
+    profile has none (``sdk-minimal`` composes no default, so it always needs
+    both).
+    The runtime inherits the caller's environment by default, so provider
+    credentials such as DEEPSEEK_API_KEY and DEEPSEEK_BASE_URL keep working.
+    Use ``env`` to intentionally override or inject variables for a subprocess.
     These values are startup input, not a live Session state mirror; Session
     commands do not rewrite this object.
+
+    Raises:
+        TypeError: Only one of ``provider`` and ``model`` is set, or either is empty.
     """
 
-    provider: str = "deepseek-official"
-    model: str = "deepseek-v4-flash"
+    provider: str | None = None
+    model: str | None = None
     reasoning_effort: str | None = None
     max_tokens: int | None = None
     cwd: str | None = None
@@ -39,6 +47,9 @@ class DeepSeekHarnessConfig:
     api_key: str | None = None
     on_user_question: UserQuestionHandler | None = None
     approval_requests: bool = False
+
+    def __post_init__(self) -> None:
+        _model_route(self.provider, self.model)
 
 
 @dataclass(slots=True)

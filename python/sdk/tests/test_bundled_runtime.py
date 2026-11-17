@@ -71,6 +71,7 @@ def test_python_sdk_applies_an_ordered_profile_patch(
         "config": {"persona": "Python SDK ordered patch marker."},
     }]))
     harness = DeepSeekHarness(
+        provider="deepseek-official",
         model="deepseek-v4-pro",
         cwd=str(tmp_path),
         dsh_home=str(tmp_path / "home"),

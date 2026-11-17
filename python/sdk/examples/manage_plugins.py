@@ -18,12 +18,17 @@ def main() -> None:
     parser.add_argument("--dsh-home", type=Path, required=True)
     parser.add_argument("--dsh-bin", type=Path)
     parser.add_argument("--workspace", type=Path, default=Path.cwd())
+    parser.add_argument("--provider", help="Provider route; pass with --model, or omit both for the profile default model")
+    parser.add_argument("--model", help="Model; pass with --provider, or omit both for the profile default model")
     args = parser.parse_args()
+    if (args.provider is None) != (args.model is None):
+        parser.error("--provider and --model are set together, or both omitted to use the profile default model")
     if os.environ.get("DSH_PRIMARY_RUNTIME") is None:
         download_primary_runtime()
     with ThreadPoolExecutor(max_workers=2) as worker:
         harness = DeepSeekHarness(dsh_home=str(args.dsh_home.resolve()), cwd=str(args.workspace.resolve()),
                                   dsh_bin=None if args.dsh_bin is None else str(args.dsh_bin.resolve()),
+                                  provider=args.provider, model=args.model,
                                   approval_requests=True,
                                   env={"DSH_PERMISSION_MODE": "workspace-write"})
         try:

@@ -118,6 +118,8 @@ print(result.final_response)
 
 The SDK starts the bundled `dsh --profile sdk-minimal` process lazily and reuses it until context-manager exit. The profile, its persistent patch, the home patch, and any ordered `patches` tuple form the application configuration. There is no separate Python runtime bin or complete-config option.
 
+The SDK has no built-in model route. Pass `provider` and `model` together, or omit both to use the selected profile's `agent-default-model` selection; passing only one, or an empty string, raises `TypeError` before the runtime starts. `sdk-minimal` composes no default-model service, so this program names both. The full `sdk` profile mounts the service without a selection: omit the route there only after setting `provider` and `model` under the `agent-default-model` row in `$DSH_HOME/profiles/sdk/cordis.patch.yml`. Otherwise initialization fails with `initialize requires provider and model: pass both, or set provider and model under agent-default-model in this profile`. See [Select a model route](../../../python/sdk/README.md#select-a-model-route).
+
 ## Install or define plugins
 
 Use `dsh plugin` for dependencies and bundle layers that should persist in this home:
@@ -180,7 +182,7 @@ Create a new root Session and ask it to create and list a shared task. Its first
 | Property | Value |
 |---|---|
 | System prompt | `DSH_SYSTEM_PROMPT`, falling back to `You are a helpful software engineer assistant.` |
-| Model in `minimal.py` | `--model`, then `DSH_MODEL`, then `deepseek-v4-flash` |
+| Route in `minimal.py` | `--provider`, default `deepseek-official`; `--model`, then `DSH_MODEL`, then `deepseek-v4-flash` |
 | Model-facing tools | Persistent `bash` on Linux/macOS or `pwsh` on Windows, `read_image`, and `working_directory` |
 | Shell timeout | 300 seconds |
 | Optional runtime context | Absent |

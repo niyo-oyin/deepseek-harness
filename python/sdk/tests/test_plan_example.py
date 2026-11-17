@@ -44,6 +44,7 @@ def test_plan_example_reports_truncation_and_accepts_explicit_dismissal(
     terminal_input.write_text("d\n", encoding="utf-8")
     monkeypatch.setenv("DSH_TOOLS_MODE", "native")
     monkeypatch.setattr(sys, "argv", [str(_EXAMPLE), "--dsh-home", str(tmp_path / "home"),
+                                     "--provider", "deepseek-official", "--model", "deepseek-v4-flash",
                                      "--workspace", str(workspace), "Plan a small change."])
     with terminal_input.open(encoding="utf-8") as terminal, _ModelServer([completion]) as model:
         monkeypatch.setattr(sys, "stdin", terminal)
