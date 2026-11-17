@@ -16,6 +16,7 @@ import {
   type ApiSessionCreateRequest,
 } from '../src/agent.ts'
 import { SessionCommandController } from '../src/commands.ts'
+import { NoDefaultModelError } from '@deepseek-ai/dsh-agent-default-model'
 import { installSessionReadTestServices, testSessionPersistence } from './test-remote.ts'
 import { brandString } from '@deepseek-ai/dsh-brand'
 
@@ -45,17 +46,19 @@ function publishedSession(ctx: Context, sessionId: SessionId) {
   }
 }
 
-async function baseContext(): Promise<Context> {
+const FIXTURE_DEFAULT_MODEL = {
+  currentSelection: () => ({ provider: 'fixture', model: 'fixture-model' }), requireSelection: () => ({ provider: 'fixture', model: 'fixture-model' }),
+  saveSelection: () => Promise.resolve(),
+}
+
+async function baseContext(defaultModel: object = FIXTURE_DEFAULT_MODEL): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(TypertRegistry)
   await ctx.plugin(SessionStore)
   await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(AgentRegistry)
   installSessionReadTestServices(ctx)
-  ctx.provide('agentDefaultModel', {
-    currentSelection: () => ({ provider: 'fixture', model: 'fixture-model' }), requireSelection: () => ({ provider: 'fixture', model: 'fixture-model' }),
-    saveSelection: () => Promise.resolve(),
-  } as never)
+  ctx.provide('agentDefaultModel', defaultModel as never)
   return ctx
 }
 
@@ -253,6 +256,24 @@ describe('Session fork failures', () => {
     const creationController = new SessionCommandController(creation, controllerAgents(creation), '/default')
     await expectFailure(creationController.fork({ sessionId: source.id }), 'gateway/internal')
     await creation.fiber.dispose()
+  })
+
+  it('reports a missing default model with its dedicated code before creating an Agent', async () => {
+    const ctx = await baseContext({
+      currentSelection: () => undefined,
+      requireSelection: () => { throw new NoDefaultModelError() },
+    })
+    ctx.provide('workspaceRegistry', { list: () => [] } as never)
+    const source = completedSession(ctx, 'defaultless-source', '/workspace')
+    const create = vi.spyOn(ctx.agents, 'create')
+    const controller = new SessionCommandController(ctx, controllerAgents(ctx), '/default')
+
+    await expect(controller.fork({ sessionId: source.id })).rejects.toMatchObject({
+      code: 'session/no-default-model',
+      message: new NoDefaultModelError().message,
+    })
+    expect(create).not.toHaveBeenCalled()
+    await ctx.fiber.dispose()
   })
 
   it('omits absent cwd and preset metadata before reporting Workspace attachment failure', async () => {

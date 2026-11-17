@@ -302,6 +302,7 @@ export class SessionCommandController {
     }
     const seed = buildForkSeed(source.events, boundary)
     if (beforeSeq !== undefined) seed.push(...pendingInputCancellations(seed))
+    const { provider, model } = this.requireDefaultModel()
     let workspace: Workspace | undefined
     try {
       workspace = await this.forkWorkspace(source.header)
@@ -315,7 +316,6 @@ export class SessionCommandController {
     const childId = brandString<SessionId>(`session-${randomUUID()}`)
     const composition = await this.agents.composeAgent(this.agents.presetForObservation(source))
     try {
-      const { provider, model } = this.ctx.agentDefaultModel.requireSelection()
       await this.ctx.agents.create({
         sessionId: childId,
         seed,
@@ -379,7 +379,11 @@ export class SessionCommandController {
     }
     // The last line of defense behind the composer: a Session with neither its own model nor a default cannot send.
     if (agent.model.current() === undefined) {
-      throw new RemoteError('session/no-default-model', new NoDefaultModelError().message, {})
+      throw new RemoteError(
+        'session/no-default-model',
+        `session "${request.sessionId}" has no model to send to: choose a model for it in the app`,
+        {},
+      )
     }
     const admission = resolvePromptFileReceipts(
       request.content,
@@ -581,6 +585,16 @@ export class SessionCommandController {
     }
     agent.cancel({ kind: 'user' }, { keepInbox: true })
     return { accepted: true }
+  }
+
+  /** The default route; a deployment without one reports `session/no-default-model` with the setting to change. */
+  private requireDefaultModel(): AgentModelSelection {
+    try {
+      return this.ctx.agentDefaultModel.requireSelection()
+    } catch (error) {
+      if (error instanceof NoDefaultModelError) throw new RemoteError('session/no-default-model', error.message, {})
+      throw error
+    }
   }
 
   private async resolveAgent(sessionId: SessionId): Promise<Agent> {

@@ -390,7 +390,7 @@ describe('Session file uploads', () => {
       { type: 'image', mediaType: 'image/png', data: 'AAAA' },
     ]), USER_SOURCE)).rejects.toMatchObject({
       code: 'session/no-default-model',
-      message: expect.stringContaining('Choose a model in the app') as unknown,
+      message: 'session "upload-session" has no model to send to: choose a model for it in the app',
     })
 
     expect(saveImages).not.toHaveBeenCalled()

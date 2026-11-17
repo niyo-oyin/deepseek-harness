@@ -11,7 +11,7 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { ModelSelection } from '@deepseek-ai/dsh-agent'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import type { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import { HarnessError, type ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-config-editor'
 
 declare module '@deepseek-ai/cordis' {
@@ -43,17 +43,36 @@ function selection(settings: { provider: string; model: string; reasoningEffort?
 }
 
 /**
- * The one failure every entry point raises when it needs the default and none
- * is set. Its text says both ways to set one, since a non-interactive caller
- * sees only the text.
+ * Every machine-routable default-model failure: `NO_DEFAULT_MODEL` while an entry point needs the
+ * default and none is set (set one, or name a route), and `DEFAULT_MODEL_INCOMPLETE` while the profile
+ * sets only one of provider and model (fix the profile).
  */
-export class NoDefaultModelError extends Error {
-  /** Stable code for callers that report the failure through a protocol. */
-  readonly code = 'NO_DEFAULT_MODEL'
+export type AgentDefaultModelErrorCode = 'NO_DEFAULT_MODEL' | 'DEFAULT_MODEL_INCOMPLETE'
 
-  constructor() {
-    super('No default model is set. Choose a model in the app (the first model you pick becomes the default),'
-      + ' or set provider and model under agent-default-model in the profile.')
+/** Typed default-model failure; `code` is one of {@link AgentDefaultModelErrorCode}. */
+export class AgentDefaultModelError extends HarnessError {
+  override readonly code: AgentDefaultModelErrorCode
+
+  constructor(message: string, code: AgentDefaultModelErrorCode) {
+    super(message, code)
+    this.name = 'AgentDefaultModelError'
+    this.code = code
+  }
+}
+
+/**
+ * The one failure every entry point raises when it needs the default and none
+ * is set. The default text says both ways to set one in the app's profile, since
+ * a non-interactive caller sees only the text; an entry point whose profile the
+ * app does not edit passes its own text.
+ */
+export class NoDefaultModelError extends AgentDefaultModelError {
+  /**
+   * @param message - What the caller changes to supply a route.
+   */
+  constructor(message = 'No default model is set. Choose a model in the app (the first model you pick becomes the default),'
+    + ' or set provider and model under agent-default-model in the profile.') {
+    super(message, 'NO_DEFAULT_MODEL')
     this.name = 'NoDefaultModelError'
   }
 }
@@ -81,15 +100,16 @@ export class AgentDefaultModelConfig extends Service {
    * Read the current default model selection.
    * @returns a detached provider, model, and optional reasoning selection, or
    *   `undefined` while no default is set.
-   * @throws Error when the configuration names a provider without a model or a model without a provider.
+   * @throws AgentDefaultModelError `DEFAULT_MODEL_INCOMPLETE` when the configuration names a provider
+   *   without a model or a model without a provider.
    */
   currentSelection(): ModelSelection | undefined {
     const provider = this.config.provider.get()
     const model = this.config.model.get()
     if (provider === undefined && model === undefined) return undefined
     if (provider === undefined || model === undefined) {
-      throw new Error('agent-default-model: provider and model are set together;'
-        + ` the profile sets only ${provider === undefined ? 'model' : 'provider'}`)
+      throw new AgentDefaultModelError('agent-default-model: provider and model are set together;'
+        + ` the profile sets only ${provider === undefined ? 'model' : 'provider'}`, 'DEFAULT_MODEL_INCOMPLETE')
     }
     const reasoningEffort = this.config.reasoningEffort.get()
     return selection({ provider, model, ...reasoningEffort === undefined ? {} : { reasoningEffort } })
@@ -97,12 +117,15 @@ export class AgentDefaultModelConfig extends Service {
 
   /**
    * Read the default for an entry point that cannot proceed without one.
+   * @param message - What this entry point's caller changes to supply a route, for an entry point whose
+   *   profile the app does not edit; omitted, the text names the app and the profile.
    * @returns the current default selection.
    * @throws NoDefaultModelError while no default is set.
+   * @throws AgentDefaultModelError `DEFAULT_MODEL_INCOMPLETE` as {@link currentSelection} does.
    */
-  requireSelection(): ModelSelection {
+  requireSelection(message?: string): ModelSelection {
     const current = this.currentSelection()
-    if (current === undefined) throw new NoDefaultModelError()
+    if (current === undefined) throw new NoDefaultModelError(message)
     return current
   }
 

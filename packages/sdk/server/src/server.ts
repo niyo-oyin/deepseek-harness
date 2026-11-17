@@ -598,17 +598,19 @@ export class HarnessSdkJsonRpcServer {
    * @param params - SDK handshake parameters.
    * @returns the requested route before adapter validation.
    * @throws TypeError when only one of provider and model is supplied or either is empty.
-   * @throws Error when both are omitted and the composition supplies no default model.
+   * @throws Error when both are omitted and the composition mounts no agent-default-model.
+   * @throws NoDefaultModelError when both are omitted and agent-default-model has no selection.
    */
   private requestedRoute(params: InitializeParams): ModelSelection {
     const { provider, model } = params
     if (provider === undefined && model === undefined) {
       const defaults = this.ctx.get('agentDefaultModel')
-      const selection = defaults?.currentSelection()
-      if (selection !== undefined) return selection
-      throw new Error(defaults === undefined
-        ? 'initialize requires provider and model: this profile composes no agent-default-model to supply a default'
-        : 'initialize requires provider and model: pass both, or set provider and model under agent-default-model in this profile')
+      if (defaults === undefined) {
+        throw new Error('initialize requires provider and model: this profile composes no agent-default-model to supply a default')
+      }
+      return defaults.requireSelection(
+        'initialize requires provider and model: pass both, or set provider and model under agent-default-model in this profile',
+      )
     }
     if (typeof provider !== 'string' || provider.length === 0 || typeof model !== 'string' || model.length === 0) {
       throw new TypeError('initialize provider and model are non-empty strings supplied together')

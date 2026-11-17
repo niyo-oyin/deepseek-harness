@@ -46,7 +46,7 @@ import {
   type Stream,
 } from '@agentclientprotocol/sdk'
 import type { ModelSelection } from '@deepseek-ai/dsh-agent'
-import type {} from '@deepseek-ai/dsh-agent-default-model'
+import type { AgentDefaultModelErrorCode } from '@deepseek-ai/dsh-agent-default-model'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 // Side-effect type import: declaration-merges the approval waterfall answered below.
@@ -131,12 +131,18 @@ export function apply(ctx: Context, config: AcpConfig): void {
       ? { provider: config.provider, model: config.model }
       : ctx.get('agentDefaultModel')?.currentSelection()
 
-  /** The route a fresh Session starts on; a profile without one fails the request with the setting to change. */
+  /**
+   * The route a fresh Session starts on. A profile without one fails the request with the setting to change and
+   * the `NO_DEFAULT_MODEL` code in the error data, the code every entry point reports for a missing default.
+   */
   const requireRoute = (): ModelSelection => {
     const route = configuredRoute()
     if (route === undefined) {
-      throw internalError('no model is selected for ACP sessions: set provider and model under agent-default-model'
-        + ' or on the acp entry in the acp profile')
+      throw RequestError.internalError(
+        { code: 'NO_DEFAULT_MODEL' satisfies AgentDefaultModelErrorCode },
+        'no model is selected for ACP sessions: set provider and model under agent-default-model'
+          + ' or on the acp entry in the acp profile',
+      )
     }
     return route
   }
