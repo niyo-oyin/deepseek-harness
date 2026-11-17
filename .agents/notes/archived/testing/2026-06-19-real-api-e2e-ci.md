@@ -1,6 +1,7 @@
 # Agent Note: Real-API e2e in CI against the external DeepSeek API
 
 Status: implemented
+Archived: 2026-11-17
 
 ## Problem
 

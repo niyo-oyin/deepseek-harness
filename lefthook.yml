@@ -25,6 +25,11 @@ pre-commit:
     - name: vendor manifest guard
       run: scripts/check-vendor-manifest.sh
 
+    # actionlint checks every workflow, since one file can call another.
+    - name: workflow definitions
+      glob: '.github/workflows/*.{yml,yaml}'
+      run: actionlint
+
 pre-merge-commit:
   jobs:
     - name: archived agent notes

@@ -2,32 +2,21 @@ name: Package CUA helper · Windows · x64
 
 on:
   workflow_dispatch:
-  workflow_call:
-    outputs:
-      artifact-id:
-        description: '包含 win-x64 helper ZIP 的产物编号'
-        value: ${{ jobs.package.outputs.artifact-id }}
-      run-id:
-        description: '产物所属的构建运行编号'
-        value: ${{ jobs.package.outputs.run-id }}
-      build-key:
-        description: '提交 SHA、.NET SDK 版本和 win-x64 RID 的 SHA-256 摘要'
-        value: ${{ jobs.package.outputs.build-key }}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
   package:
-    runs-on: windows-latest
+    runs-on: windows-2025
     timeout-minutes: 30
     defaults:
       run:
         shell: pwsh
-    outputs:
-      artifact-id: ${{ steps.upload.outputs.artifact-id }}
-      run-id: ${{ github.run_id }}
-      build-key: ${{ steps.metadata.outputs.build-key }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -98,7 +87,6 @@ jobs:
             }
           } finally { $zip.Dispose() }
       - uses: actions/upload-artifact@v7.0.1
-        id: upload
         with:
           name: cua-helper-windows-${{ github.run_id }}-${{ github.run_attempt }}-${{ steps.metadata.outputs.build-key }}
           path: dist/cua-helper-win-x64.zip

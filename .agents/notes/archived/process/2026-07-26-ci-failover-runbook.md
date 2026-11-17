@@ -1,6 +1,7 @@
 # Agent Note: CI failover runbook — hosted pools → in-house pool
 
 Status: implemented
+Archived: 2026-11-17
 
 ## Problem
 

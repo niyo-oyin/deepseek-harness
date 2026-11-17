@@ -119,20 +119,13 @@ For ordinary and standalone rebase pushes:
 git rev-parse HEAD origin/$(git branch --show-current)
 ```
 
-For GitHub PRs, inspect remote CI after the push:
+No workflow starts on a push or pull request. When the change needs hosted evidence that local checks cannot give, such as native Windows or the Python runtime, dispatch the owning workflow on the pushed branch and follow its run:
 
 ```sh
-gh pr checks
+gh workflow run ci-windows.yml --ref "$(git branch --show-current)"
+gh run list --workflow ci-windows.yml --branch "$(git branch --show-current)"
 ```
 
-Report pending checks as pending. Inspect failures before attributing them to the branch or the environment.
-
-When `gh pr checks` reports "no checks reported" and `/actions/runs?head_sha=<sha>` returns `total_count: 0`, read mergeability before suspecting the push or a dropped GitHub event:
-
-```sh
-gh pr view <number> --json mergeable,mergeStateStatus
-```
-
-GitHub creates no `pull_request` workflow runs while a PR is `CONFLICTING`/`DIRTY`, so the absent signal is the conflict, not infrastructure. Resolving the conflict is the only fix; empty commits, `--allow-empty` pushes, draft/ready toggles, and revert-and-restore bounces all leave `total_count` at zero and add junk history. Confirm the conflicting paths with `git merge-tree --write-tree HEAD origin/<base>` when the branch cannot be merged locally yet.
+Report pending runs as pending. Inspect failures before attributing them to the branch or the environment.
 
 For `gh stack sync`, use the post-sync validation sequence instead of pretending the ordinary order was possible.

@@ -33,7 +33,7 @@ On 2026-10-07, Docker on Apple silicon (Linux VM, `--cpus=4`, Node 24.21) ran th
 
 - `--max-old-space-size` per worker: the list and search workers use about 100 MB of JavaScript heap while their resident memory reaches 0.7–1.2 GB, mostly native memory, so a heap flag does not model the machine. Node already derives the same 2 GB old space for 4 GB and 8 GB cgroups.
 - `RLIMIT_AS`: V8 reserves address space far beyond its resident memory and fails under a virtual-memory limit.
-- A pull-request CI job: the PR workflow keeps at most ten concurrent worker jobs, and each memory-limited run takes as long as the benchmark lane, so the scenario is manual.
+- A CI job: each memory-limited run takes as long as the benchmark job and would lengthen every CI run, so the scenario is manual.
 
 ## Consequences
 

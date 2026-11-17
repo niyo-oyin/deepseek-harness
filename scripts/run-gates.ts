@@ -17,18 +17,13 @@ import { pnpmInvocation } from './pnpm-invocation.ts'
 
 /** A named aggregate exposed by the gate runner. */
 export type Mode =
-  | 'ci-primary'
-  | 'ci-linux-primary'
   | 'ci-static'
   | 'ci-lint-contracts-ready'
   | 'ci-coverage'
   | 'ci-unit'
   | 'ci-bench'
-  | 'ci-snapshot'
-  | 'ci-artifacts'
   | 'ci-consumers'
   | 'ci-windows-blocking'
-  | 'ci-windows-complete'
   | 'ci-windows-observational-ready'
   | 'node-compat'
   | 'check-all'
@@ -157,18 +152,13 @@ export function cliGateOptions(failFast: boolean): RunGatesOptions {
 
 function parseMode(raw: string | undefined): Mode {
   switch (raw) {
-    case 'ci-primary':
-    case 'ci-linux-primary':
     case 'ci-static':
     case 'ci-lint-contracts-ready':
     case 'ci-coverage':
     case 'ci-unit':
     case 'ci-bench':
-    case 'ci-snapshot':
-    case 'ci-artifacts':
     case 'ci-consumers':
     case 'ci-windows-blocking':
-    case 'ci-windows-complete':
     case 'ci-windows-observational-ready':
     case 'node-compat':
     case 'check-all':
@@ -179,7 +169,7 @@ function parseMode(raw: string | undefined): Mode {
       return raw
     default:
       throw new Error(
-        `run-gates: expected mode ci-primary | ci-linux-primary | ci-static | ci-lint-contracts-ready | ci-coverage | ci-unit | ci-bench | ci-snapshot | ci-artifacts | ci-consumers | ci-windows-blocking | ci-windows-complete | ci-windows-observational-ready | node-compat | check-all | hygiene | doc-sync | doc-quick | i18n, got ${JSON.stringify(raw)}.`,
+        `run-gates: expected mode ci-static | ci-lint-contracts-ready | ci-coverage | ci-unit | ci-bench | ci-consumers | ci-windows-blocking | ci-windows-observational-ready | node-compat | check-all | hygiene | doc-sync | doc-quick | i18n, got ${JSON.stringify(raw)}.`,
       )
   }
 }
@@ -217,7 +207,7 @@ export function defaultConcurrency(
  * Fill CI worker defaults from the [worker budget](./parallelism.ts) without replacing explicit overrides.
  * Coverage shares one budget; artifact readers share CPUs with sibling commands.
  * @param mode - aggregate selected by the caller.
- * @param env - inherited worker overrides, including serial reference settings, and the `CI` value that selects the budget.
+ * @param env - inherited worker overrides and the `CI` value that selects the budget.
  * @param cpus - CPU count Node reports for this runner process.
  * @returns environment additions for this aggregate and its children.
  */
@@ -285,7 +275,7 @@ function ciBuildGate(id = 'build', options: Partial<Gate> = {}): Gate {
 
 /**
  * Emit the artifacts every artifact consumer reads, without the aggregate
- * test and script type checks that the master lanes own.
+ * test and script type checks of `build:check`.
  */
 function ciArtifactBuildGate(id = 'build', options: Partial<Gate> = {}): Gate {
   return pnpmScript(id, 'build:artifacts', {
@@ -311,10 +301,6 @@ function pnpmExec(id: string, args: string[], options: Partial<Gate> = {}): Gate
  */
 export function gatesForMode(selected: Mode): Gate[] {
   switch (selected) {
-    case 'ci-primary':
-      return ciPrimaryGates()
-    case 'ci-linux-primary':
-      return [...ciPrimaryGates(), webSnapshotGate(['build'])]
     case 'ci-static':
       return ciStaticGates({ ownsBuild: false })
     case 'ci-lint-contracts-ready':
@@ -328,16 +314,10 @@ export function gatesForMode(selected: Mode): Gate[] {
       return ciUnitGates()
     case 'ci-bench':
       return [pnpmExec('bench', ['tsx', 'scripts/run-ci-bench.ts'], { label: 'performance benchmarks' })]
-    case 'ci-snapshot':
-      return [ciBuildGate(), snapshotGate()]
-    case 'ci-artifacts':
-      return ciArtifactGates()
     case 'ci-consumers':
       return ciConsumerGates()
     case 'ci-windows-blocking':
       return ciWindowsBlockingGates()
-    case 'ci-windows-complete':
-      return ciWindowsCompleteGates()
     case 'ci-windows-observational-ready':
       // The caller owns the successful workspace build; all diagnostics remain.
       return ciWindowsObservationalGates()
@@ -355,8 +335,6 @@ export function gatesForMode(selected: Mode): Gate[] {
         pnpmScript('cordis-config', 'verify-cordis-config', { label: 'Cordis config' }),
         pnpmScript('client-domain-graph', 'verify-client-domain-graph', { label: 'client domain graph' }),
         pnpmScript('test', 'test'),
-        pnpmScript('approval-policy', 'test:approval-policy', { label: 'Weighted approval policy' }),
-        pnpmScript('issue-management', 'test:issue-management', { label: 'Issue management policy' }),
         pnpmScript('duplication', 'duplication'),
         snapshotGate(),
         expectedOutputGate(),
@@ -399,8 +377,6 @@ function ciSharedStaticGates(): Gate[] {
     pnpmScript('package-meta', 'verify-package-meta', { label: 'package metadata' }),
     pnpmScript('cordis-config', 'verify-cordis-config', { label: 'Cordis config' }),
     ...sharedHygieneGates(),
-    pnpmScript('approval-policy', 'test:approval-policy', { label: 'Weighted approval policy' }),
-    pnpmScript('issue-management', 'test:issue-management', { label: 'Issue management policy' }),
   ]
 }
 
@@ -427,34 +403,6 @@ function sharedHygieneGates(): Gate[] {
     pnpmScript('empty-catch', 'verify-empty-catch', { label: 'no new silent catches' }),
     pnpmScript('no-top-level-await', 'verify-no-top-level-await', { label: 'no module-scope await' }),
     pnpmScript('plugin-entry-exports', 'verify-plugin-entry-exports', { label: 'plugin entry exports' }),
-  ]
-}
-
-function ciPrimaryGates(): Gate[] {
-  return [
-    ...ciSharedStaticGates(),
-    typertContractsGate(),
-    pnpmScript('typecheck', 'typecheck:contracts-ready', { needs: ['typert-contracts'] }),
-    lintGate({ needs: ['typert-contracts'] }),
-    pnpmScript('duplication', 'duplication'),
-    ...coverageGates(),
-    ...nodeCompatSmokeGates(),
-    snapshotGate(),
-    ...docSyncLeafGates({
-      docTypecheckNeeds: ['typert-contracts'],
-      docTypecheckScript: 'doc-typecheck:contracts-ready',
-    }),
-    pnpmScript('module-graph', 'verify-module-graph', { label: 'module graph' }),
-    // The prepared typecheck and build both drive Client tsc, while build also
-    // repeats the Host contract pass. Wait for all three consumers so build
-    // neither races tsbuildinfo nor replaces declarations while they are read.
-    ciBuildGate('build', { needs: ['typecheck', 'lint', 'doc-typecheck'] }),
-    pnpmScript('publint', 'publint', { needs: ['build'] }),
-    pnpmScript('node-next-types', 'verify-node-next-types', {
-      label: 'node-next types',
-      needs: ['build'],
-    }),
-    builtBinSmokeGate(),
   ]
 }
 
@@ -528,18 +476,6 @@ function ciStaticGates(options: { ownsBuild: boolean }): Gate[] {
   ]
 }
 
-function ciArtifactGates(): Gate[] {
-  return [
-    ciBuildGate(),
-    pnpmScript('publint', 'publint', { needs: ['build'] }),
-    pnpmScript('node-next-types', 'verify-node-next-types', {
-      label: 'node-next types',
-      needs: ['build'],
-    }),
-    builtBinSmokeGate(),
-  ]
-}
-
 function ciConsumerGates(): Gate[] {
   const builtTree = ['build']
   // The HMR web test starts `dev:web`, which rewrites the shared `lib/` and
@@ -606,36 +542,10 @@ function ciWindowsBlockingGates(): Gate[] {
   ]
 }
 
-function ciWindowsCompleteGates(): Gate[] {
-  const coverage = coverageGates('win32').map(gate => gate.id === 'electron-install' ? gate : {
-    ...gate,
-    needs: [...new Set(['build', ...(gate.needs ?? [])])],
-  })
-  const coverageAfter = coverage.map(gate => gate.id)
-  const observational = ciWindowsObservationalGates()
-    // Coverage owns Electron preparation. The required production site replaces
-    // the MPA build, which writes to the same output directory.
-    .filter(gate => gate.id !== 'build' && gate.id !== 'docs-site-build' && gate.id !== 'electron-install')
-    .map(gate => ({
-      ...gate,
-      allowFailure: true,
-      after: [...new Set([
-        ...coverageAfter,
-        ...(gate.after ?? []).map(id => id === 'docs-site-build' ? 'windows-site' : id),
-      ])],
-    }))
-  return [
-    ciBuildGate(),
-    pnpmScript('windows-site', 'docs:build', { label: 'production site' }),
-    ...coverage,
-    ...observational,
-  ]
-}
-
 // Native Electron fixtures need the locked binary before Vitest removes ambient proxies.
 //
 // The installer fetches the 100 MB Electron release archive through the runner
-// proxy, and one gateway timeout there fails the required Windows coverage lane
+// proxy, and one gateway timeout there fails the Windows coverage lane
 // before any test runs. On 2026-11-09 four jobs on three branches stopped at
 // `504 (Gateway Time-out)` for that URL after ~12 s, while other jobs fetched
 // the same archive minutes later (2.5 s from a warm cache, 14.7 s cold), so the
@@ -657,7 +567,7 @@ function ciWindowsObservationalGates(): Gate[] {
   const predecessors = [
     ...ciStaticGates({ ownsBuild: true }),
     electronInstallGate(),
-    // Linux owns required lint and snapshots; Windows omits those duplicates.
+    // Linux owns lint and snapshots; Windows omits those duplicates.
     pnpmScript('duplication', 'duplication'),
     pnpmScript('publint', 'publint', { needs: ['build'] }),
     pnpmScript('node-next-types', 'verify-node-next-types', {
@@ -674,16 +584,6 @@ function ciWindowsObservationalGates(): Gate[] {
       after: predecessors.map(gate => gate.id),
     },
   ]
-}
-
-// Host package compilation and the bundle-free Typert pass produce the
-// declarations that prepared typecheck, lint, and doc-typecheck read; none of
-// them reads a bundle or the Host aggregate program's noEmit check, which
-// `build` owns.
-function typertContractsGate(): Gate {
-  return pnpmExec('typert-contracts', ['tsx', 'scripts/compile-referenced-projects.ts', 'host-contracts'], {
-    label: 'Typert contracts',
-  })
 }
 
 function lintGate(options: { needs?: string[] } = {}): Gate {
@@ -706,9 +606,9 @@ function lintGate(options: { needs?: string[] } = {}): Gate {
 // defaults its partition count to the instrumented share; an explicit
 // DSH_COVERAGE_PARTITIONS overrides that share independently. The exempt
 // gate's wall clock is dominated by its longest single file, so it takes the
-// small share. A budget of 1 gives each gate 1 worker; lanes that need a strict
-// total of one (the serial reference jobs) also set DSH_GATE_CONCURRENCY=1,
-// which keeps the gates from overlapping at all.
+// small share. A budget of 1 gives each gate 1 worker; a run that needs a strict
+// total of one also sets DSH_GATE_CONCURRENCY=1, which keeps the gates from
+// overlapping at all.
 // DSH_COVERAGE_TEST_TIMEOUT_MS is not a gate argument: vitest.config.ts reads
 // it from the environment every gate inherits (coverageTestTimeoutOptions).
 function coverageWorkerArgs(): { instrumented: string[]; exempt: string[] } {

@@ -1,4 +1,4 @@
-# Agent Note: Installed-wheel Python runtime pull-request validation
+# Agent Note: Installed-wheel Python runtime validation
 
 Status: implemented
 
@@ -10,7 +10,7 @@ The Python SDK unit suite drives fake peers, while the packaged-runtime workflow
 
 ### Installed artifact boundary
 
-The required Python runtime workflow builds the pure SDK wheel and each platform runtime wheel before behavior tests. Every native target installs those two local files into a new Python 3.10 virtual environment, changes to a temporary directory outside the repository, unsets `PYTHONPATH` and `DSH_RUNTIME_MODE`, and invokes only the public Python modules plus the packaged executable.
+The Python runtime workflow builds the pure SDK wheel and each platform runtime wheel before behavior tests. Every native target installs those two local files into a new Python 3.10 virtual environment, changes to a temporary directory outside the repository, unsets `PYTHONPATH` and `DSH_RUNTIME_MODE`, and invokes only the public Python modules plus the packaged executable.
 
 The black-box harness rejects a non-venv process, repository-relative working directory, source or editable import, unequal distribution versions, an SDK dependency that does not exactly pin the runtime version, an executable outside the installed runtime package, or an executable absent from the runtime distribution record. This installed-artifact identity check runs before the first agent request, so a behavior pass cannot conceal that the wrong code ran.
 
@@ -22,13 +22,11 @@ Linux additionally retains its manylinux 2.28 clean-install smoke and GLIBC chec
 
 ### Real DeepSeek API
 
-Trusted pull requests and master pushes run a second installed-wheel check on each selected native target with `DEEPSEEK_API_KEY_EXTERNAL`, mapped only into a preflight and the live test step. The preflight fails when the secret is empty, so the provider suite cannot self-skip to green. The test starts the public SDK against `https://api.deepseek.com`, asks the model to write an exact sentinel file through the platform shell, asks a second turn in the same session to read it, and verifies the external line content, final responses, completed turn reasons, model-requested tool calls, and the existence and Zstandard framing of its session log. Decoded record content and completed-turn durability are deterministic keyless obligations owned by the restart snapshot rather than inferred from compressed live-provider bytes.
+CI runs no real-provider check and holds no key; the [manual hosted CI decision](../process/2026-11-17-manual-hosted-ci.md) removed the live installed-wheel step and records what that gives up. `scripts/smoke-python-runtime.py --scenario sdk-live --installed-wheel` remains a local check: it starts the public SDK against `https://api.deepseek.com`, asks the model to write an exact sentinel file through the platform shell, asks a second turn in the same session to read it, and verifies the external line content, final responses, completed turn reasons, model-requested tool calls, and the existence and Zstandard framing of its session log. Decoded record content and completed-turn durability are deterministic keyless obligations owned by the restart snapshot rather than inferred from compressed live-provider bytes.
 
-Fork and Dependabot pull requests never receive the repository secret. Their native jobs run the complete keyless path and skip both secret-bearing steps; `pull_request_target` is forbidden because it would execute untrusted code with the key.
+### Targets
 
-### Required targets
-
-The pull-request `python-runtime` job in CI Python calls the reusable builder for Linux x64 and Windows x64; master pushes select Linux arm64 and both macOS architectures under the [master-only platform policy](../../../../.github/workflows/ci-master.yml). Its aggregate result is a dependency of CI Python's required verdict, `python checks passed`, so a failed, cancelled, or missing native carrier blocks the required verdict. The [sdk-runtime README](../../../../python/sdk-runtime/README.md) owns the Windows target and its PowerShell-specific minimal snapshot.
+The `python-runtime` job of the manually dispatched CI Python workflow calls the reusable builder for Linux x64 and Windows x64; a direct dispatch of the builder selects Linux arm64, either macOS architecture, or all five targets. A failed, cancelled, or missing native carrier fails the CI Python run. The [sdk-runtime README](../../../../python/sdk-runtime/README.md) owns the Windows target and its PowerShell-specific minimal snapshot.
 
 ## Existing decisions and supersession
 
@@ -40,10 +38,6 @@ This decision supersedes the single-target topology in the archived [required Py
 
 **Run full behavior before wheel construction and keep two small installed smokes.** Rejected because that proves the executable against source imports, then proves too little through the distribution users install. The clean installed environment is the stronger common location for the same scenarios.
 
-**Use keyless model emulation only.** Rejected because a local SSE endpoint cannot prove authentication, request compatibility, streaming, tool-call interpretation, or a complete turn against the real provider.
-
-**Expose the key to forked pull requests through `pull_request_target`.** Rejected because arbitrary fork code could exfiltrate the repository secret. Missing credentialed evidence on an untrusted ref is explicit and security-preserving; trusted heads and post-merge provider CI retain the live signal.
-
 ## Consequences
 
-Every pull request pays for two native executable and wheel builds plus deterministic installed-artifact scenarios. Trusted same-repository pull requests also pay for one two-turn DeepSeek task per target. In exchange, the required result describes the files Python users install, proves the selected carriers before merge, and cannot pass by importing the checkout or silently skipping the real provider.
+Every CI Python run pays for two native executable and wheel builds plus deterministic installed-artifact scenarios. In exchange, its result describes the files Python users install, proves the selected carriers, and cannot pass by importing the checkout. Real-provider compatibility of the installed wheel is proven only when a contributor runs the local live scenario.

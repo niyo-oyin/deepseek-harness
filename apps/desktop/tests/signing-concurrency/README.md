@@ -1,12 +1,12 @@
 ---
-description: "Windows signing concurrency measurements and retesting on replacement runners."
+description: "Windows signing concurrency measurements and retesting on replacement build machines."
 ---
 
 # Windows signing concurrency qualification
 
 ## Summary
 
-Use this record when choosing signing concurrency on a replacement Windows runner. Results apply to the measured host, token and software combination; repeat qualification after changing them. Production signing remains serial.
+Use this record when choosing signing concurrency on a replacement Windows build machine. Results apply to the measured host, token and software combination; repeat qualification after changing them. Production signing remains serial.
 
 ## Table of Contents
 

@@ -132,13 +132,13 @@ describe.skipIf(!hasPwsh)('persistent pwsh through a real cordis.yml Loader comp
       // send's wait reason, which pins the controlled-prompt fast path directly
       // instead of relying on how long silence would take to settle.
       '    handoffGraceMs: 300',
-      // promptTailGraceMs keeps its product default (0): the self-hosted Windows failures of
+      // promptTailGraceMs keeps its product default (0): the Windows CI failures of
       // 2026-09-25..27 settled at the plain silence bound with the tolerance present and absent
       // alike, so it never applied there and would only lengthen a never-arriving-tail fallback.
       '    scrollbackLines: 20000',
       // The first call pays the full pwsh cold-start latency (spawn + .NET +
       // PSReadLine + Defender) inside the tool deadline; a 60s bound on the
-      // fully loaded self-hosted Windows pool is exceeded often enough to
+      // fully loaded Windows CI host was exceeded often enough to
       // reset the session mid-test (2026-09-01, two runs ~62s each). 300s
       // matches the dsh-tool-pwsh-persistent product default; the
       // dsh-terminal-bash value bounds one send plus the complete startup

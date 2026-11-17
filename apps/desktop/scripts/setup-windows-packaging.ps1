@@ -46,4 +46,4 @@ if (-not $CheckOnly) {
     if (-not (Test-Path -LiteralPath $destination)) { Copy-Item -LiteralPath (Join-Path $templates 'windows-signing.env.example') -Destination $destination }
 }
 Write-Output "Packaging directories verified. Configuration root: $(Join-Path $rootPath 'packaging')"
-Write-Output 'Existing configuration, caches, runner registration and signing failure records were not overwritten.'
+Write-Output 'Existing configuration, caches and signing failure records were not overwritten.'

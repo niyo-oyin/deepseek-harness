@@ -20,7 +20,7 @@ import { testProfileResolution } from './profiles/headless/tests/profile-resolut
 
 /** Published-entry acceptance for argument errors, profile lifecycle, and boot-free config dumps. */
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url))
-// The dsh built bin cold-starts slowly on the contended self-hosted Windows pool; the
+// The dsh built bin cold-starts slowly on a contended Windows host; the
 // execa deadline, its error text, the outer vitest case budget, and waitForFile all
 // share this value so a widening cannot leave a stale 25s diagnostic behind.
 const SPAWN_TIMEOUT_MS = 60_000

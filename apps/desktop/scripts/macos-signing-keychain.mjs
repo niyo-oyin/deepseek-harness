@@ -39,7 +39,7 @@ function readUserKeychains(run) {
  * Children receive only its path, never the p12 password. Existing login keychains are not unlocked.
  * codesign resolves an identity only from a keychain on the user search list, so the owned keychain
  * is prepended during the run and the previous list is restored before deletion.
- * Abrupt process termination requires the CI runner to clean its temporary directory.
+ * Abrupt process termination leaves the temporary keychain directory for manual removal.
  * @param {NodeJS.ProcessEnv} environment Validated platform configuration with local CSC_LINK and CSC_KEY_PASSWORD.
  * @param {(environment: NodeJS.ProcessEnv) => Promise<void>} action All signing work, settled before cleanup.
  * @param {(command: string, args: string[]) => string} run Apple command executor.

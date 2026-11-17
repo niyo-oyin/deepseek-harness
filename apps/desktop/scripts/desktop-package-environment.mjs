@@ -34,7 +34,6 @@ export function localMacOSPackageEnvironment(environment = process.env) {
 /**
  * Read a machine preset when selected, otherwise the target's required dotenv; no ambient release fallback.
  * A preset names the machine configuration file; it carries no deployment of its own.
- * PACKAGE_WINDOWS_COMPRESSION_LEVEL selects 3 or 7 for Windows workflow builds; blank retains the file setting and other platforms reject a value.
  * @param {'win32' | 'darwin'} platform Target platform.
  * @param {NodeJS.ProcessEnv} environment Parent environment, retained only for unrelated build tools.
  * @param {string} appRoot Desktop application directory; relative credential paths resolve here.
@@ -42,12 +41,6 @@ export function localMacOSPackageEnvironment(environment = process.env) {
  * @returns {NodeJS.ProcessEnv} Isolated environment with file-owned release settings.
  */
 export function loadDesktopPackageEnvironment(platform, environment = process.env, appRoot = APP_ROOT, options = {}) {
-  const compression = environment.PACKAGE_WINDOWS_COMPRESSION_LEVEL
-  if (compression !== undefined && compression !== '') {
-    if (platform !== 'win32' || !['3', '7'].includes(compression)) {
-      throw new Error('desktop package: PACKAGE_WINDOWS_COMPRESSION_LEVEL requires Windows and a choice of 3 or 7')
-    }
-  }
   const preset = environment.DSH_PACKAGING_PRESET
   let path = join(appRoot, platform === 'win32' ? '.env.windows' : '.env.macos')
   if (preset !== undefined) {
@@ -69,7 +62,6 @@ export function loadDesktopPackageEnvironment(platform, environment = process.en
         ? /^DSH_DESKTOP_WINDOWS_(?:CER_FILE|SIGNTOOL|KEY_CONTAINER|TOKEN_PIN)$/u.test(name)
         : MACOS_SETTING.test(name) && !publicPlatformSetting.test(name)))
   }
-  if (compression !== undefined && compression !== '') settings.DSH_DESKTOP_WINDOWS_COMPRESSION_LEVEL = compression
   return {
     ...Object.fromEntries(Object.entries(environment).filter(([name]) => !AMBIENT_RELEASE_SETTING.test(name))),
     ...settings,

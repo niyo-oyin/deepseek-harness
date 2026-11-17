@@ -2,9 +2,6 @@
  * Resolve the version one build carries, which is not always the version the
  * repository declares.
  *
- * Desktop CI version mode `build-number` uses UTC date, workflow run number and attempt as
- * `.YYYYMMDD.run.attempt`; these identify CI builds, not release sequences.
- *
  * A production build carries the version in the manifests, aligned with the
  * `dsh` npm package. A test build carries a version that appends a date and a
  * sequence number, so several builds of a single product version stay
@@ -74,8 +71,7 @@ export function validateDesktopBuildVersion(buildVersion, productVersion) {
     && required.every((field, index) => build.prerelease[index] === field)
   if (!extendsProduct) {
     throw new Error(`desktop build version: ${buildVersion} must extend ${productVersion} as ${
-      desktopBuildVersionPrefix(productVersion)}<date>.<sequence> or ${
-      desktopBuildVersionPrefix(productVersion)}<date>.<run>.<attempt>`)
+      desktopBuildVersionPrefix(productVersion)}<date>.<sequence>`)
   }
   return build.version
 }

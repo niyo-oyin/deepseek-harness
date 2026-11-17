@@ -27,7 +27,7 @@ The kind set is closed and mutually exclusive:
 
 The kind records the dominant intent. Accompanying tests, documentation, cleanup, or dependency movement do not override a feature or bug fix. A new kind changes these classification rules and requires an explicit taxonomy and policy change.
 
-Repository policy rejects unsupported `kind/*` values and reserves every alias removed by the unification: `kind/bug`, `kind/documentation`, `feature`, `bug-fix`, `doc`, `cleanup`, `testing`, `dependencies`, `ci`, `cli`, `llm`, and `web-search`. Reserving the exact migrated set prevents an obsolete synonym from being recreated as an apparently unrelated operational label.
+The taxonomy rejects unsupported `kind/*` values and reserves every alias removed by the unification: `kind/bug`, `kind/documentation`, `feature`, `bug-fix`, `doc`, `cleanup`, `testing`, `dependencies`, `ci`, `cli`, `llm`, and `web-search`. Reserving the exact migrated set prevents an obsolete synonym from being recreated as an apparently unrelated operational label.
 
 ### Areas
 
@@ -45,7 +45,7 @@ The area set is intentionally extensible. When no existing description honestly 
 
 Issues use native Issue Type instead of `kind/*`; their `area/*` labels remain optional. `source/*` labels record how an Issue was created and do not apply to pull requests. Priority, GitHub defaults, and workflow triggers remain independent operational metadata.
 
-The repository lifecycle removes pull request `kind/*` labels and reserved aliases from an Issue before auditing it. Policy comments report only violations whose intended value cannot be derived from the Issue, such as a missing native Type or an unsupported Priority.
+An Issue carries no pull request `kind/*` label or reserved alias. No workflow enforces these rules; the [manual hosted CI decision](2026-11-17-manual-hosted-ci.md) removed the Issue lifecycle and policy automation, so contributors apply them by hand.
 
 Label migrations preserve meaning before removing aliases: add the canonical replacement, verify the labelable, then remove the obsolete assignment. A label is deleted only after no pull request or Issue still uses it, and unrelated labels are never replaced as a set.
 
@@ -65,10 +65,10 @@ Label migrations preserve meaning before removing aliases: add the canonical rep
 
 **Kinds on Issues.** Native Issue Type already owns that classification; duplicating it as a label creates drift.
 
-**Comment-only Issue enforcement.** A comment preserves invalid metadata and requires human cleanup even when the only valid result is removal. The lifecycle applies that removal and retains comments for choices it cannot infer.
+**Comment-only Issue enforcement.** A comment preserves invalid metadata and requires human cleanup even when the only valid result is removal. Removing the invalid label is the valid repair.
 
 **Exactly one area per pull request.** Coherent changes can materially affect several independent APIs or behaviors, and dropping secondary areas hides affected scope.
 
 ## Consequences
 
-Reviewers and automation can query intent, semantic scope, how an Issue was created, priority, and operational triggers independently. Invalid Issue labels disappear without a policy comment, and the label event records the repair; when no other violation remains, the lifecycle deletes any earlier policy comment. Maintainers must read the change and the live label descriptions instead of inferring classification from title prefixes or paths. The live catalog, this rationale, and policy enforcement must move together when a kind or a non-obvious area boundary changes, and taxonomy migrations carry an explicit historical backfill and verification cost.
+Reviewers and automation can query intent, semantic scope, how an Issue was created, priority, and operational triggers independently. Maintainers must read the change and the live label descriptions instead of inferring classification from title prefixes or paths. The live catalog and this rationale must move together when a kind or a non-obvious area boundary changes, and taxonomy migrations carry an explicit historical backfill and verification cost.

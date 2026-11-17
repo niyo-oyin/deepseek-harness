@@ -1,4 +1,4 @@
-/** Prepare private machine directories and templates without registering a runner or overwriting configuration. */
+/** Prepare private machine directories and templates without overwriting configuration. */
 import { readFileSync, writeFileSync, existsSync, lstatSync, mkdirSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 
@@ -12,7 +12,7 @@ for (let path = resolve(root); ; path = dirname(path)) {
   if (existsSync(path) && lstatSync(path).isSymbolicLink()) throw new Error('Packaging root ancestors cannot be links')
   if (path === dirname(path)) break
 }
-for (const relative of ['', 'packaging', 'packaging/presets', 'packaging/secrets', 'packaging/certificates', 'runner', 'cache', 'cache/macos-signatures']) {
+for (const relative of ['', 'packaging', 'packaging/presets', 'packaging/secrets', 'packaging/certificates', 'cache', 'cache/macos-signatures']) {
   const path = join(root, relative)
   if (!existsSync(path) && mode !== '--check') mkdirSync(path, { recursive: true, mode: 0o700 })
   const info = lstatSync(path)

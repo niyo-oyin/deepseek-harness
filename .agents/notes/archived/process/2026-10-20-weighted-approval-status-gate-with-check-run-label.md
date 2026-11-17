@@ -1,6 +1,7 @@
 # Agent Note: Weighted approval keeps its commit status gate and publishes the decision label from an App
 
 Status: implemented
+Archived: 2026-11-17
 
 ## Problem
 

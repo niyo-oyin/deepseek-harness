@@ -1,6 +1,7 @@
 # Agent Note: Blacksmith as a failover leg for CI pools
 
 Status: implemented
+Archived: 2026-11-17
 
 ## Problem
 

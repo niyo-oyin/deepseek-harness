@@ -1,16 +1,13 @@
 # Sandbox CI: the keyless real-kernel confinement proofs, plus the darwin
-# unit-parity job (unit-darwin) that needs the matrix's macOS image. This
-# master-only reference stays outside the pull-request verdict; rationale lives in
-# .agents/notes/implemented/process/2026-07-21-serial-cross-platform-ci-reference.md.
+# unit-parity job (unit-darwin) that needs the matrix's macOS image.
 # A separate workflow from ci.yml because the axis is different — the e2e jobs
 # fan out over OS×runner (kernel capabilities), not node versions. The Landlock
 # launcher is built from native/system on each Landlock leg and installed
-# from the same tarballs the main-repository release workflow publishes.
+# from locally packed tarballs.
 name: Sandbox
 
 on:
-  push:
-    branches: [master]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -18,10 +15,6 @@ concurrency:
 
 permissions:
   contents: read
-
-env:
-  # CI runs must never report to the production telemetry endpoint baked
-  # into apps/cli/cordis.yml (AppCLIEntry disables the row when set).
 
 jobs:
   # Keyless real-kernel sandbox proofs (sandbox Agent Note § Testing): each ladder
@@ -36,21 +29,14 @@ jobs:
   #
   # The e2e files self-skip where their runner is absent, so a leg that lost
   # its runner (no bwrap, kernel without Landlock, macOS without
-  # sandbox-exec) would otherwise pass as a false green — the same trap
-  # e2e.yml's key preflight guards against. Each leg therefore asserts BOTH
+  # sandbox-exec) would otherwise pass as a false green. Each leg therefore asserts BOTH
   # its platform files actually ran: `Test Files  2 passed (2)`, no skips.
   sandbox-e2e:
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Only the bwrap leg has a Blacksmith equivalent: the earlier
-          # migration dispatch runs measured that Blacksmith's Linux images do
-          # not enforce Landlock (the run-guard would turn the leg red) and
-          # its macOS image is unverified, so those legs stay on GitHub's
-          # images under every failover value — see
-          # .agents/notes/implemented/process/2026-09-09-blacksmith-failover-leg.md.
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             runner: bwrap
           - os: ubuntu-24.04
             runner: landlock
@@ -59,10 +45,7 @@ jobs:
           - os: macos-latest
             runner: seatbelt
     name: sandbox e2e (${{ matrix.runner }}, ${{ matrix.os }})
-    runs-on: >-
-      ${{ matrix.runner == 'bwrap' && vars.DSH_CI_FAILOVER_LINUX == 'blacksmith'
-          && 'blacksmith-4vcpu-ubuntu-2404'
-          || matrix.os }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7.0.1
@@ -113,7 +96,7 @@ jobs:
           # the very platform that exists to prove it) is a failure, not a pass.
           echo "$out" | grep -qE 'Test Files[[:space:]]+2 passed \(2\)'
 
-      # Publish-path rehearsal, Landlock legs only. Build the launcher on its
+      # Packed-install rehearsal, Landlock legs only. Build the launcher on its
       # native architecture, then install the local native and harness tarballs
       # together so registry state cannot mask source/package drift.
       - name: Build packages for the pack rehearsal
@@ -135,7 +118,7 @@ jobs:
   # The unit suite runs on ubuntu in ci.yml's Linux jobs; macos-latest is this
   # workflow's only darwin runner, so the platform-dependent unit expectations
   # (Seatbelt path canonicalization: /tmp IS /private/tmp — sandbox semantics,
-  # hence this workflow rather than ci-master.yml) take their darwin branch only
+  # hence this workflow) take their darwin branch only
   # here. A job of its own so the seatbelt e2e leg keeps the matrix budget. The
   # budget below is a completion ceiling, not a latency target: the full suite
   # takes 16 minutes on a fast macos-latest runner and was under half done at
@@ -156,10 +139,10 @@ jobs:
       - name: Install (immutable)
         run: pnpm install --frozen-lockfile
 
-      # The same key and value the coverage and serial lanes grant: on the
-      # shared 3-vCPU runner, cases that inherit Vitest's 5000 ms default timed
-      # out in spawn.spec.ts and changes.spec.ts (run 36370945526) while
-      # passing in under a second on a quiet host. The ci-unit aggregate is
+      # The same key and value the coverage lanes grant: on the shared 3-vCPU
+      # runner, cases that inherit Vitest's 5000 ms default timed out in
+      # spawn.spec.ts and changes.spec.ts while passing in under a second on a
+      # quiet host. The ci-unit aggregate is
       # `pnpm run test` through the path that consumes the variable.
       - name: Unit tests (darwin parity)
         env:

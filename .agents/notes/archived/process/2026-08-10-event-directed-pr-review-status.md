@@ -1,6 +1,7 @@
 # Agent Note: Event-directed PR review status commands
 
 Status: implemented
+Archived: 2026-11-17
 
 ## Problem
 

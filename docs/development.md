@@ -64,7 +64,7 @@ The repository uses isolated Host and Client aggregates. An ordinary package is 
 | `tsconfig.base.json` | Shared compilerOptions and the source `paths` map. Also the resolution facade the vitest configs point vite-tsconfig-paths at: it has no `include`, so its `paths` apply to every importer. | No |
 | `tsconfig.base.client.json` | Browser compiler settings (`jsx`, DOM libs, `types: []`) extended by the Client aggregate and every `packages/client/*` package. | No |
 
-Host and Client aggregate type checks run with an 8 GiB Node old-space limit. This is a per-compiler limit; concurrent build steps need additional memory. `pnpm run build:official --serial` prevents build steps from overlapping, even with `DSH_GATE_CONCURRENCY` set; the DSH publication workflow uses this option.
+Host and Client aggregate type checks run with an 8 GiB Node old-space limit. This is a per-compiler limit; concurrent build steps need additional memory. `pnpm run build:official --serial` prevents build steps from overlapping, even with `DSH_GATE_CONCURRENCY` set.
 
 Host and Client stay two aggregate programs because both sides declaration-merge the cordis `Context` interface under the same keys with different services; one program seeing both merges reports a collision. The collision exists only inside a `ts.Program` — module resolution never triggers it — which is why the solution may reference both aggregates and one paths facade may span both sides. Three disciplines follow:
 
@@ -96,11 +96,11 @@ Choose the command by what the change needs:
 | Iterating on package sources and needing runnable artifacts | `pnpm run build:artifacts`; `dev:web` and `dev:desktop` run it before launching |
 | Type-checking tests, scripts, benchmarks, or website code | `pnpm run build:check` after the latest `build:artifacts`; rerun `build:artifacts` first when package sources changed |
 | Before declaring TypeScript work complete | `pnpm run build:check` after the latest `build:artifacts`, or `pnpm run build` |
-| Complete verification, as the required CI build lanes run it | `pnpm run build` |
+| Complete verification, as the CI build jobs run it | `pnpm run build` |
 | Type checks without the Web and Desktop artifacts | `pnpm run typecheck` |
 | Lint or documentation code-block checks | `pnpm run lint` or `pnpm run doc-typecheck`; each prepares `host-contracts` itself |
 
-PR artifact builders run `build:artifacts`; required Linux and Windows normal builds and public `typecheck` also check the repository-wide test and script programs. CI benchmark preparation additionally uses `--noCheck` for its disposable library outputs, relying on those required builds for diagnostics; other artifact builders keep package checking ([rationale](../.agents/notes/implemented/process/2026-10-05-pr-artifact-typechecks.md)).
+Artifact builders run `build:artifacts`; the normal builds of the Linux consumer and Windows build CI jobs and public `typecheck` also check the repository-wide test and script programs. CI benchmark preparation additionally uses `--noCheck` for its disposable library outputs, relying on those normal builds for diagnostics; other artifact builders keep package checking ([rationale](../.agents/notes/implemented/process/2026-10-05-pr-artifact-typechecks.md)).
 
 Both tsdown passes match `vendor/*`, `packages/*/*`, and `apps/cli`; the Host pass also matches `apps/desktop-host`. They neither scan build artifacts to discover Client packages nor maintain a Host/Client package filter list. Package-local tsdown configs select entries for the current phase through `DSH_BUILD_FACE`: an ordinary Client plugin produces both its Node loader and browser bundle during the Client phase; `api-remotes` uses `hostPhase: true` to produce its Host entry early and only its browser bundle during the Client phase. Tsdown consumes only the JavaScript emitted to `lib/types` by the preceding tsc phase. Tsdown builds the matched workspace members concurrently, so `apps/desktop`, whose main bundle inlines workspace devDependencies from their `lib/` output, bundles in its own step after the Host pass ([Desktop README](../apps/desktop/README.md#bundled-workspace-dependencies)).
 
@@ -137,7 +137,7 @@ DEEPSEEK_BASE_URL=https://... # optional
 
 lefthook is configured in `lefthook.yml` as a fast local checkpoint:
 
-- `pre-commit` verifies the sealed Agent Note archive when files under `.agents/notes/archived/` are staged, validates staged files with the project-free `.oxlintrc.staged.json` profile and applies Oxlint fixes with one bounded retry, checks the staged diff for whitespace errors, checks pi-ai provider metadata when its inputs or generated file are staged, and runs the vendor manifest guard.
+- `pre-commit` verifies the sealed Agent Note archive when files under `.agents/notes/archived/` are staged, validates staged files with the project-free `.oxlintrc.staged.json` profile and applies Oxlint fixes with one bounded retry, checks the staged diff for whitespace errors, checks pi-ai provider metadata when its inputs or generated file are staged, runs the vendor manifest guard, and runs `actionlint` over every workflow when a file under `.github/workflows/` is staged. Install `actionlint` on `PATH` before committing workflow changes; on Windows, `winget install rhysd.actionlint` installs it.
 - `pre-merge-commit` performs the same archive check before Git creates an automatic merge commit. If it rejects an otherwise clean merge, Git leaves the complete result staged without a commit; repair the failure and run `git commit`, or run `git merge --abort`.
 - `pre-push` runs `pnpm run typecheck`, which generates Typert contracts without bundling before the Client TypeScript check and checks both aggregates.
 
@@ -145,7 +145,7 @@ The vendor manifest guard checks that changes under `vendor/*/src` are staged wi
 
 The pi-ai check regenerates expected metadata in memory. It rejects stale data without rewriting or staging files. After a pi-ai dependency or generator change, follow the package's [provider metadata update steps](../packages/llm/llm-pi-ai/README.md#generated-provider-metadata).
 
-Apart from the scoped archive and provider metadata checks, the hooks intentionally do not run tests, snapshots, documentation checks, builds, or hygiene. Contributors run the [checks relevant to the changed behavior](../AGENTS.md#run-relevant-checks-locally) once; CI owns exhaustive coverage, built-artifact smokes, and the Node 24.9, latest 24, and 26 compatibility matrix.
+Apart from the scoped archive, provider metadata, and workflow checks, the hooks intentionally do not run tests, snapshots, documentation checks, builds, or hygiene. Contributors run the [checks relevant to the changed behavior](../AGENTS.md#run-relevant-checks-locally) once; CI owns exhaustive coverage, built-artifact smokes, and the Node 24.9, latest 24, and 26 compatibility matrix.
 
 Contributors can opt into the comprehensive local gate set with `pnpm run check:all`. The command is independent of the Git hooks and is not an agent instruction.
 
@@ -155,9 +155,11 @@ Outside CI (`CI` other than `true`), default worker counts follow the [local wor
 
 ### CI gates
 
-The keyless [CI workflow](../.github/workflows/ci.yml) groups independent gates into broad lanes and runs a smaller compatibility signal across supported Node versions. Artifact consumers wait for one build within their lane. Coverage partitions reuse file timings scoped to their platform and runner pool to balance work within the configured worker limit. Native Windows lanes run in the separate [CI Windows workflow](../.github/workflows/ci-windows.yml) and Python checks in the separate [CI Python workflow](../.github/workflows/ci-python.yml), each of which can be re-run independently. Required benchmarks run separately on standard GitHub-hosted Linux; the [benchmark runner reference](../benchmarks/AGENTS.md) owns routing and the job timeout. The separate real-API workflow runs `pnpm run test:e2e` with its configured worker bound. See [scripts/run-gates.ts](../scripts/run-gates.ts) and the workflow files for the current gate and job inventory.
+Every GitHub Actions workflow runs only on manual `workflow_dispatch`; no push or pull request starts one. Jobs use GitHub-hosted runner labels and no repository secrets, and no workflow calls a real model provider or publishes a package ([decision](../.agents/notes/implemented/process/2026-11-17-manual-hosted-ci.md)). A run's own status is its result.
 
-The credential-free dsh dependency-layout and dsh/vendor pack rehearsals use the existing Linux self-hosted pool only when `DSH_CI_FAILOVER_LINUX=selfhosted` and the event is a trusted master push or same-repository, non-fork, non-Dependabot pull request. All other cases, including manual dispatch, use `ubuntu-24.94`; manual publication stays hosted. See the [release rehearsal runner reference](../.agents/notes/implemented/process/2026-07-26-ci-failover-runbook.md) for persistent-store isolation and fallback limits.
+The keyless [CI workflow](../.github/workflows/ci.yml) groups independent gates into broad Linux jobs, including benchmarks, and runs a smaller compatibility signal across supported Node versions. Artifact consumers wait for one build within their job. Coverage partitions reuse file timings scoped to their platform to balance work within the configured worker limit. Native Windows jobs run in the separate [CI Windows workflow](../.github/workflows/ci-windows.yml) and Python checks in the separate [CI Python workflow](../.github/workflows/ci-python.yml), each dispatched and re-run independently. See [scripts/run-gates.ts](../scripts/run-gates.ts) and the workflow files for the current gate and job inventory.
+
+The [Release (dsh)](../.github/workflows/release.yml) and [Release (vendor)](../.github/workflows/release-vendor.yml) workflows check the dependency layout, pack the npm tarballs, and verify a packed install; they retain the tarballs as run artifacts and publish nothing. The [.github instructions](../.github/AGENTS.md) list the remaining build and packaging workflows.
 
 ### Daily commands
 

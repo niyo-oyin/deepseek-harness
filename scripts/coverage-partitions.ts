@@ -147,7 +147,7 @@ const UNKNOWN_FILE_WEIGHT = 1
  * Coordinator-maintained duration history. CI removes `node_modules/.vite`
  * on every checkout, so Vitest's own cache never survives there; this
  * gitignored file at the repository root carries recorded durations across
- * runs on a persistent checkout (self-hosted runners).
+ * runs, and the CI coverage jobs restore and save it through the Actions cache.
  */
 const FILE_TIMES_NAME = '.coverage-times.json'
 

@@ -4,7 +4,7 @@
  * Import and authorize the required p12 before work; delete the owned keychain after work settles.
  * Children receive only its path, never the p12 password. Existing login keychains are not unlocked.
  * The owned keychain is prepended to the user search list for the run and the previous list is restored.
- * Abrupt process termination requires the CI runner to clean its temporary directory.
+ * Abrupt process termination leaves the temporary keychain directory for manual removal.
  * @param environment Validated platform configuration with local CSC_LINK and CSC_KEY_PASSWORD.
  * @param action All signing work, settled before cleanup.
  * @param run Apple command executor returning command standard output.

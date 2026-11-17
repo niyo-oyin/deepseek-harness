@@ -203,7 +203,7 @@ describe('CI worker allocation', () => {
     expect(defaultConcurrency('ci-static', 60, 8, {}).workers).toBe(8)
   })
 
-  it('preserves serial reference overrides on large hosts', () => {
+  it('preserves explicit serial overrides on large hosts', () => {
     const inherited = {
       DSH_GATE_CONCURRENCY: '1',
       DSH_COVERAGE_MAX_WORKERS: '1',
@@ -212,7 +212,7 @@ describe('CI worker allocation', () => {
       DSH_SNAPSHOT_MAX_CONCURRENCY: '1',
       DSH_WEB_SNAPSHOT_WORKERS: '1',
     }
-    const additions = ciWorkerEnvironment('ci-primary', inherited, 64)
+    const additions = ciWorkerEnvironment('ci-consumers', inherited, 64)
     expect(additions).toEqual({ DSH_SNAPSHOT_MAX_WORKERS: '1' })
     expect(inherited.DSH_COVERAGE_MAX_WORKERS).toBe('1')
   })
@@ -243,18 +243,13 @@ describe('CI worker allocation', () => {
 
 describe('gate graph validation', () => {
   it.each([
-    'ci-primary',
-    'ci-linux-primary',
     'ci-static',
     'ci-lint-contracts-ready',
     'ci-coverage',
     'ci-unit',
     'ci-bench',
-    'ci-snapshot',
-    'ci-artifacts',
     'ci-consumers',
     'ci-windows-blocking',
-    'ci-windows-complete',
     'ci-windows-observational-ready',
     'node-compat',
     'check-all',
@@ -430,7 +425,7 @@ describe('gate graph validation', () => {
     })
   })
 
-  it.each(['ci-primary', 'ci-static', 'check-all'] as const)(
+  it.each(['ci-static', 'check-all'] as const)(
     'keeps the DSH package license policy in %s',
     (mode) => {
       const ids = withPnpmEntrypoint(() => gatesForMode(mode).map(subject => subject.id))
@@ -439,7 +434,7 @@ describe('gate graph validation', () => {
     },
   )
 
-  it.each(['ci-primary', 'ci-static', 'check-all', 'hygiene'] as const)(
+  it.each(['ci-static', 'check-all', 'hygiene'] as const)(
     'rejects new unknown casts in %s',
     (mode) => {
       const gate = withPnpmEntrypoint(() => gatesForMode(mode).find(subject => subject.id === 'no-unknown-casts'))
@@ -449,7 +444,7 @@ describe('gate graph validation', () => {
     },
   )
 
-  it.each(['ci-primary', 'ci-static', 'check-all', 'hygiene'] as const)(
+  it.each(['ci-static', 'check-all', 'hygiene'] as const)(
     'rejects silent empty catches in %s',
     (mode) => {
       const gate = withPnpmEntrypoint(() => gatesForMode(mode).find(subject => subject.id === 'empty-catch'))
@@ -459,7 +454,7 @@ describe('gate graph validation', () => {
     },
   )
 
-  it.each(['ci-primary', 'ci-static', 'check-all', 'hygiene'] as const)(
+  it.each(['ci-static', 'check-all', 'hygiene'] as const)(
     'keeps package dependency enforcement in %s',
     (mode) => {
       const ids = withPnpmEntrypoint(() => gatesForMode(mode).map(subject => subject.id))
@@ -468,7 +463,7 @@ describe('gate graph validation', () => {
     },
   )
 
-  it.each(['ci-primary', 'ci-static', 'check-all', 'hygiene'] as const)(
+  it.each(['ci-static', 'check-all', 'hygiene'] as const)(
     'executes default-product experimental isolation in %s',
     (mode) => {
       const gate = withPnpmEntrypoint(() => gatesForMode(mode)
@@ -479,7 +474,7 @@ describe('gate graph validation', () => {
     },
   )
 
-  it.each(['ci-primary', 'ci-static', 'check-all'] as const)(
+  it.each(['ci-static', 'check-all'] as const)(
     'keeps the client dependency policy in %s',
     (mode) => {
       const ids = withPnpmEntrypoint(() => gatesForMode(mode).map(subject => subject.id))
@@ -488,16 +483,7 @@ describe('gate graph validation', () => {
     },
   )
 
-  it.each(['ci-primary', 'ci-static', 'check-all'] as const)(
-    'keeps weighted approval policy tests in %s',
-    (mode) => {
-      const ids = withPnpmEntrypoint(() => gatesForMode(mode).map(subject => subject.id))
-
-      expect(ids).toContain('approval-policy')
-    },
-  )
-
-  it.each(['ci-primary', 'ci-static', 'check-all', 'hygiene'] as const)(
+  it.each(['ci-static', 'check-all', 'hygiene'] as const)(
     'keeps hard-coded Client UI copy enforcement in %s',
     (mode) => {
       const ids = withPnpmEntrypoint(() => gatesForMode(mode).map(subject => subject.id))
@@ -506,7 +492,7 @@ describe('gate graph validation', () => {
     },
   )
 
-  it.each(['ci-primary', 'ci-static', 'check-all', 'hygiene'] as const)(
+  it.each(['ci-static', 'check-all', 'hygiene'] as const)(
     'keeps browser app-route resolution enforcement in %s',
     (mode) => {
       const ids = withPnpmEntrypoint(() => gatesForMode(mode).map(subject => subject.id))
@@ -515,7 +501,7 @@ describe('gate graph validation', () => {
     },
   )
 
-  it.each(['ci-primary', 'ci-static', 'check-all', 'hygiene'] as const)(
+  it.each(['ci-static', 'check-all', 'hygiene'] as const)(
     'keeps application entrypoint enforcement in %s',
     (mode) => {
       const ids = withPnpmEntrypoint(() => gatesForMode(mode).map(subject => subject.id))
@@ -523,32 +509,6 @@ describe('gate graph validation', () => {
       expect(ids).toContain('application-entrypoints')
     },
   )
-
-  it('keeps native Windows coverage blocking and behind the complete build', () => {
-    const complete = withPnpmEntrypoint(() => gatesForMode('ci-windows-complete'))
-    const observational = withPnpmEntrypoint(() => gatesForMode('ci-windows-observational-ready'))
-      .filter(gate => gate.id !== 'docs-site-build' && gate.id !== 'electron-install')
-    const byId = new Map(complete.map(subject => [subject.id, subject]))
-
-    expect(byId.get('coverage')?.allowFailure).not.toBe(true)
-    expect(byId.get('coverage')?.needs).toContain('build')
-    expect(byId.get('coverage-exempt-heavy')?.allowFailure).not.toBe(true)
-    expect(byId.get('coverage')?.needs).toContain('build')
-    expect(byId.get('coverage-exempt-heavy')?.needs).toContain('build')
-    expect(byId.get('coverage-exempt-heavy')?.args).toContain(
-      'packages/experimental/webworker-packer/tests/image-loadable.spec.ts',
-    )
-    expect(observational).not.toHaveLength(0)
-    for (const gate of observational) {
-      const completeGate = byId.get(gate.id)
-      expect(completeGate?.allowFailure).toBe(true)
-      expect(completeGate?.after).toEqual(expect.arrayContaining([
-        'coverage',
-        'coverage-exempt-heavy',
-      ]))
-      expect((completeGate?.needs ?? []).filter(id => id !== 'build')).toEqual(gate.needs ?? [])
-    }
-  })
 
   it('runs the Windows built-bin smoke after other observational gates settle', () => {
     const observational = withPnpmEntrypoint(() => gatesForMode('ci-windows-observational-ready'))
@@ -558,35 +518,18 @@ describe('gate graph validation', () => {
       observational.filter(gate => gate.id !== 'built-bin-smoke').map(gate => gate.id),
     )
 
-    const completeBuiltBin = withPnpmEntrypoint(() => gatesForMode('ci-windows-complete'))
-      .find(gate => gate.id === 'built-bin-smoke')
-    expect(completeBuiltBin?.after).toContain('windows-site')
-    expect(completeBuiltBin?.after).not.toContain('docs-site-build')
   })
 
-  it('reuses the Windows build without dropping diagnostics or rebuilding the workspace', () => {
+  it('reuses the Windows build without rebuilding the workspace', () => {
     const ready = withPnpmEntrypoint(() => gatesForMode('ci-windows-observational-ready'))
-    const complete = withPnpmEntrypoint(() => gatesForMode('ci-windows-complete'))
     const { scripts } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
       scripts: Record<string, string>
     }
 
     expect(scripts['check:ci:windows-observational-ready']).toBe('tsx scripts/run-gates.ts ci-windows-observational-ready')
-    expect(scripts).not.toHaveProperty('check:ci:windows-observational')
-    const completeOnly = new Set(['build', 'windows-site', 'native-system', 'coverage', 'coverage-exempt-heavy'])
-    const shared = complete.filter(gate => !completeOnly.has(gate.id))
-    expect(ready.map(gate => gate.id).sort()).toEqual([...shared.map(gate => gate.id), 'docs-site-build'].sort())
     expect(ready.some(gate => gate.id === 'build')).toBe(false)
+    expect(ready.every(gate => !(gate.needs ?? []).includes('build') && !(gate.after ?? []).includes('build'))).toBe(true)
     expect(ready.find(gate => gate.id === 'docs-site-build')?.displayCommand).toBe('pnpm run docs:build:mpa')
-    for (const diagnostic of shared) {
-      expect(ready.find(gate => gate.id === diagnostic.id)).toMatchObject({
-        command: diagnostic.command,
-        args: diagnostic.args,
-      })
-      expect(ready.find(gate => gate.id === diagnostic.id)?.env).toEqual(diagnostic.env)
-    }
-    expect(complete.find(gate => gate.id === 'build')).toBeDefined()
-    expect(complete.find(gate => gate.id === 'coverage')).toBeDefined()
   })
 
   it('runs built Windows smoke after failed diagnostics settle on an existing build', async () => {
@@ -608,7 +551,7 @@ describe('gate graph validation', () => {
 
   it.each([undefined, '3'])('provisions Electron before Windows coverage with partition count %s', async (partitions) => {
     const gates = withEnv('DSH_COVERAGE_PARTITIONS', partitions, () =>
-      withPnpmEntrypoint(() => gatesForMode('ci-windows-complete')))
+      withPlatform('win32', () => withPnpmEntrypoint(() => gatesForMode('ci-coverage'))))
     const installers = gates.filter(gate => gate.id === 'electron-install')
     expect(installers).toHaveLength(1)
     expect(installers[0]?.allowFailure).not.toBe(true)
@@ -622,45 +565,34 @@ describe('gate graph validation', () => {
     })
   })
 
-  it.each(['ci-windows-complete', 'ci-windows-observational-ready'] as const)(
-    'provisions the locked Electron binary before built smoke in %s', (mode) => {
-      const gates = withPnpmEntrypoint(() => gatesForMode(mode))
-      const install = gates.find(gate => gate.id === 'electron-install')
-      expect(install).toMatchObject({
-        command: process.execPath,
-        args: ['/private/pnpm.cjs', '--filter', '@deepseek-ai/dsh-desktop', 'exec', 'install-electron'],
-        env: { ELECTRON_GET_USE_PROXY: '1' },
-        retries: 2,
-        retryDelayMs: 15000,
-      })
-      expect(gates.find(gate => gate.id === 'built-bin-smoke')?.needs).toContain('electron-install')
-      expect(gates.filter(gate => gate.id !== 'electron-install').every(gate => gate.env?.ELECTRON_GET_USE_PROXY === undefined)).toBe(true)
-    },
-  )
+  it('provisions the locked Electron binary before built smoke on an existing Windows build', () => {
+    const gates = withPnpmEntrypoint(() => gatesForMode('ci-windows-observational-ready'))
+    const install = gates.find(gate => gate.id === 'electron-install')
+    expect(install).toMatchObject({
+      command: process.execPath,
+      args: ['/private/pnpm.cjs', '--filter', '@deepseek-ai/dsh-desktop', 'exec', 'install-electron'],
+      env: { ELECTRON_GET_USE_PROXY: '1' },
+      retries: 2,
+      retryDelayMs: 15000,
+    })
+    expect(gates.find(gate => gate.id === 'built-bin-smoke')?.needs).toContain('electron-install')
+    expect(gates.filter(gate => gate.id !== 'electron-install').every(gate => gate.env?.ELECTRON_GET_USE_PROXY === undefined)).toBe(true)
+  })
 
-  it.each(['ci-windows-complete', 'ci-windows-observational-ready'] as const)(
-    'keeps failed Electron provisioning visible without stopping unrelated diagnostics in %s', async (mode) => {
-      const gates = withPnpmEntrypoint(() => gatesForMode(mode))
-      const attempted: string[] = []
-      const results = await runGates(gates, 8, async (subject) => {
-        attempted.push(subject.id)
-        return resultFor(subject, subject.id === 'electron-install' ? 'failed' : 'passed')
-      })
-      expect(results.filter(result => result.status === 'failed').map(result => result.gate.id)).toEqual(['electron-install'])
-      expect(attempted).not.toContain('built-bin-smoke')
-      expect(results.find(result => result.gate.id === 'built-bin-smoke')?.status).toBe('skipped')
-      expect(results.find(result => result.gate.id === 'doc-graphs')?.status).toBe('passed')
-      if (mode === 'ci-windows-complete') {
-        expect(results.filter(result => result.status === 'failed' && !result.gate.allowFailure).map(result => result.gate.id))
-          .toEqual(['electron-install'])
-        expect(attempted).not.toContain('coverage')
-        expect(results.find(result => result.gate.id === 'coverage')?.status).toBe('skipped')
-        expect(results.find(result => result.gate.id === 'coverage-exempt-heavy')?.status).toBe('passed')
-      }
-    },
-  )
+  it('keeps failed Electron provisioning visible without stopping unrelated diagnostics', async () => {
+    const gates = withPnpmEntrypoint(() => gatesForMode('ci-windows-observational-ready'))
+    const attempted: string[] = []
+    const results = await runGates(gates, 8, async (subject) => {
+      attempted.push(subject.id)
+      return resultFor(subject, subject.id === 'electron-install' ? 'failed' : 'passed')
+    })
+    expect(results.filter(result => result.status === 'failed').map(result => result.gate.id)).toEqual(['electron-install'])
+    expect(attempted).not.toContain('built-bin-smoke')
+    expect(results.find(result => result.gate.id === 'built-bin-smoke')?.status).toBe('skipped')
+    expect(results.find(result => result.gate.id === 'doc-graphs')?.status).toBe('passed')
+  })
 
-  it.each(['ci-coverage', 'ci-artifacts', 'ci-windows-blocking'] as const)(
+  it.each(['ci-coverage', 'ci-static', 'ci-windows-blocking'] as const)(
     'only provisions Electron for native Windows coverage in %s', (mode) => {
       const original = Object.getOwnPropertyDescriptor(process, 'platform')
       for (const platform of ['linux', 'darwin', 'win32'] as const) {
@@ -690,10 +622,10 @@ describe('gate graph validation', () => {
     // (coverageTestTimeoutOptions); a gate argument would add a second owner.
     for (const budget of ['15000', undefined]) {
       const gates = withEnv('DSH_COVERAGE_TEST_TIMEOUT_MS', budget, () =>
-        withPnpmEntrypoint(() => gatesForMode('ci-windows-complete')))
+        withPnpmEntrypoint(() => gatesForMode('ci-coverage')))
       for (const id of ['coverage', 'coverage-exempt-heavy']) {
         const gate = gates.find(subject => subject.id === id)
-        if (gate === undefined) throw new Error(`ci-windows-complete must define the ${id} gate`)
+        if (gate === undefined) throw new Error(`ci-coverage must define the ${id} gate`)
         expect(gate.args).not.toEqual(expect.arrayContaining([
           expect.stringMatching(/^--(?:testTimeout|expect\.poll\.timeout|hookTimeout)=/),
         ]))
@@ -732,7 +664,7 @@ describe('gate graph validation', () => {
 
   it('selects partitioned coverage only when explicitly configured', () => {
     const coverage = withEnv('DSH_COVERAGE_PARTITIONS', '3', () =>
-      withPnpmEntrypoint(() => gatesForMode('ci-windows-complete').find(subject => subject.id === 'coverage')))
+      withPnpmEntrypoint(() => gatesForMode('ci-coverage').find(subject => subject.id === 'coverage')))
 
     expect(coverage).toMatchObject({
       displayCommand: 'DSH_COVERAGE_PARTITIONS=3 pnpm run test:coverage:partitioned',
@@ -744,7 +676,7 @@ describe('gate graph validation', () => {
 
   it('rejects an invalid coverage partition count before starting a gate', () => {
     expect(() => withEnv('DSH_COVERAGE_PARTITIONS', '1', () =>
-      withPnpmEntrypoint(() => gatesForMode('ci-windows-complete'))))
+      withPnpmEntrypoint(() => gatesForMode('ci-coverage'))))
       .toThrow('DSH_COVERAGE_PARTITIONS must be an integer greater than 1')
   })
 
@@ -832,32 +764,6 @@ describe('Oxlint gate', () => {
 })
 
 describe('Typert contract preparation', () => {
-  it('prepares primary source consumers once before they run', () => {
-    const subject = withEnv('DSH_OXLINT_THREADS', undefined, () =>
-      withPnpmEntrypoint(() => gatesForMode('ci-primary')))
-
-    expect(subject.find(item => item.id === 'typert-contracts')).toMatchObject({
-      displayCommand: 'pnpm exec tsx scripts/compile-referenced-projects.ts host-contracts',
-      args: ['/private/pnpm.cjs', 'exec', 'tsx', 'scripts/compile-referenced-projects.ts', 'host-contracts'],
-    })
-    for (const [id, script] of [
-      ['typecheck', 'typecheck:contracts-ready'],
-      ['lint', 'lint:contracts-ready'],
-      ['doc-typecheck', 'doc-typecheck:contracts-ready'],
-    ] as const) {
-      expect(subject.find(item => item.id === id)).toMatchObject({
-        displayCommand: `pnpm run ${script}`,
-        args: ['/private/pnpm.cjs', 'run', script],
-        needs: ['typert-contracts'],
-      })
-    }
-    expect(subject.find(item => item.id === 'build')?.needs).toEqual([
-      'typecheck',
-      'lint',
-      'doc-typecheck',
-    ])
-  })
-
   it('reuses contracts from the validated consumer build', () => {
     const subject = withPnpmEntrypoint(() => gatesForMode('ci-consumers'))
 
@@ -1038,19 +944,6 @@ describe('Node 24 lane ownership', () => {
         'node-next-types',
         'built-bin-smoke',
       ],
-    })
-  })
-})
-
-describe('Linux primary graph', () => {
-  it('adds the same compare-only web gate after built client artifacts', () => {
-    const subject = withPnpmEntrypoint(() => gatesForMode('ci-linux-primary'))
-    const web = subject.find(item => item.id === 'web-snapshot')
-
-    expect(web).toMatchObject({
-      displayCommand: 'DSH_SNAPSHOT=replay pnpm run test:web:built',
-      env: { DSH_SNAPSHOT: 'replay' },
-      needs: ['build'],
     })
   })
 })

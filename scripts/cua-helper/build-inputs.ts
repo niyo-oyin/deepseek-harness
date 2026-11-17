@@ -1,18 +1,15 @@
-/** Content and machine identity for reusing a signed helper before installing dependencies. */
+/** Content and machine identity of a signed macOS helper build. */
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { appendFileSync, lstatSync, readFileSync } from 'node:fs'
-import { isAbsolute, join, resolve } from 'node:path'
-import { isEntry } from '../release/process.ts'
-import { readDesktopPackageSettings } from '../../apps/desktop/scripts/desktop-file-settings.mjs'
+import { lstatSync, readFileSync } from 'node:fs'
+import { isAbsolute, join } from 'node:path'
 import { resolveMacOSSigningEnvironment } from '../../apps/desktop/scripts/desktop-release-environment.mjs'
 
 const sourceDirectories = [
   'packages/experimental/cua-macos/native', 'scripts/cua-helper', 'apps/desktop/scripts', 'patches',
 ]
 const sourceFiles = new Set([
-  '.github/workflows/cua-helper-package-macos.yml', '.github/workflows/release-publish.yml',
   'package.json', 'scripts/package.json', 'apps/package.json', 'apps/desktop/package.json', 'scripts/release/process.ts',
   'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc', '.pnpmfile.cjs', '.pnpmfile.mjs',
 ])
@@ -48,15 +45,11 @@ function sourceFile(root: string, file: string): { bytes: Buffer; executable: bo
   return { bytes: readFileSync(path), executable: (stat.mode & 0o111) !== 0 }
 }
 
-function gitBlobHash(bytes: Buffer): string {
-  return createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex')
-}
-
 /**
  * Hash tracked build inputs by path, bytes and executable mode; only package manifest version fields is excluded.
  * Missing tracked files and links fail; build outputs and untracked files never enter the digest.
  * @param root - Clean repository root containing all helper build inputs.
- * @returns SHA-256 of sources, resources, workflows, package configuration, patches and locked dependencies.
+ * @returns SHA-256 of sources, resources, package configuration, patches and locked dependencies.
  */
 export function cuaHelperSourceDigest(root: string): string {
   const hash = createHash('sha256')
@@ -66,70 +59,6 @@ export function cuaHelperSourceDigest(root: string): string {
     hash.update(`${file}\0`).update(createHash('sha256').update(input).digest()).update(Buffer.from([Number(executable)]))
   }
   return hash.digest('hex')
-}
-
-/**
- * Compare a producer's immutable GitHub commit tree with local build inputs independently of artifact metadata.
- * Incomplete trees, unreadable blobs and API failures stop selection; content differences return false.
- * @param root - Consumer repository root, before dependency installation.
- * @param repository - GitHub repository containing the authenticated producer run.
- * @param commit - Producer head SHA returned by GitHub, never an artifact-supplied revision.
- * @param api - Read-only GitHub JSON reader.
- * @returns Resolves to whether selected paths, bytes and executable modes match, excluding package manifest version fields.
- */
-export async function cuaHelperSourceMatches(root: string, repository: string, commit: string,
-  api: (path: string) => Promise<unknown>): Promise<boolean> {
-  assert(/^[a-f0-9]{40}$/u.test(commit), 'CUA source: invalid producer commit')
-  const response = await api(`repos/${repository}/git/trees/${commit}?recursive=1`)
-  assert(response && typeof response === 'object' && 'truncated' in response && response.truncated === false
-    && 'tree' in response && Array.isArray(response.tree), 'CUA source: GitHub returned an incomplete commit tree')
-  const tree = new Map<string, { sha: string; mode: string }>()
-  const entries: unknown[] = response.tree
-  for (const value of entries) {
-    assert(value && typeof value === 'object' && 'path' in value && typeof value.path === 'string', 'CUA source: invalid tree entry')
-    if (!isSourceFile(value.path) || ('type' in value && value.type === 'tree')) continue
-    assert('sha' in value && typeof value.sha === 'string' && /^[a-f0-9]{40}$/u.test(value.sha)
-      && 'mode' in value && typeof value.mode === 'string' && 'type' in value, 'CUA source: invalid source entry')
-    if (value.type !== 'blob' || !['100644', '100755'].includes(value.mode)) return false
-    assert(!tree.has(value.path), 'CUA source: duplicate source entry')
-    tree.set(value.path, { sha: value.sha, mode: value.mode })
-  }
-  const files = trackedSources(root)
-  if (tree.size !== files.length) return false
-  for (const file of files) {
-    const remote = tree.get(file)
-    if (!remote) return false
-    const local = sourceFile(root, file)
-    if (remote.mode !== (local.executable ? '100755' : '100644')) return false
-    if (gitBlobHash(local.bytes) === remote.sha) continue
-    const canonical = execFileSync('git', ['hash-object', `--path=${file}`, '--stdin'],
-      { cwd: root, input: local.bytes, encoding: 'utf8' }).trim()
-    if (canonical === remote.sha) continue
-    if (file !== 'package.json' && !file.endsWith('/package.json')) return false
-    const blob = await api(`repos/${repository}/git/blobs/${remote.sha}`)
-    assert(blob && typeof blob === 'object' && 'sha' in blob && blob.sha === remote.sha
-      && 'encoding' in blob && blob.encoding === 'base64' && 'content' in blob && typeof blob.content === 'string',
-    'CUA source: invalid package manifest blob')
-    const bytes = Buffer.from(blob.content, 'base64')
-    assert(gitBlobHash(bytes) === remote.sha, 'CUA source: package manifest blob digest mismatch')
-    if (!manifestConfiguration(local.bytes, file === 'package.json').equals(manifestConfiguration(bytes, file === 'package.json'))) return false
-  }
-  return true
-}
-
-/**
- * Read the signing preset's public identity and certificate location without installing desktop dependencies.
- * @param environment - Actions environment with the machine configuration directory and selected preset.
- * @returns File-owned signing settings and the selected preset; no values are logged.
- */
-export function readCuaSigningSettings(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const root = environment.DSH_PACKAGING_CONFIG_DIR
-  const preset = environment.DSH_PACKAGING_PRESET
-  if (!root || !isAbsolute(root) || !['test', 'production'].includes(preset ?? '')) {
-    throw new Error('CUA reuse: DSH_PACKAGING_CONFIG_DIR and a test or production preset are required')
-  }
-  const settings = readDesktopPackageSettings(join(root, 'secrets/macos-signing.env'), () => true)
-  return { ...settings, DSH_PACKAGING_PRESET: preset }
 }
 
 /**
@@ -155,15 +84,4 @@ export function cuaHelperBuildKey(source: string, environment: NodeJS.ProcessEnv
     python: run('/usr/bin/xcrun', ['python3', '--version']),
   }
   return createHash('sha256').update(JSON.stringify(configuration)).digest('hex')
-}
-
-if (isEntry(import.meta.url)) {
-  const env = process.env
-  if (!env.GITHUB_OUTPUT || !env.GITHUB_STEP_SUMMARY) throw new Error('CUA build inputs: Actions context required')
-  const root = resolve(import.meta.dirname, '../..')
-  const sourceDigest = cuaHelperSourceDigest(root)
-  const buildKey = cuaHelperBuildKey(sourceDigest, readCuaSigningSettings(env))
-  appendFileSync(env.GITHUB_OUTPUT, `build-key=${buildKey}\n`)
-  appendFileSync(env.GITHUB_STEP_SUMMARY, `CUA helper 源码摘要：\`${sourceDigest}\`。\n\n`)
-  console.log(`CUA helper source digest: ${sourceDigest}`)
 }

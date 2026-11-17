@@ -1,13 +1,12 @@
 name: Build single-exe
 
-# Native builds for the release targets; see
+# Native builds for the five runtime targets; see
 # .agents/notes/implemented/architecture/2026-07-10-single-file-executable-sdk-runtime-distribution.md.
 # A full target run retains one SDK wheel and five runtime wheels; subset
 # dispatch retains the SDK wheel and selected runtime wheels. Bare executables
-# and source closures are test inputs. Run manually or call it from the Python
-# release workflow. There is no `pull_request` trigger: a label trigger would
-# list gray skipped checks on every unrelated PR label event. Checkout uses the
-# triggering ref, so dispatch needs no separate ref input.
+# and source closures are test inputs. Dispatch it directly or through
+# ci-python.yml. Checkout uses the triggering ref, so dispatch needs no
+# separate ref input.
 on:
   workflow_call:
     inputs:
@@ -16,20 +15,6 @@ on:
         type: string
         required: false
         default: ''
-      release:
-        description: Run as the native builder for the Python release workflow.
-        type: boolean
-        required: false
-        default: false
-      ci:
-        description: Run Python runtime CI validation for the selected targets.
-        type: boolean
-        required: false
-        default: false
-    secrets:
-      DEEPSEEK_API_KEY_EXTERNAL:
-        description: Real DeepSeek API key for trusted installed-wheel pull-request tests.
-        required: false
   workflow_dispatch:
     inputs:
       targets:
@@ -43,28 +28,19 @@ on:
 
 concurrency:
   # Keep the called workflow distinct from its caller's concurrency group;
-  # github.workflow identifies the caller inside a reusable workflow and keeps
-  # an ordinary CI run from cancelling a full release validation on the same ref.
+  # github.workflow identifies the caller inside a reusable workflow.
   group: build-single-exe-${{ github.workflow }}-${{ github.ref }}
-  # Release-owned builds are part of an intentional publication transaction.
-  cancel-in-progress: ${{ !inputs.release }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
-
-env:
-  # CI runs must never report to the production telemetry endpoint baked
-  # into apps/cli/cordis.yml (AppCLIEntry disables the row when set).
 
 jobs:
   # Job-level conditions cannot inspect `matrix`, so validate target names and
   # construct the matrix before the dependent jobs.
   plan:
     name: plan targets
-    if: inputs.ci || inputs.release || github.event_name == 'workflow_dispatch'
-    runs-on: >-
-      ${{ inputs.ci && !inputs.release && vars.DSH_CI_FAILOVER_LINUX == 'blacksmith'
-          && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
@@ -102,7 +78,7 @@ jobs:
             # Native-only: hosted arm64 Linux uses ubuntu-24.04-arm, while
             # macos-latest is Apple Silicon; macos-15-intel is native x64.
             case "$t" in
-              node24-linux-x64)   runner=ubuntu-latest ;;
+              node24-linux-x64)   runner=ubuntu-24.04 ;;
               node24-linux-arm64) runner=ubuntu-24.04-arm ;;
               node24-macos-arm64) runner=macos-latest ;;
               node24-macos-x64)   runner=macos-15-intel ;;
@@ -124,9 +100,7 @@ jobs:
   sdk-wheel:
     needs: plan
     name: deepseek_harness_sdk-${{ needs.plan.outputs.version }}-py3-none-any.whl
-    runs-on: >-
-      ${{ inputs.ci && !inputs.release && vars.DSH_CI_FAILOVER_LINUX == 'blacksmith'
-          && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7.0.1
@@ -151,20 +125,10 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # Blacksmith x64 CI builds use 2 vCPU for compilation, bundling, and wheel smokes.
-  # Release macOS builds use larger GitHub runners; ordinary CI and direct
-  # builder dispatches retain the standard native target matrix.
   build:
     needs: [plan, sdk-wheel]
     name: ${{ matrix.target }}
-    runs-on: >-
-      ${{ inputs.release && matrix.target == 'node24-macos-x64' && 'macos-15-large'
-          || inputs.release && matrix.target == 'node24-macos-arm64' && 'macos-15-xlarge'
-          || inputs.ci && !inputs.release && matrix.target == 'node24-linux-x64'
-          && vars.DSH_CI_FAILOVER_LINUX == 'blacksmith' && 'blacksmith-2vcpu-ubuntu-2404'
-          || inputs.ci && !inputs.release && matrix.target == 'node24-win-x64'
-          && vars.DSH_CI_FAILOVER_WINDOWS == 'blacksmith' && 'blacksmith-2vcpu-windows-2025'
-          || matrix.runner }}
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -269,7 +233,6 @@ jobs:
         # therefore not a workflow choice.
         run: >-
           pnpm exec tsx scripts/build-exe-for-python-sdk.ts --targets=${{ matrix.target }}
-          ${{ inputs.ci && github.event_name == 'pull_request' && '--build-artifacts' || '' }}
 
       - name: Resolve platform outputs (POSIX)
         id: runtime-posix
@@ -394,80 +357,6 @@ jobs:
         run: |
           & "${{ steps.smoke-venv-windows.outputs.python }}" -I "$env:GITHUB_WORKSPACE\python\sdk\tests\run_installed_commands.py"
           if ($LASTEXITCODE -ne 0) { throw "Installed-wheel native command tests failed with exit code $LASTEXITCODE" }
-
-      - name: Preflight installed-wheel real API test (POSIX)
-        if: >-
-          inputs.ci
-          && runner.os != 'Windows'
-          && (github.event_name != 'pull_request'
-              || !(github.event.pull_request.head.repo.fork
-                   || github.event.pull_request.user.login == 'dependabot[bot]'))
-        env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY_EXTERNAL }}
-        run: |
-          set -euo pipefail
-          if [ -z "${DEEPSEEK_API_KEY:-}" ]; then
-            echo "::error::DEEPSEEK_API_KEY_EXTERNAL is empty; the installed-wheel real API test cannot self-skip."
-            exit 1
-          fi
-
-      - name: Preflight installed-wheel real API test (Windows)
-        if: >-
-          inputs.ci
-          && runner.os == 'Windows'
-          && (github.event_name != 'pull_request'
-              || !(github.event.pull_request.head.repo.fork
-                   || github.event.pull_request.user.login == 'dependabot[bot]'))
-        shell: pwsh
-        env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY_EXTERNAL }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:DEEPSEEK_API_KEY)) {
-            throw 'DEEPSEEK_API_KEY_EXTERNAL is empty; the installed-wheel real API test cannot self-skip.'
-          }
-
-      - name: Run installed-wheel real API black-box test (POSIX)
-        if: >-
-          inputs.ci
-          && runner.os != 'Windows'
-          && (github.event_name != 'pull_request'
-              || !(github.event.pull_request.head.repo.fork
-                   || github.event.pull_request.user.login == 'dependabot[bot]'))
-        env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY_EXTERNAL }}
-          DEEPSEEK_BASE_URL: https://api.deepseek.com/anthropic
-        run: |
-          set -euo pipefail
-          blackbox_root="$(python -c 'import tempfile; print(tempfile.mkdtemp(prefix="dsh-sdk-blackbox-live-"))')"
-          cd "$blackbox_root"
-          env -u PYTHONPATH -u DSH_RUNTIME_MODE \
-            "${{ steps.smoke-venv-posix.outputs.python }}" \
-            "$GITHUB_WORKSPACE/scripts/smoke-python-runtime.py" \
-            --scenario sdk-live \
-            --installed-wheel
-
-      - name: Run installed-wheel real API black-box test (Windows)
-        if: >-
-          inputs.ci
-          && runner.os == 'Windows'
-          && (github.event_name != 'pull_request'
-              || !(github.event.pull_request.head.repo.fork
-                   || github.event.pull_request.user.login == 'dependabot[bot]'))
-        shell: pwsh
-        env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY_EXTERNAL }}
-          DEEPSEEK_BASE_URL: https://api.deepseek.com/anthropic
-        run: |
-          $blackboxRoot = (& python -c 'import tempfile; print(tempfile.mkdtemp(prefix="dsh-sdk-blackbox-live-"))').Trim()
-          Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
-          Remove-Item Env:DSH_RUNTIME_MODE -ErrorAction SilentlyContinue
-          Push-Location $blackboxRoot
-          try {
-            & "${{ steps.smoke-venv-windows.outputs.python }}" "$env:GITHUB_WORKSPACE\scripts\smoke-python-runtime.py" --scenario sdk-live --installed-wheel
-            if ($LASTEXITCODE -ne 0) { throw "Installed-wheel live API smoke failed with exit code $LASTEXITCODE" }
-          } finally {
-            Pop-Location
-          }
 
       - name: Check Linux GLIBC requirements
         if: runner.os == 'Linux'

@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 /**
- * Derive the GitHub Actions matrices from the checked-in package matrix
+ * Derive the GitHub Actions matrix from the checked-in package matrix
  * (`packages/<name>/prebuilds.json`). Single source: adding a platform
- * package extends CI and Release without editing a workflow.
+ * package extends CI without editing a workflow.
  *
- *   node scripts/github-matrix.mjs ci                → one leg per distinct platform
- *   node scripts/github-matrix.mjs release-prebuild  → one leg per platform package
+ *   node scripts/github-matrix.mjs ci  → one leg per distinct platform
  */
 
 import path from 'node:path';
@@ -27,38 +26,16 @@ function runnerFor(platform) {
   return runner;
 }
 
-function platformManifests() {
-  return platformDirs().map((dir) => ({
-    dir,
-    name: path.basename(dir),
-    prebuilds: readJson(path.join(root, dir, 'prebuilds.json')),
-  }));
-}
-
 function ciMatrix() {
-  const platforms = [...new Set(platformManifests().map(({ prebuilds }) => prebuilds.platform))].sort();
+  const platforms = [...new Set(platformDirs().map((dir) => readJson(path.join(root, dir, 'prebuilds.json')).platform))].sort();
   return {
     include: platforms.map((platform) => ({ platform, runner: runnerFor(platform) })),
-  };
-}
-
-function releasePrebuildMatrix() {
-  return {
-    include: platformManifests().map(({ dir, name, prebuilds }) => ({
-      platform: prebuilds.platform,
-      package: name,
-      dir,
-      runner: runnerFor(prebuilds.platform),
-      artifact: `prebuild-${name}`,
-    })),
   };
 }
 
 const target = process.argv[2];
 const matrices = {
   ci: ciMatrix,
-  'release-prebuild': releasePrebuildMatrix,
-  compatibility: () => ciMatrix().include.flatMap((row) => [20, 22, 24, 26].map((node) => ({ ...row, node }))),
 };
 
 if (!target || !matrices[target]) {

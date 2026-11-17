@@ -27,9 +27,6 @@ async function main(): Promise<void> {
   const environment = loadDesktopPackageEnvironment('darwin')
   const sourceDigest = cuaHelperSourceDigest(root)
   const buildKey = cuaHelperBuildKey(sourceDigest, environment)
-  if (process.env.CUA_EXPECTED_BUILD_KEY !== undefined && process.env.CUA_EXPECTED_BUILD_KEY !== buildKey) {
-    throw new Error('CUA build inputs changed after artifact selection; restart the helper workflow')
-  }
   const signing = resolveMacOSSigningEnvironment(environment)
   const notary = resolveMacOSNotarizationEnvironment(environment)
   const settings = resolveMacOSPackageSettings(environment)

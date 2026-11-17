@@ -1,16 +1,6 @@
 name: Build SSH helper
 
 on:
-  workflow_call:
-    inputs:
-      targets:
-        description: Comma-separated native Node 24 targets; empty builds all four.
-        type: string
-        default: ''
-      release:
-        description: Retain a complete release build when another run starts.
-        type: boolean
-        default: false
   workflow_dispatch:
     inputs:
       targets:
@@ -22,12 +12,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: ssh-helper-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ !inputs.release }}
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   plan:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       matrix: ${{ steps.targets.outputs.matrix }}

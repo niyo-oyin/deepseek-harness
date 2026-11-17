@@ -222,10 +222,10 @@ Desktop reads the shared `locale.preference` and theme preference from the Host 
 
 Desktop has no update check. To install a new version, build an installer locally, for example `pnpm --dir apps/desktop run package:win:x64:unsigned --build-version <version>` (or the signed `package:win:x64`, or a macOS `package:mac:*` script), and run it over the existing installation.
 
-Use the dedicated guides for build operations. Shared Windows runners have accepted credential and device isolation limits; read them before signing or executing branch code.
+Use the dedicated guides for build operations. Windows signing has accepted credential and device isolation limits; read them before signing or running untrusted code under the build account.
 
-- [Desktop packaging](packaging/README.md): local and Actions builds, versions, deployment settings, artifacts, logs and verification.
-- [Windows signing and runner operations](windows-signing/README.md): machine setup, accepted isolation risks, signing credentials, token failures and cache maintenance.
+- [Desktop packaging](packaging/README.md): local builds, versions, deployment settings, artifacts, logs and verification.
+- [Windows signing operations](windows-signing/README.md): machine setup, accepted isolation risks, signing credentials, token failures and cache maintenance.
 
 <a id="windows-uninstall-rules"></a>
 
