@@ -16,6 +16,6 @@ Packaging no longer produces update metadata, blockmaps, or a macOS ZIP; macOS s
 ## Migration
 
 1. Delete the update, download, and mandatory-update lines listed above from `apps/desktop/.env.windows`, `apps/desktop/.env.macos`, and any `presets/*.env` under `DSH_PACKAGING_CONFIG_DIR`; packaging fails with an unsupported-setting error until they are gone. Remove the publishing `secrets/cos-*.json` files and `publishing/*.json` configuration if you created them.
-2. Optionally delete `desktop/settings.json` under Desktop's Electron user-data directory, which Electron names after the packaged manifest name under `%APPDATA%` on Windows or `~/Library/Application Support` on macOS.
+2. Optionally delete `desktop/settings.json` under the previous Desktop's Electron user-data directory, `%APPDATA%\dsh-fork-desktop` on Windows or `~/Library/Application Support/dsh-fork-desktop` on macOS; this release uses `ndsh-desktop` instead ([Desktop rename](../desktop-ndsh-identity/guide.md)).
 3. Code that read `dshDesktop.updates` or imported `@deepseek-ai/dsh-client-ui-settings-general/types` removes that code.
 4. Confirm with `pnpm --dir apps/desktop run check:package win-x64 --unsigned` (or `mac-arm64`, `mac-x64`): it passes with the edited files, and the installed application menu has no **Check for Updates…** item.
