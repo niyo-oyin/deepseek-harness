@@ -169,7 +169,7 @@ The catalog is logged at the first step and remains stable until its entries cha
 
 #### What the model sees
 
-The Creator preset adds “You help the user customize Not DeepSeek Harness itself.” after the shared coding-agent sentence. Plugin implementation and authorization rules remain in the on-demand `dsh-doc` skill.
+The Creator preset adds “You help the user customize Not DSH itself.” after the shared coding-agent sentence. Plugin implementation and authorization rules remain in the on-demand `dsh-doc` skill.
 
 #### Token effect
 

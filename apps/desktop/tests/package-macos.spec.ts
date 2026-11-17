@@ -19,7 +19,7 @@ const environment = {
 async function fixture(arch: 'arm64' | 'x64' = 'arm64') {
   const root = await mkdtemp(join(tmpdir(), 'desktop-disk-image-'))
   const artifactsRoot = join(root, 'artifacts')
-  const appPath = join(artifactsRoot, arch === 'arm64' ? 'mac-arm64' : 'mac', 'Not DeepSeek Harness.app')
+  const appPath = join(artifactsRoot, arch === 'arm64' ? 'mac-arm64' : 'mac', 'Not DSH.app')
   await mkdir(appPath, { recursive: true })
   await writeFile(join(appPath, 'payload'), 'signed content')
   const version = '1.2.3-alpha.1'
@@ -76,7 +76,7 @@ describe('macOS disk image', () => {
 
   it('passes the actual App and isolated output directory to the DMG builder', () => {
     const target = resolveDesktopPackageTarget('mac-arm64', 'darwin', 'arm64')
-    const appPath = join('private build', 'Not DeepSeek Harness.app')
+    const appPath = join('private build', 'Not DSH.app')
     const output = join(dirname(appPath), 'artifacts')
     expect(desktopElectronBuilderArguments(target, false, { appPath, output })).toEqual([
       'exec', 'electron-builder', '--config', 'electron-builder.config.mjs',

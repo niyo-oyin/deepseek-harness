@@ -54,10 +54,10 @@ describe('DocumentTitle', () => {
   it('uses the localized product title supplied by the frame', () => {
     const { sessionId, sessions, props } = titleSources()
     sessions.update((state) => { state.byId[sessionId]!.title = 'First title' })
-    const mounted = render(<DocumentTitle {...props} productTitle="Not DeepSeek Harness" />)
-    expect(document.title).toBe('First title — Not DeepSeek Harness')
+    const mounted = render(<DocumentTitle {...props} productTitle="Not DSH" />)
+    expect(document.title).toBe('First title — Not DSH')
     mounted.unmount()
-    expect(document.title).toBe('Not DeepSeek Harness')
+    expect(document.title).toBe('Not DSH')
   })
 
   it('keeps the product title across global panels and restores the latest Session title on return', () => {

@@ -531,7 +531,7 @@ export class HarnessSdkJsonRpcServer {
       case 'shutdown':
         return this.shutdown()
       default:
-        throw new Error(`unknown Not DeepSeek Harness SDK runtime method: ${method}`)
+        throw new Error(`unknown Not DSH SDK runtime method: ${method}`)
     }
   }
 

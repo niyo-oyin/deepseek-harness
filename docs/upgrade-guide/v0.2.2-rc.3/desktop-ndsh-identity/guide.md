@@ -1,15 +1,15 @@
 ---
 kind: upgrade-guide
-description: "Desktop is named Not DeepSeek Harness instead of DSH Fork, so its executable, installation directory, Electron user data, and installer cache directory change names and nothing is carried over."
+description: "Desktop is named Not DSH instead of DSH Fork, so its executable, installation directory, Electron user data, and installer cache directory change names and nothing is carried over."
 ---
 
-# Desktop is named Not DeepSeek Harness
+# Desktop is named Not DSH
 
 ## Change
 
-The packaged Desktop application was named "DSH Fork" with the manifest name `dsh-fork-desktop`. It is now named "Not DeepSeek Harness" with the manifest name `ndsh-desktop` ([`desktop-product.mjs`](../../../../apps/desktop/scripts/desktop-product.mjs)). As a result:
+The packaged Desktop application was named "DSH Fork" with the manifest name `dsh-fork-desktop`. It is now named "Not DSH" with the manifest name `ndsh-desktop` ([`desktop-product.mjs`](../../../../apps/desktop/scripts/desktop-product.mjs)). As a result:
 
-- The executable, default installation directory, shortcuts, uninstall entry, and macOS bundle are `Not DeepSeek Harness` (`Not DeepSeek Harness.exe`, `Not DeepSeek Harness.app`).
+- The executable, default installation directory, shortcuts, uninstall entry, and macOS bundle are `Not DSH` (`Not DSH.exe`, `Not DSH.app`).
 - Electron user data (keyboard shortcuts, the cached interface language, plugin operation reports, and the close-to-background acknowledgement) moves from `%APPDATA%\dsh-fork-desktop` to `%APPDATA%\ndsh-desktop` on Windows and from `~/Library/Application Support/dsh-fork-desktop` to `~/Library/Application Support/ndsh-desktop` on macOS.
 - The per-application cache directory that holds installer failure reports moves from `dsh-fork-desktop-updater` to `ndsh-desktop-updater` under `%LOCALAPPDATA%` (macOS `~/Library/Caches`).
 - Installer files are named `ndsh-<version>-<os>-<arch>…`, and the example packaging environment files set `DSH_DESKTOP_APP_ID=app.ndsh.desktop`.
@@ -22,5 +22,5 @@ Nothing is read from or moved out of the previous directories. On Windows, the i
 2. Quit DSH Fork, including its background process. To keep keyboard shortcuts, copy `keybindings.json` from the previous user-data directory to the same place under `ndsh-desktop`.
 3. Uninstall DSH Fork: on Windows through Settings → Apps → Installed apps, which also removes `%APPDATA%\dsh-fork-desktop`, `%APPDATA%\DSH Fork`, and `%LOCALAPPDATA%\dsh-fork-desktop-updater`; on macOS by deleting `DSH Fork.app`, then deleting `~/Library/Application Support/dsh-fork-desktop`, `~/Library/Caches/dsh-fork-desktop-updater`, and `~/Library/Logs/DSH Fork` if present.
 4. Move the Harness home as described in [its guide](../home-directory-ndsh/guide.md).
-5. Install Not DeepSeek Harness and register the `dsh` command again from **Manage dsh Command…** if you use it.
-6. Confirm: only one Desktop entry remains in the installed apps list, and Not DeepSeek Harness lists your previous Sessions.
+5. Install Not DSH and register the `dsh` command again from **Manage dsh Command…** if you use it.
+6. Confirm: only one Desktop entry remains in the installed apps list, and Not DSH lists your previous Sessions.

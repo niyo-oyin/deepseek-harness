@@ -92,7 +92,7 @@ export class DeepSeekHarness implements AsyncDisposable {
         } catch (cleanupError: unknown) {
           throw new AggregateError(
             [error, cleanupError],
-            'Not DeepSeek Harness initialization and cleanup failed',
+            'Not DSH initialization and cleanup failed',
           )
         }
         if (!this.closed) this.clientInstance = this.createClient()

@@ -1,12 +1,12 @@
 # Uninstall NDSH Desktop
 
-Use this guide to uninstall Not DeepSeek Harness Desktop on macOS or Windows. Local data cleanup is optional.
+Use this guide to uninstall Not DSH Desktop on macOS or Windows. Local data cleanup is optional.
 
 ## 1. Uninstall the app
 
 Finish any commands using Desktop's bundled CLI. If you installed the `dsh` command through Desktop, first select **Manage dsh Command… → Remove** in the application menu. This removes Desktop's command registration without uninstalling independent CLI programs.
 
-Quit Not DeepSeek Harness, then uninstall it using your platform's procedure:
+Quit Not DSH, then uninstall it using your platform's procedure:
 
 - **macOS:** Delete the app from Applications in Finder.
 - **Windows:** Uninstall it through Settings → Apps → Installed apps on Windows 11, or Control Panel → Programs → Programs and Features.
@@ -26,7 +26,7 @@ sh -c '
 rm -rf -- \
   "$HOME/.ndsh" \
   "$HOME/Library/Application Support/ndsh-desktop" \
-  "$HOME/Library/Logs/Not DeepSeek Harness" \
+  "$HOME/Library/Logs/Not DSH" \
   "$HOME/Library/Preferences/app.ndsh.desktop.plist" \
   "$HOME/Library/Preferences/ByHost"/app.ndsh.desktop.ShipIt.*.plist \
   "$HOME/Library/Caches/app.ndsh.desktop" \

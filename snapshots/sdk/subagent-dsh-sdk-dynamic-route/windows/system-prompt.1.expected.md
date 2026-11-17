@@ -1,4 +1,4 @@
-You are an AI agent powered by Not DeepSeek Harness (NDSH).
+You are an AI agent powered by Not DSH (NDSH).
 
 Echo where you run.
 

@@ -1,6 +1,6 @@
 [
   {
-    "label": "关于 Not DeepSeek Harness",
+    "label": "关于 Not DSH",
     "role": "about"
   },
   {
@@ -21,7 +21,7 @@
   },
   {
     "role": "hide",
-    "label": "隐藏 Not DeepSeek Harness"
+    "label": "隐藏 Not DSH"
   },
   {
     "role": "hideOthers",
@@ -36,6 +36,6 @@
   },
   {
     "role": "quit",
-    "label": "退出 Not DeepSeek Harness"
+    "label": "退出 Not DSH"
   }
 ]

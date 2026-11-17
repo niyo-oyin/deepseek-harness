@@ -210,8 +210,8 @@ describe('Python SDK dsh profile keyless smoke', () => {
         'Time sampled while preparing']) {
         expect(requestText.includes(text), text).toBe(true)
       }
-      expect(requestText).not.toContain('Current Not DeepSeek Harness implementation checkout:')
-      expect(requestText).not.toContain('Current Not DeepSeek Harness Web GUI URL:')
+      expect(requestText).not.toContain('Current Not DSH implementation checkout:')
+      expect(requestText).not.toContain('Current Not DSH Web GUI URL:')
 
       child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'shutdown' })}\n`)
       const shutdown = await waitForLine(lines, value => value.id === 3, () => stderr)

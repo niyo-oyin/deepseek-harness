@@ -1,9 +1,9 @@
 ---
 name: dsh-doc
-description: Use when a task needs facts about Not DeepSeek Harness (NDSH) itself, such as how a feature, setting, plugin, agent preset, tool, or Cordis API of the running installation works; when the user asks to design, review, build, install, enable, or debug an NDSH plugin, bundle, MCP connection, agent preset, plugin icon or detail page, or an NDSH tool definition or skill; and when upgrading a plugin or profile to a newer NDSH release. Loading it grants no permission to change files or the profile.
+description: Use when a task needs facts about Not DSH (NDSH) itself, such as how a feature, setting, plugin, agent preset, tool, or Cordis API of the running installation works; when the user asks to design, review, build, install, enable, or debug an NDSH plugin, bundle, MCP connection, agent preset, plugin icon or detail page, or an NDSH tool definition or skill; and when upgrading a plugin or profile to a newer NDSH release. Loading it grants no permission to change files or the profile.
 ---
 
-# Not DeepSeek Harness documentation
+# Not DSH documentation
 
 Answer questions about NDSH from the documentation and source of the installed version, not from memory, and extend NDSH through bundles installed in the current profile.
 

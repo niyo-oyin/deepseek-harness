@@ -73,7 +73,7 @@ export function apply(ctx: Context, config: Config): void {
   if (ready === undefined || exit === undefined || profile === undefined) throw new Error('Computer Use MCP requires the dsh profile launcher')
   const commandName = `dsh --profile ${profile.name}`
   const program = new Command(commandName)
-    .description('Serve Not DeepSeek Harness Computer Use to an MCP client over stdio.')
+    .description('Serve Not DSH Computer Use to an MCP client over stdio.')
     .addHelpText('after', `
 Examples:
   ${commandName}                          serve one MCP client until it closes stdin
