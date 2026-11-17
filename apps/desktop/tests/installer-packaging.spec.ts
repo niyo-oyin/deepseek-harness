@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { Arch, Platform } from 'electron-builder'
 import { AppInfo, Packager } from 'app-builder-lib'
 import { expandMacro } from 'app-builder-lib/out/util/macroExpander.js'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, onTestFinished, vi } from 'vitest'
 
 const { execute, write } = vi.hoisted(() => ({ execute: vi.fn(async () => undefined), write: vi.fn(async () => undefined) }))
 vi.mock('node:child_process', async (importOriginal) => {
@@ -33,6 +33,10 @@ describe('installer preparation preserves application dependencies', () => {
     for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value)
     try {
       const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
+      // The copyright year comes from the clock when the configuration is created.
+      vi.useFakeTimers({ toFake: ['Date'] })
+      onTestFinished(() => { vi.useRealTimers() })
+      vi.setSystemTime(new Date(2031, 0, 1))
       const config = createElectronBuilderConfig(env, platform, 'x64')
       const metadataPackager = new Packager({ projectDir: tmpdir() })
       const metadata: unknown = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
@@ -42,7 +46,7 @@ describe('installer preparation preserves application dependencies', () => {
       })
       const appInfo = new AppInfo(metadataPackager, undefined)
       expect(appInfo.companyName).toBe('Hangzhou DeepSeek Artificial Intelligence Co., Ltd.')
-      expect(appInfo.copyright).toBe(`Copyright © ${new Date().getFullYear()} Not DeepSeek Harness`)
+      expect(appInfo.copyright).toBe('Copyright © 2031 Not DeepSeek Harness')
       if (platform === 'win32') {
         expect(expandMacro(config.nsis.uninstallDisplayName, null, appInfo, {}, false)).toBe('Not DeepSeek Harness')
         expect(config.nsis.installerLanguages).toEqual(readInstallerLocales().map(locale => locale.id))
@@ -87,7 +91,7 @@ describe('installer preparation preserves application dependencies', () => {
       DSH_DESKTOP_TARGET_ARCH: 'x64',
       DSH_DESKTOP_UNSIGNED: '1',
     }, 'win32', 'x64')
-    expect(config.artifactName).toBe('deepseek-harness-${version}-${os}-${arch}-unsigned.${ext}')
+    expect(config.artifactName).toBe('ndsh-${version}-${os}-${arch}-unsigned.${ext}')
   })
 
   it('packages every preload entry point the shell loads', async () => {

@@ -23,7 +23,7 @@ async function fixture(arch: 'arm64' | 'x64' = 'arm64') {
   await mkdir(appPath, { recursive: true })
   await writeFile(join(appPath, 'payload'), 'signed content')
   const version = '1.2.3-alpha.1'
-  const dmg = `deepseek-harness-${version}-mac-${arch}.dmg`
+  const dmg = `ndsh-${version}-mac-${arch}.dmg`
   const request = { arch, artifactsRoot, version, environment }
   const apple: MacOSDiskImageOperations = { verifySignature: vi.fn() }
   const build = async (artifact: DesktopPrepackagedArtifact) => {

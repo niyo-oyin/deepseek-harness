@@ -21,8 +21,8 @@ export interface ShellDialogView {
   readonly technicalDetailsLabel: string
 }
 
-/** Electron message options with separately expandable, main-owned diagnostics. */
-export interface ShellDialogOptions extends MessageBoxOptions {
+/** Electron message options with separately expandable, main-owned diagnostics; a shell dialog has no abort signal. */
+export interface ShellDialogOptions extends Omit<MessageBoxOptions, 'signal'> {
   readonly technicalDetails?: string
 }
 
@@ -60,10 +60,10 @@ export class DesktopShellDialog {
 
   /**
    * @param preload - Bundled isolated preload.
-   * @param locale - Shell-owned copy or a reader of the current UI language.
+   * @param locale - Reader of the current shell language.
    * @param overlays - Application-owned view creation and input tracking.
    */
-  constructor(private readonly preload: string, private readonly locale: DesktopLocale | (() => DesktopLocale),
+  constructor(private readonly preload: string, private readonly locale: () => DesktopLocale,
     private readonly overlays: Pick<DesktopShellOverlays, 'create'>) {
     ipcMain.handle(SHELL_DIALOG_IPC.status, (event) => { this.owned(event); return this.active?.view ?? null })
     ipcMain.handle(SHELL_DIALOG_IPC.respond, (event, revision: unknown, index: unknown) => {
@@ -80,14 +80,14 @@ export class DesktopShellDialog {
 
   /**
    * @param parent - Window blocked by this dialog.
-   * @param options - Main-owned localized content, response choices, and optional cancellation signal.
-   * @returns A displayed response, or cancellation on replacement, abort, close, or load failure; backdrop dismissal fades independently.
+   * @param options - Main-owned localized content and response choices.
+   * @returns A displayed response, or cancellation on replacement, close, or load failure; backdrop dismissal fades independently.
    */
   show(parent: BrowserWindow, options: ShellDialogOptions): Promise<MessageBoxReturnValue> {
-    const locale = typeof this.locale === 'function' ? this.locale() : this.locale
+    const locale = this.locale()
     const buttons = options.buttons ?? [locale.messages.acknowledge]
     const cancelId = options.cancelId ?? buttons.length - 1
-    if (this.disposed || options.signal?.aborted === true || parent.isDestroyed()) {
+    if (this.disposed || parent.isDestroyed()) {
       return Promise.resolve({ response: cancelId, checkboxChecked: false })
     }
     if (this.parent !== parent) { this.cancel(); this.close() }
@@ -102,11 +102,9 @@ export class DesktopShellDialog {
       detail: options.detail ?? '', buttons, cancelId, closeLabel: locale.messages.close,
       technicalDetails: options.technicalDetails ?? '', technicalDetailsLabel: locale.messages.technicalDetails }
     return new Promise((resolve) => {
-      const abort = (): void => { finish(cancelId) }
       const finish = (response: number, retain = false): void => {
         if (this.active?.view !== view) return
         this.active = undefined
-        options.signal?.removeEventListener('abort', abort)
         if (!retain && !surface.webContents.isDestroyed()) {
           surface.webContents.send(SHELL_DIALOG_IPC.changed, null)
           this.closing = setTimeout(() => { this.close() }, 150)
@@ -114,7 +112,6 @@ export class DesktopShellDialog {
         resolve({ response, checkboxChecked: false })
       }
       this.active = { view, finish }
-      options.signal?.addEventListener('abort', abort, { once: true })
       if (existing !== undefined) { surface.webContents.send(SHELL_DIALOG_IPC.changed, view); return }
       const failed = (): void => { if (this.view === surface) { this.cancel(); this.close() } }
       surface.webContents.once('destroyed', failed)

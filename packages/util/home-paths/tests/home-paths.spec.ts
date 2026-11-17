@@ -3,10 +3,6 @@ import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  AGENTS_HOME_DIR_NAME,
-  DEFAULT_AGENTS_HOME_DISPLAY,
-  DEFAULT_DSH_HOME_DISPLAY,
-  DSH_HOME_DIR_NAME,
   agentsHomeDisplay,
   canonicalizeWatchPath,
   defaultAgentsHome,
@@ -25,9 +21,7 @@ afterEach(() => {
 })
 
 describe('dsh path helpers', () => {
-  it('owns the shared default DSH home directory name', () => {
-    expect(DSH_HOME_DIR_NAME).toBe('.ndsh')
-    expect(DEFAULT_DSH_HOME_DISPLAY).toBe('~/.ndsh')
+  it('defaults the DSH home under the user home', () => {
     expect(defaultDshHome()).toBe(join(homedir(), '.ndsh'))
   })
 
@@ -63,9 +57,7 @@ describe('dsh path helpers', () => {
     expect(dshHomeDisplay('/some/other/root')).toBe('$DSH_HOME')
   })
 
-  it('owns the shared default agents home directory name', () => {
-    expect(AGENTS_HOME_DIR_NAME).toBe('.agents')
-    expect(DEFAULT_AGENTS_HOME_DISPLAY).toBe('~/.agents')
+  it('defaults the agents home under the user home', () => {
     expect(defaultAgentsHome()).toBe(join(homedir(), '.agents'))
   })
 

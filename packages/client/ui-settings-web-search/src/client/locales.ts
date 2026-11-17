@@ -34,7 +34,7 @@ export const en: Record<WebSearchSettingsLocaleKey, string> = {
   providersFailed: "Couldn't load the provider list, so this menu may be incomplete.",
   retry: 'Retry',
   pluginProviderHint: 'Configure this provider in its own plugin settings.',
-  searchAutoHint: 'No provider is chosen. Web search uses the one provider that is set up; while none or several are, web search is off until you choose one here.',
+  searchAutoHint: 'No provider is chosen. Web search uses the provider that is set up if there is exactly one; if none or several are set up, web search stays off until you choose one here.',
   credential: 'API key',
   baseUrl: 'Base URL',
   baseUrlHint: 'Include the API prefix. Leave blank to use the official address. The provider appends {path}.',

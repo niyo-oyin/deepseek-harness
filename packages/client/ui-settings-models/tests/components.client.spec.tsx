@@ -1828,6 +1828,26 @@ describe('ModelsSection', () => {
     expect(screen.getByRole('button', { name: en.add })).toBeTruthy()
   })
 
+  it('keeps Cancel on a catalog-only card when a refresh adopts its last addable provider', async () => {
+    const scripted = scriptedFace()
+    let adopted = false
+    scripted.face.settings.describe.mockResolvedValue(remoteOk({
+      writable: true, hasDocument: false, namespaces: wireNamespaces().filter(view => view.ns !== 'llm-pi-ai'),
+    }))
+    scripted.face.llm.listConfigurableProviders.mockResolvedValue(remoteOk([
+      { provider: 'deepseek-official', displayName: 'DeepSeek', settingsNs: 'llm-deepseek', settingsPath: [] },
+    ]))
+    scripted.face.credentials.describe.mockImplementation((refs: string[]) => Promise.resolve(remoteOk(
+      Object.fromEntries(refs.map(ref => [ref, { configured: adopted, writable: true }])),
+    )))
+    const { controller } = await mountFace(scripted)
+    fireEvent.click(screen.getByRole('button', { name: en.add }))
+    expect(screen.getByLabelText(en.provider)).toBeTruthy()
+    adopted = true
+    await act(async () => { await controller.load() })
+    fireEvent.click(screen.getByRole('button', { name: en.cancel }))
+    expect(screen.getByRole('button', { name: en.add })).toBeTruthy()
+  })
   it('cancels the add card back to the add button', async () => {
     await mountSection()
     openAddCard()

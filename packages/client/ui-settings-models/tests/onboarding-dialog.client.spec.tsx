@@ -88,6 +88,7 @@ function harness(options: {
   settingsWritable?: boolean
   providersFailure?: string
   setFailure?: string
+  acmeConfigured?: boolean
 } = {}) {
   if (document.getElementById('root') === null) {
     const appRoot = document.createElement('div')
@@ -98,9 +99,11 @@ function harness(options: {
   const configured = options.configured ?? (() => fileConfigured)
   const apiKeyEnv = options.apiKeyEnv === undefined ? 'DEEPSEEK_API_KEY' : options.apiKeyEnv
   const mutate = vi.fn(() => Promise.resolve(remoteOk(deepSeekNamespace(apiKeyEnv))))
-  const set = vi.fn((_ref: string, _value: string) => {
+  let acmeConfigured = options.acmeConfigured ?? false
+  const set = vi.fn((ref: string, _value: string) => {
     if (options.setFailure !== undefined) return Promise.resolve(remoteFail(options.setFailure))
-    fileConfigured = true
+    if (ref === 'ACME_API_KEY') acmeConfigured = true
+    else fileConfigured = true
     return Promise.resolve(remoteOk(undefined))
   })
   const face = {
@@ -128,7 +131,7 @@ function harness(options: {
     credentials: {
       describe: () => options.describeFailure === undefined
         ? Promise.resolve(remoteOk({
-          ACME_API_KEY: { configured: false, writable: true },
+          ACME_API_KEY: { configured: acmeConfigured, writable: true },
           DEEPSEEK_API_KEY: {
             configured: configured(),
             ...configured() && options.credential?.source !== undefined
@@ -284,5 +287,17 @@ describe('ProviderOnboardingDialog', () => {
     render(<ProviderOnboardingDialog {...h.props} />)
     await waitFor(() => { expect(screen.getByRole('dialog')).toBeTruthy() })
     expect(h.complete).not.toHaveBeenCalled()
+  })
+
+  it('ends an explicitly opened step once the added provider is saved', async () => {
+    const h = harness({ acmeConfigured: true })
+    h.props.explicit = true
+    render(<ProviderOnboardingDialog {...h.props} />)
+    await screen.findByRole('dialog')
+    fireEvent.change(screen.getByLabelText(en.provider), { target: { value: 'deepseek-official' } })
+    fireEvent.change(screen.getByLabelText(en.keyInput), { target: { value: 'sk-live' } })
+    fireEvent.click(screen.getByRole('button', { name: en.apply }))
+    await waitFor(() => { expect(h.set).toHaveBeenCalledWith('DEEPSEEK_API_KEY', 'sk-live') })
+    await waitFor(() => { expect(h.complete).toHaveBeenCalledOnce() })
   })
 })

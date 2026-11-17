@@ -73,3 +73,24 @@ it.each(['en', 'zh-CN'])('keeps ordinary diagnostics folded, text-only, and keyb
   publish(null)
   expect(backdrop.classList.contains('visible')).toBe(false)
 })
+
+it('answers one button click per revision', async () => {
+  const p = page('shell-dialog')
+  const locale = resolveDesktopLocale('en')
+  const state: ShellDialogView = { revision: 1, locale: locale.id, title: '', message: locale.messages.cliCommandTitle, detail: '',
+    buttons: ['Remove', 'Keep'], cancelId: 1, closeLabel: locale.messages.close,
+    technicalDetailsLabel: locale.messages.technicalDetails, technicalDetails: '' }
+  const respond = vi.fn(async () => {})
+  let publish!: (view: ShellDialogView | null) => void
+  const api: ShellDialogApi = { status: async () => state, respond, subscribe: (listener) => { publish = listener; return () => {} } }
+  Object.defineProperty(p.dom.window, 'dshShellDialog', { value: api })
+  p.run()
+  await expect.poll(() => p.element('dialog').hidden).toBe(false)
+  const button = (index: number) => p.element('actions').children[index] as HTMLButtonElement
+  button(0).click()
+  button(1).click()
+  expect(respond.mock.calls).toEqual([[1, 0]])
+  publish({ ...state, revision: 2 })
+  button(1).click()
+  expect(respond.mock.calls).toEqual([[1, 0], [2, 1]])
+})

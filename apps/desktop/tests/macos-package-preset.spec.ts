@@ -93,7 +93,7 @@ it.each(['arm64', 'x64'])('records the %s debugging DMG only for an explicit CI 
     expect(debugging.signal).toBeNull()
     expect(debugging.stderr).toBe('')
     expect(debugging.status).toBe(0)
-    const installer = `deepseek-harness-${parseEnv(await readFile(output, 'utf8')).version}-mac-${arch}-unnotarized.dmg`
+    const installer = `ndsh-${parseEnv(await readFile(output, 'utf8')).version}-mac-${arch}-unnotarized.dmg`
     expect(parseEnv(await readFile(output, 'utf8'))).toMatchObject({
       installer: join(import.meta.dirname, '..', '.desktop-build', 'targets', `mac-${arch}`, 'unnotarized-artifacts', installer),
       'installer-name': installer,

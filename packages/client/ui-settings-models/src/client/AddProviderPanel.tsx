@@ -190,14 +190,6 @@ export function AddProviderPanel(
                 ))}
               </select>
             </div>
-            {/* Until a provider is chosen there is no editor footer, so the card carries its own Cancel where it has one. */}
-            {draft === undefined && cancelable
-              ? (
-                <div className={styles['editorActions']}>
-                  <button type="button" className={styles['secondaryButton']} onClick={() => { onClose(false) }}>{t('cancel')}</button>
-                </div>
-              )
-              : null}
             {draft === undefined ? null : <ProviderEditor
               key={draft.target.provider}
               provider={draft.target.provider}
@@ -226,6 +218,15 @@ export function AddProviderPanel(
                 { provider: addRow.entry, configured: addRow.configured, keyConfigured: keyConfiguredOf(addRow) },
                 { entryKey: addRow.entry.settingsNs },
               )}
+          </div>
+        )
+        : null}
+      {/* Until a provider is chosen there is no editor footer, so the card carries its own Cancel where it has one,
+          also after a refresh adopts the last catalog row and the catalog panel has nothing left to show. */}
+      {mode === 'catalog' && draft === undefined && cancelable
+        ? (
+          <div className={styles['editorActions']}>
+            <button type="button" className={styles['secondaryButton']} onClick={() => { onClose(false) }}>{t('cancel')}</button>
           </div>
         )
         : null}
