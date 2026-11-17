@@ -51,13 +51,13 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function setup(locale: DesktopLocale | (() => DesktopLocale) = resolveDesktopLocale('zh-CN')) {
+function setup(locale: () => DesktopLocale = () => resolveDesktopLocale('zh-CN')) {
   const parent = new fixture.FakeParent()
   const owner = parent as unknown as BrowserWindow
   const overlays = new DesktopShellOverlays()
   dialogs = new DesktopShellDialog('preload-shell-dialog.cjs', locale, overlays)
-  const show = (signal?: AbortSignal, options: Partial<ShellDialogOptions> = {}) => dialogs!.show(owner, {
-    message: '已安装 Desktop 命令', buttons: ['移除'], cancelId: 1, ...options, ...(signal === undefined ? {} : { signal }),
+  const show = (options: Partial<ShellDialogOptions> = {}) => dialogs!.show(owner, {
+    message: '已安装 Desktop 命令', buttons: ['移除'], cancelId: 1, ...options,
   })
   const invoke = (channel: string, ...args: unknown[]) => {
     const view = fixture.views.at(-1)!
@@ -108,7 +108,7 @@ it('replaces the displayed dialog in the same view without activating its owner'
   await Promise.resolve()
   const view = fixture.views[0]!
   const old = f.invoke(SHELL_DIALOG_IPC.status) as { revision: number }
-  const next = f.show(undefined, { message: '已移除 Desktop 命令注册' })
+  const next = f.show({ message: '已移除 Desktop 命令注册' })
   expect((await first).response).toBe(1)
   expect(fixture.views).toHaveLength(1)
   expect(f.parent.contentView.addChildView).toHaveBeenCalledOnce()
@@ -127,19 +127,17 @@ it('releases keyboard blocking only after fade-out and retains it across replace
   vi.useFakeTimers()
   const f = setup()
   expect(f.overlays.input(f.owner)).toEqual({ revision: 0, blocked: false })
-  const firstAbort = new AbortController()
-  const first = f.show(firstAbort.signal)
+  const first = f.show()
   const view = fixture.views[0]!
   expect(f.overlays.input(f.owner)).toEqual({ revision: 1, blocked: true })
-  firstAbort.abort()
+  f.invoke(SHELL_DIALOG_IPC.respond, 1)
   await first
   expect(view.webContents.send).toHaveBeenLastCalledWith(SHELL_DIALOG_IPC.changed, null)
-  const nextAbort = new AbortController()
-  const next = f.show(nextAbort.signal)
+  const next = f.show()
   await vi.advanceTimersByTimeAsync(150)
   expect(view.destroyed).toBe(false)
   expect(f.overlays.input(f.owner)).toEqual({ revision: 1, blocked: true })
-  nextAbort.abort()
+  f.invoke(SHELL_DIALOG_IPC.respond, 1)
   await next
   await vi.advanceTimersByTimeAsync(150)
   expect(view.destroyed).toBe(true)
@@ -167,13 +165,8 @@ it('blocks owner input and restores dialog focus only when that owner is focused
   expect(f.parent.listenerCount('focus')).toBe(0)
 })
 
-it('cancels on abort, renderer failure, failed load, disposal, or a destroyed owner', async () => {
+it('cancels on renderer failure, failed load, disposal, or a destroyed owner', async () => {
   const f = setup()
-  const abort = new AbortController()
-  const pending = f.show(abort.signal)
-  abort.abort()
-  expect((await pending).response).toBe(1)
-  expect((await f.show(abort.signal)).response).toBe(1)
   const crashing = f.show()
   fixture.views.at(-1)!.webContents.emit('render-process-gone')
   expect((await crashing).response).toBe(1)
@@ -191,8 +184,7 @@ it('cancels on abort, renderer failure, failed load, disposal, or a destroyed ow
 
 it('denies foreign navigation, redirects, and new windows', async () => {
   const f = setup()
-  const abort = new AbortController()
-  const pending = f.show(abort.signal)
+  const pending = f.show()
   const contents = fixture.views[0]!.webContents
   const event = { preventDefault: vi.fn() }
   contents.emit('will-navigate', event, 'https://example.com')
@@ -201,7 +193,7 @@ it('denies foreign navigation, redirects, and new windows', async () => {
   contents.emit('will-redirect', event)
   expect(event.preventDefault).toHaveBeenCalledTimes(2)
   expect(contents.setWindowOpenHandler.mock.calls[0]![0]()).toEqual({ action: 'deny' })
-  abort.abort()
+  f.invoke(SHELL_DIALOG_IPC.respond, 1)
   await pending
 })
 
@@ -210,11 +202,10 @@ it('reads the current locale and keeps technical diagnostics separate from ordin
   const f = setup(() => locale)
   for (const language of ['zh-CN', 'en']) {
     locale = resolveDesktopLocale(language)
-    const abort = new AbortController()
-    const pending = f.show(abort.signal, { technicalDetails: 'EACCES: permission denied' })
+    const pending = f.show({ technicalDetails: 'EACCES: permission denied' })
     expect(f.invoke(SHELL_DIALOG_IPC.status)).toMatchObject({ locale: locale.id, closeLabel: locale.messages.close,
       detail: '', technicalDetails: 'EACCES: permission denied', technicalDetailsLabel: locale.messages.technicalDetails })
-    abort.abort()
+    f.invoke(SHELL_DIALOG_IPC.respond, 1)
     await pending
   }
 })
