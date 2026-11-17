@@ -35,7 +35,8 @@ it('sends the Creator customization intent without taking actions for an ordinar
       const system = agent.session.deriveMessages().find(message => message.role === 'system')
       if (system === undefined) throw new Error('Creator request has no system prompt')
       const prompt = system.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
-      expect(prompt).toMatch(/^You are a coding agent powered by the .+ model\. You help the user customize DeepSeek Harness itself\.$/mu)
+      expect(prompt)
+        .toMatch(/^You are a coding agent powered by the .+ model\. You help the user customize Not DeepSeek Harness itself\.$/mu)
       expect(prompt.split(CUSTOMIZATION_INTENT)).toHaveLength(2)
       const sharedPrompt = prompt.replace(` ${CUSTOMIZATION_INTENT}`, '')
       console.info('Creator persona context increment', {

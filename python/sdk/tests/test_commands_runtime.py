@@ -535,7 +535,7 @@ def _assert_request_permission(request: dict, sandbox: str, approval: str) -> No
         if text.startswith("<system-reminder>\nThe following information describes your current session")
     ]
     assert contexts, "model request has no runtime-context snapshot"
-    assert f"Current DSH file policy: {sandbox}." in contexts[-1]
+    assert f"Current NDSH file policy: {sandbox}." in contexts[-1]
     assert (_ASK_POLICY if approval == "ask" else _NEVER_POLICY) in contexts[-1]
 
 
