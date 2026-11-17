@@ -2,7 +2,7 @@
 
 Status: implemented
 
-Window timing and shutdown ownership otherwise follow [showing the window before the Host starts](../../../../apps/desktop/README.md); the active-task rule was first defined for the update restart check, which the [update subsystem removal](../simplification/2026-11-16-remove-desktop-auto-update.md) deleted, and now lives only in the Host quit inspection. ⌘W does not destroy the window through Electron's role, and Dock activation reopens the hidden window when no window is visible instead of only when none exists. The native menu declarations in the [Desktop reference](../../../../apps/desktop/README.md) stay in force.
+Window timing and shutdown ownership otherwise follow [showing the window before the Host starts](../../../../apps/desktop/README.md); the active-task rule lives in the Host quit inspection. ⌘W does not destroy the window through Electron's role, and Dock activation reopens the hidden window when no window is visible instead of only when none exists. The native menu declarations in the [Desktop reference](../../../../apps/desktop/README.md) stay in force.
 
 ## Problem
 

@@ -10,7 +10,7 @@ Moving a capability into the experimental directory changes its ownership and su
 
 The moved packages retain the published names declared by the [experimental naming policy](../../../../scripts/experimental-package-policy.ts). That typed directory-to-name map is the sole maintained inventory of unprefixed experimental names; under the [unprefixed naming decision](2026-11-04-unprefixed-experimental-package-names.md), every new experimental package joins it. Package manifests, consumers, installation checks, and bundler checks agree with it; a missing, moved, or duplicated entry is rejected. [Experimental status](../../../../packages/experimental/README.md#status) remains independent of spelling, Official discovery, and explicit selection.
 
-Existing badge, Ralph, and native delegation row IDs remain valid Host row selectors. New isolation groups and newly introduced capabilities retain their new IDs. Later user layers still replace configuration or disable rows. Selecting an optional bundle is still explicit: a patch targeting an absent row does not select its bundle.
+Existing Ralph and native delegation row IDs remain valid Host row selectors. New isolation groups and newly introduced capabilities retain their new IDs. Later user layers still replace configuration or disable rows. Selecting an optional bundle is still explicit: a patch targeting an absent row does not select its bundle.
 
 Compatibility protection covers Web and Desktop profiles, including existing native provider package identities, selections, configuration, and authentication. Native bundles insert ordinary Host rows, so Headless, SDK, and ACP compositions can select them too; separate provider-only compatibility wrappers are unnecessary. Public APIs remain pre-stable, and new output metadata stays required unless an actual consumer needs an accommodation.
 
@@ -18,7 +18,7 @@ Compatibility protection covers Web and Desktop profiles, including existing nat
 
 | Retained identity | Unconstrained cleanup | Why it is deferred |
 |---|---|---|
-| Existing badge, Ralph, and native-tool row IDs | Give optional contributions consistently distinct `optional-*` selectors | Existing user overrides use those IDs; the ownership move does not require a new selector |
+| Existing Ralph and native-tool row IDs | Give optional contributions consistently distinct `optional-*` selectors | Existing user overrides use those IDs; the ownership move does not require a new selector |
 
 These naming changes are deferred, not prerequisites for experimental classification. A later cleanup requires an explicit release and migration decision, an inventory of affected Web/Desktop configurations, and installed-profile upgrade evidence. Directory moves or pre-stable API status alone do not retire these row IDs. The package list stays in the typed policy rather than being copied into this note or package READMEs.
 

@@ -19,7 +19,7 @@ Desktop no longer shows a native welcome window; it opens the workspace and the 
    - id: agent-default-model
      config:
        provider: deepseek-official
-       model: deepseek-v4-flash
+       model: deepseek-flash
    ```
 
    A profile that already saved a default through the composer keeps it.
