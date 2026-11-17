@@ -1366,16 +1366,20 @@ describe('HarnessSdkJsonRpcServer', () => {
   })
 
   it.each([
-    ['without agent-default-model', false, 'this profile composes no agent-default-model to supply a default'],
-    ['while agent-default-model has no selection', true, 'pass both, or set provider and model under agent-default-model in this profile'],
-  ])('rejects an initialize without provider and model %s', async (_label, mountDefault, message) => {
+    ['without agent-default-model', false, { message: expect.stringContaining('this profile composes no agent-default-model to supply a default') }],
+    ['while agent-default-model has no selection', true, {
+      name: 'NoDefaultModelError',
+      code: 'NO_DEFAULT_MODEL',
+      message: 'initialize requires provider and model: pass both, or set provider and model under agent-default-model in this profile',
+    }],
+  ])('rejects an initialize without provider and model %s', async (_label, mountDefault, failure) => {
     const ctx = new Context()
     await mountAgentLoopTestDependencies(ctx)
     ctx.llm.registerAdapter(['mock'], new MockAdapter([]))
     if (mountDefault) await ctx.plugin(AgentDefaultModelConfig, {})
     const server = new HarnessSdkJsonRpcServer(ctx, new FakeTransport())
     try {
-      await expect(server.initialize({ cwd: '.' })).rejects.toThrow(message)
+      await expect(server.initialize({ cwd: '.' })).rejects.toMatchObject(failure)
       await expect(server.prompt({ sessionId: 'none', contentBlocks: [{ type: 'text', text: 'x' }] }))
         .rejects.toThrow('SDK server is not initialized')
     } finally {

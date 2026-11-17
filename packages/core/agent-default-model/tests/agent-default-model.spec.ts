@@ -2,7 +2,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { expect, it, onTestFinished, vi } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import type { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import { HarnessError, type ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import DefaultModel, { NoDefaultModelError } from '../src/index.ts'
 import { liveConfig } from '../../../settings/settings/tests/live-config.ts'
 
@@ -78,7 +78,8 @@ it('answers that no default is set until a profile or a pick sets one, and names
   let error: unknown
   try { consumer.requireSelection() } catch (caught) { error = caught }
   expect(error).toBeInstanceOf(NoDefaultModelError)
-  expect(error).toMatchObject({ code: 'NO_DEFAULT_MODEL' })
+  expect(error).toBeInstanceOf(HarnessError)
+  expect(error).toMatchObject({ name: 'NoDefaultModelError', code: 'NO_DEFAULT_MODEL' })
   expect((error as Error).message).toBe('No default model is set. Choose a model in the app (the first model you pick'
     + ' becomes the default), or set provider and model under agent-default-model in the profile.')
   await live.update({ provider: 'p', model: 'm' })
@@ -89,5 +90,11 @@ it('refuses a profile that names a provider without a model', async () => {
   const ctx = new Context()
   onTestFinished(() => ctx.fiber.dispose())
   await liveConfig(ctx, DefaultModel, { provider: 'p' })
-  expect(() => ctx.agentDefaultModel.currentSelection()).toThrow('provider and model are set together; the profile sets only provider')
+  for (const read of [() => ctx.agentDefaultModel.currentSelection(), () => ctx.agentDefaultModel.requireSelection()]) {
+    expect(read).toThrow(expect.objectContaining({
+      name: 'AgentDefaultModelError',
+      code: 'DEFAULT_MODEL_INCOMPLETE',
+      message: 'agent-default-model: provider and model are set together; the profile sets only provider',
+    }))
+  }
 })

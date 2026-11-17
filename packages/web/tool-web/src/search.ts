@@ -327,8 +327,7 @@ function mergeSearchResults(
 
 /**
  * Register the `web_search` tool and its system-prompt guidance. A model step admits the tool,
- * and so declares, dispatches, and describes it, only while `ctx.web.searchReady()` answers true
- * for the step's chat route.
+ * and so declares, dispatches, and describes it, only while `ctx.web.searchReady()` answers true.
  *
  * @param ctx - context whose `tools` and `systemPrompt` registries receive the
  *   registrations; both are effect-scoped and unregister on plugin dispose.
@@ -411,5 +410,5 @@ export function applyWebSearchTool(
     },
     presentCall: presentSearchCall,
     presentResult: (args, result) => presentSearchResult(args, result),
-  }), { when: ({ modelSelection }) => ctx.web.searchReady(modelSelection.provider) })
+  }), { when: () => ctx.web.searchReady() })
 }

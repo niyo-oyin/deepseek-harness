@@ -3698,7 +3698,7 @@ export type CodexPermissionMode =
 ## `@deepseek-ai/dsh-subagent-dsh-sdk`
 
 - `inject`: `subagents`
-- `source`: [`packages/subagent/subagent-dsh-sdk/src/index.ts:39`](../packages/subagent/subagent-dsh-sdk/src/index.ts)
+- `source`: [`packages/subagent/subagent-dsh-sdk/src/index.ts:40`](../packages/subagent/subagent-dsh-sdk/src/index.ts)
 
 ```ts config-catalog
 /** Config: how to spawn and drive the child SDK runtime process. */
@@ -4803,14 +4803,12 @@ export interface Config {
 
 - `inject`: `web`
 - `refs`: `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/web/web-deepseek-api/src/index.ts:54`](../packages/web/web-deepseek-api/src/index.ts)
+- `source`: [`packages/web/web-deepseek-api/src/index.ts:52`](../packages/web/web-deepseek-api/src/index.ts)
 
 ```ts config-catalog
 /**
  * Settings read by the next search or fetch without re-registering either provider. A non-empty `*BaseURL` or
- * `*ApiKeyEnv` gives that capability its own endpoint and key; with neither, it sends the DeepSeek API key. Stored
- * fields of earlier settings (`baseURL`, `apiKeyEnv`, `apiKey`, `searchBilling`, `fetchBilling`) are not schema
- * fields: they load without error and have no effect.
+ * `*ApiKeyEnv` gives that capability its own endpoint and key; with neither, it sends the DeepSeek API key.
  */
 export interface Config {
   /** Search API results per search, from 1 through 50; a smaller request bound wins. Defaults to 10. */

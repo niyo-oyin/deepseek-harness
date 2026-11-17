@@ -111,8 +111,11 @@ interface SessionsView {
 
 /** Session-scoped conversation face exposing the composer block registry. */
 interface ConversationView {
-  readonly blocks: { set(sessionId: string, block: ComposerBlock | undefined): void }
+  readonly blocks: { set(sessionId: string, owner: string, block: ComposerBlock | undefined): void }
 }
+
+/** Owner name this plugin's composer blocks are held under, apart from other plugins' blocks. */
+const BLOCK_OWNER = 'liveshare'
 
 /**
  * Read the share, open the Session the served document names, and keep every composer honest.
@@ -271,10 +274,10 @@ export function apply(ctx: ClientContext): void {
       // A Session this page may prompt carries no block: the branch it created, and in write mode also
       // the Session the owner opened.
       if (prompt.getSnapshot()) {
-        conversation.blocks.set(listed, undefined)
+        conversation.blocks.set(listed, BLOCK_OWNER, undefined)
         continue
       }
-      conversation.blocks.set(listed, {
+      conversation.blocks.set(listed, BLOCK_OWNER, {
         reason: blockReason(listed === sessionId, isOwnFork(snapshot.byId[listed]), viewerCapabilities.getSnapshot(), t),
       })
     }
@@ -299,7 +302,7 @@ export function apply(ctx: ClientContext): void {
       for (const stop of followed.values()) stop()
       for (const listed of tracked) {
         const conversation = sessions.scope(listed)?.get('conversation') as ConversationView | undefined
-        conversation?.blocks.set(listed, undefined)
+        conversation?.blocks.set(listed, BLOCK_OWNER, undefined)
       }
     }
   }, 'liveshare: keep the viewer composer honest')

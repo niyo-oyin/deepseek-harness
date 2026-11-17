@@ -10,19 +10,22 @@ export interface ComposerBlock {
 /** The registry face other plugins reach through `ctx.conversation.blocks`. */
 export interface ComposerBlocks {
   /**
-   * Raise or clear this session's block.
+   * Raise, replace, or clear one owner's block on this session. Each owner holds its own block, so
+   * one owner never clears or replaces another's. The session shows the earliest block still raised;
+   * replacing an owner's reason keeps its place.
    * @param sessionId - Session whose composer is affected.
-   * @param block - Block to raise, or undefined to clear it.
+   * @param owner - Stable name of the plugin that owns the block.
+   * @param block - Block to raise, or undefined to clear this owner's block.
    */
-  set(sessionId: SessionId, block: ComposerBlock | undefined): void
+  set(sessionId: SessionId, owner: string, block: ComposerBlock | undefined): void
   /**
    * Resolve the observable block state for one Session.
    * @param sessionId - Session to observe.
-   * @returns Identity-stable block store.
+   * @returns Identity-stable store of the block the session shows, or undefined while no owner blocks it.
    */
   storeFor(sessionId: SessionId): SnapshotStore<ComposerBlock | undefined>
   /**
-   * Drop one Session's store.
+   * Drop one Session's store and every owner's block on it.
    * @param sessionId - Session being released.
    */
   forget(sessionId: SessionId): void

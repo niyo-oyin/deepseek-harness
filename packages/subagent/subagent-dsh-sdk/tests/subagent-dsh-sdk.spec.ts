@@ -219,37 +219,40 @@ describe('dsh-subagent-dsh-sdk provider', () => {
     }
   })
 
-  it('initializes an unconfigured child on the delegating parent route and fails without one', async () => {
+  it('initializes an unconfigured child on the delegating parent route and effort, and fails without one', async () => {
     const tmp = mkdtempSync(join(tmpdir(), 'subagent-dsh-sdk-parent-route-'))
+    onTestFinished(() => { rmSync(tmp, { recursive: true, force: true }) })
     const recordFile = join(tmp, 'init.jsonl')
-    try {
-      const ctx = new Context()
-      await ctx.plugin(SessionProjectionRegistry)
-      await mountWorkingDirectoryFixture(ctx)
-      await ctx.plugin(SubagentRuntime)
-      await ctx.plugin(sdk, {
-        providerName: 'dsh-sdk', profile: 'sdk', patches: [], dshHome: process.cwd(), env: { FAKE_RECORD_INIT: recordFile },
-      })
-      expect(ctx.subagents.getProvider('dsh-sdk')?.agentRouteDefaults).toBeUndefined()
+    const ctx = new Context()
+    onTestFinished(() => ctx.fiber.dispose())
+    await ctx.plugin(SessionProjectionRegistry)
+    await mountWorkingDirectoryFixture(ctx)
+    await ctx.plugin(SubagentRuntime)
+    await ctx.plugin(sdk, {
+      providerName: 'dsh-sdk', profile: 'sdk', patches: [], dshHome: process.cwd(), env: { FAKE_RECORD_INIT: recordFile },
+    })
+    expect(ctx.subagents.getProvider('dsh-sdk')?.agentRouteDefaults).toBeUndefined()
 
-      const parent = await externalTestParent(ctx, process.cwd())
-      Object.assign(parent.options, { provider: 'parent-provider', model: 'parent-model' })
-      const run = await startExternalActivation(ctx, 'dsh-sdk', { ...request('inherit'), parent })
-      await run.result
-      await run.dispose()
-      const { readFileSync } = await import('node:fs')
-      expect(JSON.parse(readFileSync(recordFile, 'utf8'))).toEqual({
-        cwd: process.cwd(),
-        provider: 'parent-provider',
-        model: 'parent-model',
-      })
+    const parent = await externalTestParent(ctx, process.cwd())
+    Object.assign(parent.options, {
+      provider: 'parent-provider', model: 'parent-model', reasoningEffort: brandString<ReasoningEffortId>('max'),
+    })
+    const run = await startExternalActivation(ctx, 'dsh-sdk', { ...request('inherit'), parent })
+    await run.result
+    await run.dispose()
+    const { readFileSync } = await import('node:fs')
+    expect(JSON.parse(readFileSync(recordFile, 'utf8'))).toEqual({
+      cwd: process.cwd(),
+      provider: 'parent-provider',
+      model: 'parent-model',
+      reasoningEffort: 'max',
+    })
 
-      await expect(startExternalActivation(ctx, 'dsh-sdk', request('no-route')))
-        .rejects.toThrow(expectedFailure('stage: initialize; category: configuration'))
-      await ctx.fiber.dispose()
-    } finally {
-      rmSync(tmp, { recursive: true, force: true })
-    }
+    await expect(startExternalActivation(ctx, 'dsh-sdk', request('no-route'))).rejects.toMatchObject({
+      name: 'SubagentError',
+      code: 'NO_MODEL_ROUTE',
+      message: 'subagent-dsh-sdk: the child has no model route; set provider and model on this provider, or select a model for the parent',
+    })
   })
 
   it('preserves instance defaults around a partial request override', async () => {
@@ -910,13 +913,13 @@ describe('dsh-subagent-dsh-sdk provider', () => {
 
   it('rejects a route that names only one of provider and model at load', async () => {
     const ctx = new Context()
+    onTestFinished(() => ctx.fiber.dispose())
     await ctx.plugin(SessionProjectionRegistry)
     await mountWorkingDirectoryFixture(ctx)
     await ctx.plugin(SubagentRuntime)
     const base = { providerName: 'sdk', profile: 'sdk', patches: [], dshHome: process.cwd(), env: {} }
     await expect(ctx.plugin(sdk, { ...base, provider: 'p' }))
       .rejects.toThrow('subagent-dsh-sdk provider and model are set together, or both omitted to use the parent route')
-    await ctx.fiber.dispose()
   })
 
   it('requires an explicit absolute Harness home for nested dsh runtimes', async () => {

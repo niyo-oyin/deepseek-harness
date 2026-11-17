@@ -14,6 +14,8 @@ import { TranslationError } from './error.ts'
 import type { TranslationLog } from './storage.ts'
 
 const MODEL = 'deepseek-flash'
+/** The DeepSeek API-key route that serves paid translation. */
+const PROVIDER = 'deepseek-official' satisfies PaidTranslationProvider
 /** Loader package that registers the DeepSeek API-key route. */
 const OWNER_PACKAGE = '@deepseek-ai/dsh-llm-deepseek-api-key'
 
@@ -56,28 +58,28 @@ function awaitMetadata<T>(start: () => Promise<T>, signal: AbortSignal, track: (
   })
 }
 
-function nativeOwner(ctx: Context, provider: PaidTranslationProvider): NativeOwner | undefined {
+function nativeOwner(ctx: Context): NativeOwner | undefined {
   const llm = ctx.get('llm'), loader = ctx.get('loader')
-  if (llm === undefined || loader === undefined || !llm.listProviders().some(row => row.id === provider)) return undefined
-  const directory = llm.listConfigurableProviders().find(row => row.provider === provider)
+  if (llm === undefined || loader === undefined || !llm.listProviders().some(row => row.id === PROVIDER)) return undefined
+  const directory = llm.listConfigurableProviders().find(row => row.provider === PROVIDER)
   if (directory === undefined || directory.settingsPath.length !== 0) return undefined
   const entry = [...loader.entries()].find(row => row.options.id === directory.settingsNs && row.options.name === OWNER_PACKAGE)
   if (entry?.fiber?.state !== FiberState.ACTIVE) return undefined
   return { llm, fiber: entry.fiber.ctx.fiber, config: entry.fiber.effectiveConfig as OfficialNativeConfig }
 }
 
-function unchanged(ctx: Context, provider: PaidTranslationProvider, previous: EligibleOwner): NativeOwner | undefined {
-  const current = nativeOwner(ctx, provider)
+function unchanged(ctx: Context, previous: EligibleOwner): NativeOwner | undefined {
+  const current = nativeOwner(ctx)
   if (current === undefined || current.fiber !== previous.fiber
     || current.config.models.get() !== previous.modelConfig
     || current.config.apiKeyEnv.get() !== previous.apiKeyRef) return undefined
   return current
 }
 
-async function eligible(ctx: Context, provider: PaidTranslationProvider, signal: AbortSignal,
+async function eligible(ctx: Context, signal: AbortSignal,
   track: (work: Promise<unknown>) => void): Promise<EligibleOwner | undefined> {
   signal.throwIfAborted()
-  const owner = nativeOwner(ctx, provider)
+  const owner = nativeOwner(ctx)
   if (owner === undefined) return undefined
   const modelConfig = owner.config.models.get()
   const apiKeyRef = owner.config.apiKeyEnv.get()
@@ -85,11 +87,11 @@ async function eligible(ctx: Context, provider: PaidTranslationProvider, signal:
   if (credentials === undefined) {
     if ((launchEnvironmentOf(ctx).get(apiKeyRef)?.value.length ?? 0) === 0) return undefined
   } else if (!(await awaitMetadata(() => credentials.describe(credentialRef(apiKeyRef)), signal, track)).configured) return undefined
-  const catalog = await awaitMetadata(() => owner.llm.listModels(provider), signal, track)
+  const catalog = await awaitMetadata(() => owner.llm.listModels(PROVIDER), signal, track)
   signal.throwIfAborted()
   if (!catalog.some(model => model.id === MODEL)) return undefined
   const accepted = { ...owner, modelConfig, apiKeyRef }
-  return unchanged(ctx, provider, accepted) === undefined ? undefined : accepted
+  return unchanged(ctx, accepted) === undefined ? undefined : accepted
 }
 
 /**
@@ -104,16 +106,14 @@ export async function availablePaidProviders(ctx: Context, config: Config, signa
   track: (work: Promise<unknown>) => void): Promise<readonly TranslationProvider[]> {
   using timeout = deadline(signal, config.deepseekTimeoutMs, 'TRANSLATION_TIMEOUT')
   const available: TranslationProvider[] = ['bing', 'google']
-  for (const provider of ['deepseek-official'] as const) {
-    try {
-      const candidate = await eligible(ctx, provider, timeout.signal, track)
-      timeout.signal.throwIfAborted()
-      if (candidate !== undefined) available.push(provider)
-    } catch (_unavailableNativeProvider) {
-      const expired = timeoutOf(timeout.signal, 'TRANSLATION_TIMEOUT')
-      if (expired !== undefined && expired !== signal.reason) return available
-      timeout.signal.throwIfAborted()
-    }
+  try {
+    const candidate = await eligible(ctx, timeout.signal, track)
+    timeout.signal.throwIfAborted()
+    if (candidate !== undefined) available.push(PROVIDER)
+  } catch (_unavailableNativeProvider) {
+    const expired = timeoutOf(timeout.signal, 'TRANSLATION_TIMEOUT')
+    if (expired !== undefined && expired !== signal.reason) return available
+    timeout.signal.throwIfAborted()
   }
   return available
 }
@@ -140,10 +140,10 @@ export async function translateWithDeepSeek(ctx: Context, spec: PaidTranslationS
       await awaitMetadata(() => log.result(requestSeq, ''), timeout.signal, track)
       return ''
     }
-    const accepted = await eligible(ctx, spec.provider, timeout.signal, track)
+    const accepted = await eligible(ctx, timeout.signal, track)
     timeout.signal.throwIfAborted()
     if (accepted === undefined) throw new TranslationError('TRANSLATION_UNAVAILABLE', 'Selected native Flash translation provider is unavailable')
-    const owner = unchanged(ctx, spec.provider, accepted)
+    const owner = unchanged(ctx, accepted)
     if (owner === undefined) throw new TranslationError('TRANSLATION_UNAVAILABLE', 'Selected native Flash translation provider is unavailable')
     unwatch = ctx.on('internal/status', (fiber) => {
       if (fiber === owner.fiber && fiber.state !== FiberState.ACTIVE) {
@@ -153,7 +153,7 @@ export async function translateWithDeepSeek(ctx: Context, spec: PaidTranslationS
     const prepared = await awaitMetadata(() => owner.llm.prepareCall({ provider: spec.provider, model: MODEL,
       reasoningEffort: brandString<ReasoningEffortId>('off'), maxTokens: config.deepseekMaxOutputTokens }, timeout.signal), timeout.signal, track)
     timeout.signal.throwIfAborted()
-    if (await eligible(ctx, spec.provider, timeout.signal, track) === undefined || unchanged(ctx, spec.provider, accepted) === undefined) {
+    if (await eligible(ctx, timeout.signal, track) === undefined || unchanged(ctx, accepted) === undefined) {
       throw new TranslationError('TRANSLATION_UNAVAILABLE', 'Native Flash translation provider changed before dispatch')
     }
     if (prepared.config.reasoningEffort !== 'off') throw new TranslationError('TRANSLATION_UNAVAILABLE', 'Native Flash translation requires disabled thinking')
@@ -167,7 +167,7 @@ export async function translateWithDeepSeek(ctx: Context, spec: PaidTranslationS
     const requestSeq = await awaitMetadata(() => log.request({ ...identity, metadata: { modelRequest } }), timeout.signal, track)
     timeout.signal.throwIfAborted()
     // Durable storage can outlast the admitted owner, credentials, or model catalog.
-    if (await eligible(ctx, spec.provider, timeout.signal, track) === undefined || unchanged(ctx, spec.provider, accepted) === undefined) {
+    if (await eligible(ctx, timeout.signal, track) === undefined || unchanged(ctx, accepted) === undefined) {
       throw new TranslationError('TRANSLATION_UNAVAILABLE', 'Native Flash translation provider changed before dispatch')
     }
     timeout.signal.throwIfAborted()

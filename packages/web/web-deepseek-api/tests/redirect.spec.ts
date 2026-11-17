@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createServer, type IncomingMessage, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { customGuidance } from './guidance.ts'
+import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { dispatchDeepSeekWeb } from '../src/transport.ts'
 
 const TEST_API_KEY = 'redirect-test-key'
@@ -47,9 +48,10 @@ afterAll(async () => {
 describe('dispatchDeepSeekWeb redirect policy', () => {
   it.each([301, 302, 303, 307, 308])('rejects HTTP %i before contacting Location', async (status) => {
     targetRequests.length = 0
-    await expect(dispatchDeepSeekWeb({ source: { kind: 'api-key', baseURL: redirectOrigin, key: TEST_API_KEY } }, {
+    await expect(dispatchDeepSeekWeb({ source: { kind: 'api-key', baseURL: redirectOrigin, key: {
+      ref: credentialRef('TEST_KEY'), configured: async () => true, resolve: async () => TEST_API_KEY,
+    } }, missingCredentialMessage: 'no key' }, {
       path: `/${status}`, body: { query: TEST_QUERY }, decode: value => value,
-      apiKeyHeaders: key => ({ 'x-api-key': key }),
       guidance: customGuidance('search'),
     })).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
     expect(targetRequests).toHaveLength(0)

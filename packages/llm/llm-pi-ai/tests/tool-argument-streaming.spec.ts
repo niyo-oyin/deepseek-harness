@@ -123,11 +123,13 @@ describe('streamed tool-call arguments', () => {
     const server = await mockServer([{ events: events(fragments, argsJson) }])
     const { partials, final } = await collect(stream(server.url))
     expect(partials).toHaveLength(fragments.length)
-    // Every partial is a snapshot of the text read so far, never a value from later text.
-    for (const partial of partials) {
-      const content = (partial as { content?: unknown }).content
-      if (content !== undefined) expect(args.content.startsWith(content as string)).toBe(true)
+    // Every partial is a snapshot of the text read so far, never a value from later text, and never shrinks.
+    const contents = partials.map(partial => (partial as { content?: string }).content ?? '')
+    for (const content of contents) expect(args.content.startsWith(content)).toBe(true)
+    for (const [index, content] of contents.entries()) {
+      expect(content.length).toBeGreaterThanOrEqual(contents[index - 1]?.length ?? 0)
     }
+    expect(contents.at(-1)).not.toBe('')
     expect(final).toEqual(args)
   })
 

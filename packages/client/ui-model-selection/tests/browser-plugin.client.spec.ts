@@ -112,7 +112,7 @@ async function bench(locale: 'zh' | 'en' = 'zh') {
   const blocks = new Map<SessionId, { reason: string } | undefined>()
   ctx.provide('conversation', {
     blocks: {
-      set: (id: SessionId, block: { reason: string } | undefined) => { blocks.set(id, block) },
+      set: (id: SessionId, _owner: string, block: { reason: string } | undefined) => { blocks.set(id, block) },
     },
   })
   let contribution: CommandContribution | undefined

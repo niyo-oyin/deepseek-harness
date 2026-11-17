@@ -420,8 +420,9 @@
     # is set up, and withholds web_search while none or several are. Fetch
     # defaults to the anonymous local fetcher (http). The DeepSeek Search and Fetch APIs
     # (deepseek-search-api, deepseek-fetch-api) send the API key of the
-    # DeepSeek API-key route to its origin on every conversation route, so a
-    # DEEPSEEK_API_KEY alone serves both.
+    # DeepSeek API-key route to its origin on every conversation route. A
+    # DEEPSEEK_API_KEY alone sets up both the Search API and Legacy Messages
+    # search, so search needs a selection before it offers web_search.
     # searchBaseURL / searchApiKeyEnv (fetch* for Fetch) pin one capability to
     # its own endpoint and key instead.
     # Legacy Messages search (deepseek-official) is selectable separately and

@@ -190,25 +190,23 @@ export class WebRuntime extends TypertRemoteService {
   async search(request: WebSearchRequest, signal?: AbortSignal): Promise<WebSearchResult> {
     const configuredId = this.searchProviderId()
     const selected = configuredId === undefined
-      ? onlyReady(await readyProviders(this.searchProviders, undefined))
+      ? onlyReady(await readyProviders(this.searchProviders))
       : resolveProvider({ providers: this.searchProviders, configuredId })
     return capSources(await selected.search(request, signal), request.maxResults)
   }
 
   /**
-   * Whether search has a provider that can authenticate a search made for a model
-   * request on the `llmProvider` chat route. With a configured id, asks only that
-   * provider's `ready()`, and a selection failure answers true because `search()`
-   * reports it as a structured `WebError`. Without one, answers whether exactly one
-   * usable provider is ready. A provider without `ready()` counts as ready. Makes no
-   * network calls.
-   * @param llmProvider - the provider route id of the model request, when known.
+   * Whether search has a provider that can authenticate the next search. With a
+   * configured id, asks only that provider's `ready()`, and a selection failure
+   * answers true because `search()` reports it as a structured `WebError`. Without
+   * one, answers whether exactly one usable provider is ready. A provider without
+   * `ready()` counts as ready. Makes no network calls.
    * @returns false when the configured provider cannot authenticate, or when no id is configured and zero or several providers are ready.
    */
-  async searchReady(llmProvider?: string): Promise<boolean> {
+  async searchReady(): Promise<boolean> {
     const configuredId = this.searchProviderId()
-    if (configuredId === undefined) return (await readyProviders(this.searchProviders, llmProvider)).size === 1
-    return await selectedProviderReady(() => resolveProvider({ providers: this.searchProviders, configuredId }), llmProvider)
+    if (configuredId === undefined) return (await readyProviders(this.searchProviders)).size === 1
+    return await selectedProviderReady(() => resolveProvider({ providers: this.searchProviders, configuredId }))
   }
 
   /** The explicitly configured search provider id, from config or `$DSH_WEB_SEARCH_PROVIDER`. */
@@ -229,15 +227,14 @@ export class WebRuntime extends TypertRemoteService {
   }
 
   /**
-   * Whether the provider `fetch()` would select can authenticate a fetch made for a
-   * model request on the `llmProvider` chat route. Asks only that provider's `ready()`;
-   * one without `ready()` counts as ready. Makes no network calls. A selection failure
-   * answers true, because `fetch()` reports that failure as a structured `WebError`.
-   * @param llmProvider - the provider route id of the model request, when known.
+   * Whether the provider `fetch()` would select can authenticate the next fetch. Asks
+   * only that provider's `ready()`; one without `ready()` counts as ready. Makes no
+   * network calls. A selection failure answers true, because `fetch()` reports that
+   * failure as a structured `WebError`.
    * @returns false only when the selected provider reports that it cannot authenticate.
    */
-  async fetchReady(llmProvider?: string): Promise<boolean> {
-    return await selectedProviderReady(() => this.selectFetchProvider(), llmProvider)
+  async fetchReady(): Promise<boolean> {
+    return await selectedProviderReady(() => this.selectFetchProvider())
   }
 
   /** Select the fetch provider with the rules above, throwing the matching {@link WebError}. */
@@ -262,35 +259,31 @@ function providerInfo(provider: WebSearchProvider | WebFetchProvider): WebProvid
 interface ResolvableProvider {
   readonly id: string
   available(): boolean
-  ready?(llmProvider: string | undefined): Promise<boolean>
+  ready?(): Promise<boolean>
 }
 
 /**
- * Ask the provider an operation selects whether it can authenticate for one chat route.
+ * Ask the provider an operation selects whether it can authenticate.
  * @param select - the operation's selection; throws its {@link WebError} when no provider qualifies.
- * @param llmProvider - the provider route id of the model request, when known.
  * @returns the provider's answer; true when it has no `ready()` or selection fails, because the
  *   operation reports that failure itself.
  */
-async function selectedProviderReady(select: () => ResolvableProvider, llmProvider: string | undefined): Promise<boolean> {
+async function selectedProviderReady(select: () => ResolvableProvider): Promise<boolean> {
   let provider: ResolvableProvider
   try { provider = select() }
   catch (_selectionFailure) { return true /* The operation surfaces the same failure when called. */ }
-  return await provider.ready?.(llmProvider) ?? true
+  return await provider.ready?.() ?? true
 }
 
 /**
  * The providers automatic selection may choose: usable ones that can authenticate.
  * @param providers - every provider registered for the capability.
- * @param llmProvider - the provider route id of the model request, when known.
  * @returns the available and ready providers, keyed by id.
  */
-async function readyProviders<P extends ResolvableProvider>(
-  providers: ReadonlyMap<string, P>, llmProvider: string | undefined,
-): Promise<Map<string, P>> {
+async function readyProviders<P extends ResolvableProvider>(providers: ReadonlyMap<string, P>): Promise<Map<string, P>> {
   const ready = new Map<string, P>()
   for (const [id, provider] of providers) {
-    if (provider.available() && (await provider.ready?.(llmProvider) ?? true)) ready.set(id, provider)
+    if (provider.available() && (await provider.ready?.() ?? true)) ready.set(id, provider)
   }
   return ready
 }
@@ -304,7 +297,7 @@ async function readyProviders<P extends ResolvableProvider>(
 function onlyReady<P extends ResolvableProvider>(ready: ReadonlyMap<string, P>): P {
   const [single] = ready.values()
   if (single === undefined) {
-    throw new WebError('no web search provider is set up; set one up, or choose one in web.searchProvider', 'WEB_PROVIDER_UNAVAILABLE')
+    throw new WebError('no web search provider is set up; give one search provider the credential it needs', 'WEB_PROVIDER_UNAVAILABLE')
   }
   if (ready.size > 1) {
     throw new WebError(`several web search providers are set up (${[...ready.keys()].join(', ')}); choose one in web.searchProvider`, 'WEB_PROVIDER_AMBIGUOUS')

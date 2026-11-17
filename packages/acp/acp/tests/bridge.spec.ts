@@ -869,9 +869,23 @@ describe('automation-only ACP bridge', () => {
     harness = await makeBridgeHarness({ config: { provider: undefined, model: undefined } })
     await harness.client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} })
 
-    await expect(harness.client.newSession({ cwd: process.cwd(), mcpServers: [] }))
-      .rejects.toThrow('set provider and model under agent-default-model or on the acp entry')
+    const rejected = harness.client.newSession({ cwd: process.cwd(), mcpServers: [] })
+    await expect(rejected).rejects.toThrow('set provider and model under agent-default-model or on the acp entry')
+    await expect(rejected).rejects.toMatchObject({ data: { code: 'NO_DEFAULT_MODEL' } })
     expect(harness.ctx.agents.list()).toEqual([])
+  })
+
+  it('starts sessions on the ACP config route rather than a different default model', async () => {
+    harness = await makeBridgeHarness({ script: [textResponse('config-routed')] })
+    await harness.ctx.plugin(AgentDefaultModelConfig, { provider: 'other-provider', model: 'other-model' })
+    await harness.client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} })
+    const created = await harness.client.newSession({ cwd: process.cwd(), mcpServers: [] })
+
+    await expect(harness.client.prompt({
+      sessionId: created.sessionId,
+      prompt: [{ type: 'text', text: 'route me' }],
+    })).resolves.toEqual({ stopReason: 'end_turn' })
+    expect(harness.adapter.requests[0]).toMatchObject({ provider: 'mock', model: 'mock' })
   })
 
   it('starts sessions on the default model when the ACP config names no route', async () => {

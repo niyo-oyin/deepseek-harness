@@ -123,14 +123,14 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Read the current default model selection.',
         parameters: [],
         returns: 'a detached provider, model, and optional reasoning selection, or `undefined` while no default is set.',
-        throws: ['Error when the configuration names a provider without a model or a model without a provider.'],
+        throws: ['AgentDefaultModelError `DEFAULT_MODEL_INCOMPLETE` when the configuration names a provider without a model or a model without a provider.'],
       },
       {
-        signature: 'requireSelection(): ModelSelection',
+        signature: 'requireSelection(message?: string): ModelSelection',
         description: 'Read the default for an entry point that cannot proceed without one.',
-        parameters: [],
+        parameters: [{ name: 'message', description: 'What this entry point\'s caller changes to supply a route, for an entry point whose profile the app does not edit; omitted, the text names the app and the profile.' }],
         returns: 'the current default selection.',
-        throws: ['NoDefaultModelError while no default is set.'],
+        throws: ['NoDefaultModelError while no default is set.', 'AgentDefaultModelError `DEFAULT_MODEL_INCOMPLETE` as {@link currentSelection} does.'],
       },
       {
         signature: 'async saveSelection(next: ModelSelection): Promise<void>',
@@ -4473,9 +4473,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the provider\'s results, capped to `request.maxResults`.',
       },
       {
-        signature: 'async searchReady(llmProvider?: string): Promise<boolean>',
-        description: 'Whether search has a provider that can authenticate a search made for a model request on the `llmProvider` chat route. With a configured id, asks only that provider\'s `ready()`, and a selection failure answers true because `search()` reports it as a structured `WebError`. Without one, answers whether exactly one usable provider is ready. A provider without `ready()` counts as ready. Makes no network calls.',
-        parameters: [{ name: 'llmProvider', description: 'the provider route id of the model request, when known.' }],
+        signature: 'async searchReady(): Promise<boolean>',
+        description: 'Whether search has a provider that can authenticate the next search. With a configured id, asks only that provider\'s `ready()`, and a selection failure answers true because `search()` reports it as a structured `WebError`. Without one, answers whether exactly one usable provider is ready. A provider without `ready()` counts as ready. Makes no network calls.',
+        parameters: [],
         returns: 'false when the configured provider cannot authenticate, or when no id is configured and zero or several providers are ready.',
       },
       {
@@ -4485,9 +4485,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the retrieval outcome; non-2xx responses resolve descriptively.',
       },
       {
-        signature: 'async fetchReady(llmProvider?: string): Promise<boolean>',
-        description: 'Whether the provider `fetch()` would select can authenticate a fetch made for a model request on the `llmProvider` chat route. Asks only that provider\'s `ready()`; one without `ready()` counts as ready. Makes no network calls. A selection failure answers true, because `fetch()` reports that failure as a structured `WebError`.',
-        parameters: [{ name: 'llmProvider', description: 'the provider route id of the model request, when known.' }],
+        signature: 'async fetchReady(): Promise<boolean>',
+        description: 'Whether the provider `fetch()` would select can authenticate the next fetch. Asks only that provider\'s `ready()`; one without `ready()` counts as ready. Makes no network calls. A selection failure answers true, because `fetch()` reports that failure as a structured `WebError`.',
+        parameters: [],
         returns: 'false only when the selected provider reports that it cannot authenticate.',
       },
     ],
@@ -10441,7 +10441,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'WebFetchProvider',
-    declaration: 'export interface WebFetchProvider {\n    readonly id: string;\n    readonly title?: string;\n    readonly description?: LocalizedText;\n    available(): boolean;\n    ready?(llmProvider: string | undefined): Promise<boolean>;\n    fetch(request: WebFetchRequest, signal?: AbortSignal): Promise<WebFetchResult>;\n}',
+    declaration: 'export interface WebFetchProvider {\n    readonly id: string;\n    readonly title?: string;\n    readonly description?: LocalizedText;\n    available(): boolean;\n    ready?(): Promise<boolean>;\n    fetch(request: WebFetchRequest, signal?: AbortSignal): Promise<WebFetchResult>;\n}',
   },
   {
     name: 'WebFetchRequest',
@@ -10517,7 +10517,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'WebSearchProvider',
-    declaration: 'export interface WebSearchProvider {\n    readonly id: string;\n    readonly title?: string;\n    readonly description?: LocalizedText;\n    available(): boolean;\n    ready?(llmProvider: string | undefined): Promise<boolean>;\n    search(request: WebSearchRequest, signal?: AbortSignal): Promise<WebSearchResult>;\n}',
+    declaration: 'export interface WebSearchProvider {\n    readonly id: string;\n    readonly title?: string;\n    readonly description?: LocalizedText;\n    available(): boolean;\n    ready?(): Promise<boolean>;\n    search(request: WebSearchRequest, signal?: AbortSignal): Promise<WebSearchResult>;\n}',
   },
   {
     name: 'WebSearchRequest',

@@ -5,7 +5,7 @@
  */
 import type { WebFetchProvider, WebFetchRequest, WebFetchResult } from '@deepseek-ai/dsh-web'
 import {
-  dispatchDeepSeekWeb, hasDeepSeekWebCredential, invalidResponse, isRecord,
+  dispatchDeepSeekWeb, invalidResponse, isRecord,
   type DeepSeekWebAuth, type DeepSeekWebGuidance,
 } from './transport.ts'
 
@@ -44,8 +44,7 @@ export class DeepSeekFetchApiProvider implements WebFetchProvider {
 
   available(): boolean {
     const options = this.resolveOptions()
-    return hasDeepSeekWebCredential(options.auth)
-      && (options.auth.source.kind === 'misconfigured' || URL.canParse(options.auth.source.baseURL))
+    return options.auth.source.kind === 'misconfigured' || URL.canParse(options.auth.source.baseURL)
   }
 
   fetch(request: WebFetchRequest, signal?: AbortSignal): Promise<WebFetchResult> {

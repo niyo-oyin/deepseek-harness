@@ -47,9 +47,7 @@ export const inject = ['web']
 
 /**
  * Settings read by the next search or fetch without re-registering either provider. A non-empty `*BaseURL` or
- * `*ApiKeyEnv` gives that capability its own endpoint and key; with neither, it sends the DeepSeek API key. Stored
- * fields of earlier settings (`baseURL`, `apiKeyEnv`, `apiKey`, `searchBilling`, `fetchBilling`) are not schema
- * fields: they load without error and have no effect.
+ * `*ApiKeyEnv` gives that capability its own endpoint and key; with neither, it sends the DeepSeek API key.
  */
 export interface Config {
   /** Search API results per search, from 1 through 50; a smaller request bound wins. Defaults to 10. */
@@ -184,7 +182,7 @@ function resolveTarget(
     } }
   }
   const source = officialSource(ctx, capability)
-  const ref = source.kind === 'api-key' && typeof source.key !== 'string' ? source.key.ref : DEEPSEEK_API_KEY
+  const ref = source.kind === 'api-key' ? source.key.ref : DEEPSEEK_API_KEY
   return { guidance: guidance(false), auth: { source, missingCredentialMessage: missingMessage(capability, ref) } }
 }
 

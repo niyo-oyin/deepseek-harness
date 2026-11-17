@@ -206,16 +206,14 @@ registerFetchProvider(provider: WebFetchProvider): () => void
 async search(request: WebSearchRequest, signal?: AbortSignal): Promise<WebSearchResult>
 
 /**
- * Whether search has a provider that can authenticate a search made for a model
- * request on the `llmProvider` chat route. With a configured id, asks only that
- * provider's `ready()`, and a selection failure answers true because `search()`
- * reports it as a structured `WebError`. Without one, answers whether exactly one
- * usable provider is ready. A provider without `ready()` counts as ready. Makes no
- * network calls.
- * @param llmProvider - the provider route id of the model request, when known.
+ * Whether search has a provider that can authenticate the next search. With a
+ * configured id, asks only that provider's `ready()`, and a selection failure
+ * answers true because `search()` reports it as a structured `WebError`. Without
+ * one, answers whether exactly one usable provider is ready. A provider without
+ * `ready()` counts as ready. Makes no network calls.
  * @returns false when the configured provider cannot authenticate, or when no id is configured and zero or several providers are ready.
  */
-async searchReady(llmProvider?: string): Promise<boolean>
+async searchReady(): Promise<boolean>
 
 /**
  * Retrieve one URL through the selected provider. Resolves the provider at
@@ -228,14 +226,13 @@ async searchReady(llmProvider?: string): Promise<boolean>
 async fetch(request: WebFetchRequest, signal?: AbortSignal): Promise<WebFetchResult>
 
 /**
- * Whether the provider `fetch()` would select can authenticate a fetch made for a
- * model request on the `llmProvider` chat route. Asks only that provider's `ready()`;
- * one without `ready()` counts as ready. Makes no network calls. A selection failure
- * answers true, because `fetch()` reports that failure as a structured `WebError`.
- * @param llmProvider - the provider route id of the model request, when known.
+ * Whether the provider `fetch()` would select can authenticate the next fetch. Asks
+ * only that provider's `ready()`; one without `ready()` counts as ready. Makes no
+ * network calls. A selection failure answers true, because `fetch()` reports that
+ * failure as a structured `WebError`.
  * @returns false only when the selected provider reports that it cannot authenticate.
  */
-async fetchReady(llmProvider?: string): Promise<boolean>
+async fetchReady(): Promise<boolean>
 ```
 
 Source: [`packages/web/web/src/index.ts`](../../packages/web/web/src/index.ts)

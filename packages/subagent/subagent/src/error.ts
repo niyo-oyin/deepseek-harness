@@ -31,6 +31,8 @@ export type SubagentErrorCode =
   | 'MODEL_ROUTE_NOT_ALLOWED'
   /** The requested LLM provider is not registered with the LLM runtime. */
   | 'LLM_PROVIDER_NOT_FOUND'
+  /** Neither the request, the provider's configuration, nor the parent names the child's provider and model. */
+  | 'NO_MODEL_ROUTE'
   /** The child's target model cannot accept image input. */
   | 'MODEL_DOES_NOT_SUPPORT_IMAGES'
   /** Starting the child would exceed the requested delegation depth; thrown as `SubagentDepthError`. */

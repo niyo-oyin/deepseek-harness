@@ -4,10 +4,10 @@ import WebRuntime from '@deepseek-ai/dsh-web'
 import { DeepSeekFetchApiProvider, type DeepSeekFetchApiOptions } from '@deepseek-ai/dsh-web-deepseek-api'
 import * as webApiPlugin from '@deepseek-ai/dsh-web-deepseek-api'
 import { DSH_LAUNCH_ENVIRONMENT_KEY, createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
-import { customGuidance } from './guidance.ts'
+import { customGuidance, referencedKeyAuth } from './guidance.ts'
 const fetchProvider = (options: DeepSeekFetchApiOptions) => new DeepSeekFetchApiProvider(() => options)
 const BASE = 'https://api.deepseek.test/api/v1/tools'
-const auth = (key: string, baseURL = BASE): DeepSeekFetchApiOptions['auth'] => ({ source: { kind: 'api-key', baseURL, key } })
+const auth = (key: string, baseURL = BASE): DeepSeekFetchApiOptions['auth'] => referencedKeyAuth(key, baseURL)
 const options = { auth: auth('ds-key'), guidance: customGuidance('fetch') }
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' }, ...init })
@@ -55,9 +55,8 @@ describe('DeepSeek Fetch API', () => {
         + 'Only the user should choose or change the endpoint.',
     })
   })
-  it('is available only with a credential source and a parseable base', () => {
+  it('is available only with a parseable base', () => {
     expect(fetchProvider(options).available()).toBe(true)
-    expect(fetchProvider({ ...options, auth: auth('') }).available()).toBe(false)
     expect(fetchProvider({ ...options, auth: auth('ds-key', 'not a url') }).available()).toBe(false)
   })
   it('unregisters both providers with its plugin fiber', async () => {

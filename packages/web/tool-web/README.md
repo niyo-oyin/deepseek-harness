@@ -77,7 +77,7 @@ Tool registration follows product enablement, not backend availability: a tool s
 <a id="search-readiness"></a>
 ### Search and fetch readiness
 
-Each model step admits `web_search` and `web_fetch`, and so declares, describes, and dispatches them, only while `ctx.web.searchReady()` and `ctx.web.fetchReady()` answer true for the chat route of the step's model selection. The service asks only the provider that `search()` or `fetch()` would select; a provider that does not implement readiness counts as ready, and a failure to select a configured provider also answers true, so the stable-registration errors above still reach the model. Without a configured search provider, `web_search` is admitted only while exactly one usable search provider is ready. [`dsh-web-search-deepseek`](../web-search-deepseek/README.md#authentication) and [`dsh-web-deepseek-api`](../web-deepseek-api/README.md#authentication) are not ready when the step's operation has no credential. The shipped HTTP fetch provider needs no credential, so `web_fetch` stays admitted while it is selected. The check runs for every step, so a model switch or a newly stored key applies to the next step. A step that does not admit a tool also leaves it out of PTC program bindings, and a call to it fails as `UNKNOWN_TOOL`.
+Each model step admits `web_search` and `web_fetch`, and so declares, describes, and dispatches them, only while `ctx.web.searchReady()` and `ctx.web.fetchReady()` answer true. The service asks only the provider that `search()` or `fetch()` would select; a provider that does not implement readiness counts as ready, and a failure to select a configured provider also answers true, so the stable-registration errors above still reach the model. Without a configured search provider, `web_search` is admitted only while exactly one usable search provider is ready. [`dsh-web-search-deepseek`](../web-search-deepseek/README.md#authentication) and [`dsh-web-deepseek-api`](../web-deepseek-api/README.md#authentication) are not ready when the step's operation has no credential. The shipped HTTP fetch provider needs no credential, so `web_fetch` stays admitted while it is selected. The check runs for every step, so a newly stored key applies to the next step. A step that does not admit a tool also leaves it out of PTC program bindings, and a call to it fails as `UNKNOWN_TOOL`.
 
 ### Failures and recovery
 
@@ -114,7 +114,7 @@ The package is built on one separation and one registration rule:
 
 ### Readiness flow
 
-The `web_search` and `web_fetch` registrations carry activation conditions that ask `ctx.web.searchReady()` and `ctx.web.fetchReady()` about the route of the step's model selection. The agent loop resolves conditions before it assembles the step, so the declared tools, the `tool:web_search` and `tool:web_fetch` sections, PTC program bindings, and dispatch all read the same admitted set.
+The `web_search` and `web_fetch` registrations carry activation conditions that ask `ctx.web.searchReady()` and `ctx.web.fetchReady()` for each step. The agent loop resolves conditions before it assembles the step, so the declared tools, the `tool:web_search` and `tool:web_fetch` sections, PTC program bindings, and dispatch all read the same admitted set.
 
 ### Fetch flow
 

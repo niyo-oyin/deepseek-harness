@@ -177,7 +177,7 @@ export function apply(ctx: ClientContext): void {
     const blockerFor = (sessionId: SessionId, directory: ModelDirectory) => {
       let blocker = blockers.get(directory)
       if (blocker === undefined) {
-        blocker = (reason) => { scope.get('conversation')?.blocks.set(sessionId, reason === undefined ? undefined : { reason }) }
+        blocker = (reason) => { scope.get('conversation')?.blocks.set(sessionId, 'ui-model-selection', reason === undefined ? undefined : { reason }) }
         blockers.set(directory, blocker)
       }
       return blocker

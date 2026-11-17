@@ -1140,17 +1140,17 @@ describe('web tool admission per model step', () => {
     await Promise.all(mounted.splice(0).map(ctx => ctx.fiber.dispose()))
   })
 
+  /** Whether a scripted provider can authenticate, and how often it was asked. */
+  interface Readiness { ready: boolean; asked: number }
+
   /**
-   * A search provider that can authenticate only for the listed chat routes.
+   * A search provider whose readiness the test controls.
    * @param id - the provider id.
-   * @param readyRoutes - chat routes whose searches have a credential.
-   * @param asked - receives every route the provider is asked about.
+   * @param readiness - the provider's current answer and its ask count.
    * @param searched - receives every query the provider runs.
    * @returns the provider.
    */
-  function routeProvider(
-    id: string, readyRoutes: readonly string[], asked: (string | undefined)[] = [], searched: string[] = [],
-  ): WebSearchProvider {
+  function readyProvider(id: string, readiness: Readiness, searched: string[] = []): WebSearchProvider {
     return {
       id,
       available: () => true,
@@ -1158,24 +1158,21 @@ describe('web tool admission per model step', () => {
         searched.push(request.query)
         return Promise.resolve({ sources: [], truncated: false })
       },
-      ready: (llmProvider) => {
-        asked.push(llmProvider)
-        return Promise.resolve(llmProvider !== undefined && readyRoutes.includes(llmProvider))
+      ready: () => {
+        readiness.asked += 1
+        return Promise.resolve(readiness.ready)
       },
     }
   }
 
   /**
-   * A fetch provider that can authenticate only for the listed chat routes.
+   * A fetch provider whose readiness the test controls.
    * @param id - the provider id.
-   * @param readyRoutes - chat routes whose fetches have a credential.
-   * @param asked - receives every route the provider is asked about.
+   * @param readiness - the provider's current answer and its ask count.
    * @param fetched - receives every URL the provider retrieves.
    * @returns the provider.
    */
-  function fetchRouteProvider(
-    id: string, readyRoutes: readonly string[], asked: (string | undefined)[] = [], fetched: string[] = [],
-  ): WebFetchProvider {
+  function readyFetchProvider(id: string, readiness: Readiness, fetched: string[] = []): WebFetchProvider {
     return {
       id,
       available: () => true,
@@ -1183,25 +1180,27 @@ describe('web tool admission per model step', () => {
         fetched.push(request.url)
         return Promise.resolve({ url: request.url, statusCode: 200, body: { kind: 'text', content: 'ok' }, truncated: false })
       },
-      ready: (llmProvider) => {
-        asked.push(llmProvider)
-        return Promise.resolve(llmProvider !== undefined && readyRoutes.includes(llmProvider))
+      ready: () => {
+        readiness.asked += 1
+        return Promise.resolve(readiness.ready)
       },
     }
   }
 
+  const ready = (): Readiness => ({ ready: true, asked: 0 })
+  const notReady = (): Readiness => ({ ready: false, asked: 0 })
+
   /**
    * Mount the real prompt, tool, executor, and web services with tool-web for one agent. Each
    * step resolves tool admission for the step's model selection, as the agent loop does.
-   * @param setup - registered providers, the configured providers, and the selected route.
-   * @returns the agent, its model selection, tool-web's fiber, and a reader for one step.
+   * @param setup - registered providers and the configured providers.
+   * @returns the agent, tool-web's fiber, and a reader for one step.
    */
   async function compose(setup: {
     providers: WebSearchProvider[]
     fetchProviders?: WebFetchProvider[]
     searchProvider?: string
     fetchProvider?: string
-    route?: string
   }) {
     const ctx = new Context()
     mounted.push(ctx)
@@ -1217,55 +1216,55 @@ describe('web tool admission per model step', () => {
     const fiber = await ctx.plugin(ToolWeb, {})
     const agent = { id: brandString<SessionId>('web-search-admission') } as Agent
     await ctx.plugin(Object.assign((inner: Context) => { createScope(inner, agent) }, { inject: ['tools'] }))
-    const selection: ModelSelection = { provider: setup.route ?? 'deepseek-official', model: 'deepseek-v4-flash' }
+    const modelSelection: ModelSelection = { provider: 'deepseek-official', model: 'deepseek-v4-flash' }
     const step = async (): Promise<{ toolSet: ResolvedToolSet; tools: string[]; prompt: string }> => {
-      const modelSelection = { ...selection }
       const toolSet = await ctx.tools.resolve({ agent, modelSelection, signal: testToolSignal })
       const assembly = await ctx.systemPrompt.assemble({ scope: agent, agent, modelSelection, toolSet })
       return { toolSet, tools: assembly.tools.map(tool => tool.name), prompt: renderPrompt(assembly) }
     }
-    return { ctx, agent, selection, fiber, step }
+    return { ctx, agent, fiber, step }
   }
 
-  it('withholds web_search and its guidance when the selected provider cannot authenticate the route', async () => {
-    const asked: (string | undefined)[] = []
-    const { step } = await compose({ providers: [routeProvider('deepseek', ['routed-provider'], asked)] })
+  it('withholds web_search and its guidance when the selected provider cannot authenticate', async () => {
+    const readiness = notReady()
+    const { step } = await compose({ providers: [readyProvider('deepseek', readiness)] })
     const { tools, prompt } = await step()
     expect(tools).toContain('web_fetch')
     expect(tools).not.toContain('web_search')
     expect(prompt).not.toContain(searchGuidance)
-    expect(asked).toEqual(['deepseek-official'])
+    expect(readiness.asked).toBeGreaterThan(0)
   })
 
-  it('offers web_search and its guidance when the selected provider can authenticate the route', async () => {
-    const { step } = await compose({ providers: [routeProvider('deepseek', ['routed-provider'])], route: 'routed-provider' })
+  it('offers web_search and its guidance when the selected provider can authenticate', async () => {
+    const { step } = await compose({ providers: [readyProvider('deepseek', ready())] })
     const { tools, prompt } = await step()
     expect(tools).toContain('web_search')
     expect(prompt).toContain(searchGuidance)
   })
 
   it('asks only the provider search() selects', async () => {
-    const deepseekAsked: (string | undefined)[] = []
+    const deepseek = notReady()
     const { step } = await compose({
       searchProvider: 'exa',
-      providers: [routeProvider('exa', ['deepseek-official']), routeProvider('deepseek', [], deepseekAsked)],
+      providers: [readyProvider('exa', ready()), readyProvider('deepseek', deepseek)],
     })
     expect((await step()).tools).toContain('web_search')
-    expect(deepseekAsked).toEqual([])
+    expect(deepseek.asked).toBe(0)
   })
 
-  it('follows the model selected for each step', async () => {
-    const { selection, step } = await compose({ providers: [routeProvider('deepseek', ['routed-provider'])], route: 'routed-provider' })
+  it('asks for readiness again on each step', async () => {
+    const readiness = ready()
+    const { step } = await compose({ providers: [readyProvider('deepseek', readiness)] })
     expect((await step()).tools).toContain('web_search')
-    selection.provider = 'deepseek-official'
+    readiness.ready = false
     expect((await step()).tools).not.toContain('web_search')
-    selection.provider = 'routed-provider'
+    readiness.ready = true
     expect((await step()).tools).toContain('web_search')
   })
 
   it('refuses a web_search call in a step that withheld it', async () => {
     const searched: string[] = []
-    const { ctx, agent, step } = await compose({ providers: [routeProvider('deepseek', ['routed-provider'], [], searched)] })
+    const { ctx, agent, step } = await compose({ providers: [readyProvider('deepseek', notReady(), searched)] })
     const { toolSet } = await step()
     const result = await executeToolFixture(ctx, {
       agent, toolSet, signal: testToolSignal, callId: brandString<ToolCallId>('withheld-search'), name: 'web_search', arguments: { queries: ['q'] },
@@ -1274,44 +1273,42 @@ describe('web tool admission per model step', () => {
     expect(searched).toEqual([])
   })
 
-  it('withholds web_fetch, its guidance, and its mention in search guidance when the selected fetch provider cannot authenticate the route', async () => {
-    const asked: (string | undefined)[] = []
+  it('withholds web_fetch, its guidance, and its mention in search guidance when the selected fetch provider cannot authenticate', async () => {
+    const readiness = notReady()
     const { step } = await compose({
-      providers: [routeProvider('deepseek', ['deepseek-official'])],
-      fetchProviders: [fetchRouteProvider('deepseek-fetch', ['routed-provider'], asked)],
+      providers: [readyProvider('deepseek', ready())],
+      fetchProviders: [readyFetchProvider('deepseek-fetch', readiness)],
     })
     const { tools, prompt } = await step()
     expect(tools).toContain('web_search')
     expect(tools).not.toContain('web_fetch')
     expect(prompt).not.toContain(fetchGuidance)
     expect(prompt).toContain('Use the returned source snippets when available')
-    expect(asked).toEqual(['deepseek-official'])
+    expect(readiness.asked).toBeGreaterThan(0)
   })
 
-  it('offers web_fetch and its guidance when the selected fetch provider can authenticate the route', async () => {
-    const { step } = await compose({
-      providers: [], fetchProviders: [fetchRouteProvider('deepseek-fetch', ['routed-provider'])], route: 'routed-provider',
-    })
+  it('offers web_fetch and its guidance when the selected fetch provider can authenticate', async () => {
+    const { step } = await compose({ providers: [], fetchProviders: [readyFetchProvider('deepseek-fetch', ready())] })
     const { tools, prompt } = await step()
     expect(tools).toContain('web_fetch')
     expect(prompt).toContain(fetchGuidance)
   })
 
   it('asks only the provider fetch() selects', async () => {
-    const deepseekAsked: (string | undefined)[] = []
+    const deepseek = notReady()
     const { step } = await compose({
       providers: [],
       fetchProvider: 'http',
-      fetchProviders: [fetchRouteProvider('http', ['deepseek-official']), fetchRouteProvider('deepseek-fetch', [], deepseekAsked)],
+      fetchProviders: [readyFetchProvider('http', ready()), readyFetchProvider('deepseek-fetch', deepseek)],
     })
     expect((await step()).tools).toContain('web_fetch')
-    expect(deepseekAsked).toEqual([])
+    expect(deepseek.asked).toBe(0)
   })
 
   it('refuses a web_fetch call in a step that withheld it', async () => {
     const fetched: string[] = []
     const { ctx, agent, step } = await compose({
-      providers: [], fetchProviders: [fetchRouteProvider('deepseek-fetch', ['routed-provider'], [], fetched)],
+      providers: [], fetchProviders: [readyFetchProvider('deepseek-fetch', notReady(), fetched)],
     })
     const { toolSet } = await step()
     const result = await executeToolFixture(ctx, {

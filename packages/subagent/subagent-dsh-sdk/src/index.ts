@@ -22,6 +22,7 @@ import {
   NO_START_CAPABILITIES,
   assertUsableCwd,
   parentAgentOptionsForDelegation,
+  SubagentError,
 } from '@deepseek-ai/dsh-subagent'
 import {
   DEFAULT_DISPOSE_EOF_GRACE_MS,
@@ -111,27 +112,35 @@ const SDK_START_CAPABILITIES: SubagentCapabilities = Object.freeze({
 /**
  * Merge the request's supported route fields over this provider instance's
  * configured route, or over the delegating parent's route when none is configured.
+ * A child that keeps the parent's provider and model also keeps the parent's
+ * reasoning effort unless the request names one, as an in-process child does.
  * @param config - provider instance configuration.
  * @param requested - the start request's Agent options.
  * @param parent - delegating parent whose current route applies when none is configured.
  * @returns the child runtime's handshake route.
- * @throws Error when neither the request, the configuration, nor the parent supplies a provider and model.
+ * @throws SubagentError `NO_MODEL_ROUTE` when neither the request, the configuration, nor the parent supplies a provider and model.
  */
 function resolveSdkRoute(config: ResolvedConfig, requested: AgentOptions | undefined, parent: Agent): Pick<
   SdkRunSpec,
   'provider' | 'model' | 'reasoningEffort' | 'maxTokens'
 > {
-  const base = configuredRoute(config) ?? parentAgentOptionsForDelegation(parent)
+  const configured = configuredRoute(config)
+  const base: AgentOptions = configured ?? parentAgentOptionsForDelegation(parent)
   const provider = requested?.provider ?? base.provider
   const model = requested?.model ?? base.model
   if (provider === undefined || model === undefined) {
-    throw new Error('subagent-dsh-sdk: the child has no model route; set provider and model on this provider, or select a model for the parent')
+    throw new SubagentError(
+      'subagent-dsh-sdk: the child has no model route; set provider and model on this provider, or select a model for the parent',
+      'NO_MODEL_ROUTE',
+    )
   }
+  const reasoningEffort = requested?.reasoningEffort
+    ?? (configured === undefined && provider === base.provider && model === base.model ? base.reasoningEffort : undefined)
   const maxTokens = requested?.maxTokens ?? config.maxTokens
   return {
     provider,
     model,
-    ...requested?.reasoningEffort === undefined ? {} : { reasoningEffort: requested.reasoningEffort },
+    ...reasoningEffort === undefined ? {} : { reasoningEffort },
     ...maxTokens === undefined ? {} : { maxTokens },
   }
 }
@@ -164,15 +173,15 @@ class SdkSubagentProvider implements SubagentProvider {
       throw new Error('subagent request was aborted before the SDK child started')
     }
     let cwd: string
-    let route: ReturnType<typeof resolveSdkRoute>
     try {
       cwd = assertUsableCwd('subagent-dsh-sdk', 'child cwd', request.cwd)
-      route = resolveSdkRoute(this.config, request.agentOptions, request.parent)
     } catch (error: unknown) {
       const failure = sdkConfigurationFailure(error)
       this.ctx.logger.warn(`subagent-dsh-sdk "${this.name}": child start failed: %o`, error)
       throw failure
     }
+    // The route failure names only settings, so it reaches the caller as is.
+    const route = resolveSdkRoute(this.config, request.agentOptions, request.parent)
     const spec: SdkRunSpec = {
       ...this.config.dshBin === undefined ? {} : { dshBin: this.config.dshBin },
       profile: this.config.profile,

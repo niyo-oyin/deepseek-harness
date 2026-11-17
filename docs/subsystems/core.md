@@ -516,16 +516,20 @@ Owns the default model selection independently of any Host or transport. Each op
  * Read the current default model selection.
  * @returns a detached provider, model, and optional reasoning selection, or
  *   `undefined` while no default is set.
- * @throws Error when the configuration names a provider without a model or a model without a provider.
+ * @throws AgentDefaultModelError `DEFAULT_MODEL_INCOMPLETE` when the configuration names a provider
+ *   without a model or a model without a provider.
  */
 currentSelection(): ModelSelection | undefined
 
 /**
  * Read the default for an entry point that cannot proceed without one.
+ * @param message - What this entry point's caller changes to supply a route, for an entry point whose
+ *   profile the app does not edit; omitted, the text names the app and the profile.
  * @returns the current default selection.
  * @throws NoDefaultModelError while no default is set.
+ * @throws AgentDefaultModelError `DEFAULT_MODEL_INCOMPLETE` as {@link currentSelection} does.
  */
-requireSelection(): ModelSelection
+requireSelection(message?: string): ModelSelection
 
 /**
  * Save the complete default model selection. A deployment without a configuration
