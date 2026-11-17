@@ -457,7 +457,7 @@ export class SystemPrompt extends Service {
       this.section({
         name: 'harness:identity',
         order: this.getSectionOrder('HARNESS_IDENTITY'),
-        text: 'You are an AI agent powered by Not DeepSeek Harness.',
+        text: 'You are an AI agent powered by Not DeepSeek Harness (NDSH).',
       })
     }
     this.section({
