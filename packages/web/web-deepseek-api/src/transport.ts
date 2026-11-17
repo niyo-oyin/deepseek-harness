@@ -9,11 +9,8 @@ import { WebError } from '@deepseek-ai/dsh-web'
 
 const USER_AGENT = 'deepseek-harness/0.0.1'
 
-/**
- * API key of one {@link DeepSeekWebAuthSource}: a literal value, where an empty string means no key, or a credential
- * reference read once per use without retention.
- */
-export type DeepSeekWebApiKey = string | {
+/** API key of one {@link DeepSeekWebAuthSource}: a credential reference read once per use without retention. */
+export interface DeepSeekWebApiKey {
   /** Credential reference the key is stored under. */
   ref: CredentialRef
   /** Report key presence without reading or validating its value; store failures reject. */
@@ -46,8 +43,8 @@ export type DeepSeekWebAuthSource =
 export interface DeepSeekWebAuth {
   /** The credential and the base it is sent to. */
   source: DeepSeekWebAuthSource
-  /** Model-facing `WEB_PROVIDER_CREDENTIAL_MISSING` diagnostic; omitted uses a generic missing-credential message. */
-  missingCredentialMessage?: string
+  /** Model-facing `WEB_PROVIDER_CREDENTIAL_MISSING` diagnostic naming the missing key and its recoveries. */
+  missingCredentialMessage: string
 }
 
 /** User-owned endpoint settings named by dispatch failures. */
@@ -72,8 +69,6 @@ interface DeepSeekWebRequest<T> {
   body: object
   /** Protocol headers without credentials. */
   headers?: Readonly<Record<string, string>>
-  /** Additional API-key headers. */
-  apiKeyHeaders?: (key: string) => Readonly<Record<string, string>>
   /** Validate and project the response. */
   decode: (payload: unknown) => T
   /** Endpoint recovery settings. */
@@ -82,17 +77,6 @@ interface DeepSeekWebRequest<T> {
   recordRequest?: (endpoint: string) => void
   /** Wait for permission to send after credentials resolve; a rejection prevents dispatch. */
   waitToSend?: (signal?: AbortSignal) => Promise<void>
-}
-
-/**
- * Check synchronously whether an operation has a credential to try, without reading it.
- * @param auth - The operation's credential.
- * @returns Whether the source is a credential reference, a non-empty literal key, or a misconfigured source the
- *   operation reports.
- */
-export function hasDeepSeekWebCredential(auth: DeepSeekWebAuth): boolean {
-  const { source } = auth
-  return source.kind !== 'api-key' || typeof source.key !== 'string' || source.key.length > 0
 }
 
 /**
@@ -107,9 +91,7 @@ export async function isDeepSeekWebAuthReady(auth: DeepSeekWebAuth): Promise<boo
   switch (source.kind) {
     case 'misconfigured': return false
     case 'api-key': {
-      const { key } = source
-      if (typeof key === 'string') return key.length > 0
-      try { return await key.configured() }
+      try { return await source.key.configured() }
       catch (_unreadableStore) { return false /* The operation fails on this read. */ }
     }
     /* v8 ignore next -- the switch is exhaustive. */
@@ -263,19 +245,11 @@ async function authHeaders(
   throwIfSearchAborted(signal)
   const { source } = auth
   if (source.kind === 'misconfigured') throw new WebError(source.message, 'WEB_PROVIDER_MISCONFIGURED')
-  const { key } = source
-  // A conditional await in a ternary can produce negative branch counts in V8-to-Istanbul mapping.
-  let apiKey: string | undefined
-  if (typeof key === 'string') apiKey = key
-  else apiKey = await resolveCredential(key.resolve, signal)
-  if (apiKey !== undefined && apiKey.length > 0) return { endpoint: joinPath(source.baseURL, request.path), headers: {
-    ...request.apiKeyHeaders?.(apiKey),
-    'authorization': `Bearer ${apiKey}`,
-  } }
-  throw new WebError(
-    auth.missingCredentialMessage ?? 'DeepSeek web access has no credential to send',
-    'WEB_PROVIDER_CREDENTIAL_MISSING',
-  )
+  const apiKey = await resolveCredential(source.key.resolve, signal)
+  if (apiKey !== undefined && apiKey.length > 0) {
+    return { endpoint: joinPath(source.baseURL, request.path), headers: { 'authorization': `Bearer ${apiKey}` } }
+  }
+  throw new WebError(auth.missingCredentialMessage, 'WEB_PROVIDER_CREDENTIAL_MISSING')
 }
 
 /** Append an operation path to an API base, without doubling a trailing slash. */

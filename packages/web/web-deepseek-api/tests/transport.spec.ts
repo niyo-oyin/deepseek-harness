@@ -3,29 +3,25 @@ import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { WebError } from '@deepseek-ai/dsh-web'
 import { customGuidance } from './guidance.ts'
 import {
-  dispatchDeepSeekWeb, hasDeepSeekWebCredential, isDeepSeekWebAuthReady,
+  dispatchDeepSeekWeb, isDeepSeekWebAuthReady,
   type DeepSeekWebApiKey, type DeepSeekWebAuthSource,
 } from '../src/transport.ts'
 const API_BASE = 'https://api.deepseek.test/v1/tools'
-/** An API-key source on {@link API_BASE}. */
-function keySource(key: DeepSeekWebApiKey = 'ds-key'): DeepSeekWebAuthSource {
-  return { kind: 'api-key', baseURL: API_BASE, key }
-}
 /** A referenced key whose presence check and read are the given functions. */
 function keyRef(resolve: () => Promise<string | undefined>, configured: () => Promise<boolean> = async () => true): DeepSeekWebApiKey {
   return { ref: credentialRef('TEST_KEY'), configured, resolve }
 }
+/** An API-key source on {@link API_BASE}. */
+function keySource(key: DeepSeekWebApiKey = keyRef(async () => 'ds-key')): DeepSeekWebAuthSource {
+  return { kind: 'api-key', baseURL: API_BASE, key }
+}
 const misconfigured: DeepSeekWebAuthSource = { kind: 'misconfigured', message: 'route settings do not resolve' }
 /** Search once with the given credential. */
-function search(
-  source: DeepSeekWebAuthSource, signal?: AbortSignal,
-  extra: { recordRequest?: (endpoint: string) => void; missingCredentialMessage?: string } = {},
-) {
-  const { recordRequest, missingCredentialMessage } = extra
-  return dispatchDeepSeekWeb({ source, ...missingCredentialMessage === undefined ? {} : { missingCredentialMessage } }, {
+function search(source: DeepSeekWebAuthSource, signal?: AbortSignal, extra: { recordRequest?: (endpoint: string) => void } = {}) {
+  const { recordRequest } = extra
+  return dispatchDeepSeekWeb({ source, missingCredentialMessage: 'no credential for this search' }, {
     path: '/search', body: { query: 'q' }, decode: value => value,
     ...recordRequest === undefined ? {} : { recordRequest },
-    apiKeyHeaders: key => ({ 'x-api-key': key }),
     guidance: customGuidance('search'),
   }, signal)
 }
@@ -49,7 +45,7 @@ function captureFetch(response: () => Response = () => jsonResponse({})) {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('DeepSeek web credential', () => {
-  it('sends the referenced key to its base as Bearer and as the caller headers, reading it once', async () => {
+  it('sends the referenced key to its base as Bearer, reading it once', async () => {
     const { sent } = captureFetch()
     const resolve = vi.fn(async () => 'resolved-key')
     const configured = vi.fn(async () => true)
@@ -57,27 +53,19 @@ describe('DeepSeek web credential', () => {
     const [request] = sent()
     expect(sent()).toHaveLength(1)
     expect(request?.url).toBe(`${API_BASE}/search`)
-    expect(request?.headers).toMatchObject({ 'authorization': 'Bearer resolved-key', 'x-api-key': 'resolved-key' })
+    expect(request?.headers).toMatchObject({ 'authorization': 'Bearer resolved-key' })
     expect(resolve).toHaveBeenCalledOnce()
     expect(configured).not.toHaveBeenCalled()
   })
 
   it.each<[string, DeepSeekWebAuthSource]>([
-    ['an empty literal key', keySource('')],
     ['an absent referenced key', keySource(keyRef(async () => undefined))],
     ['an empty referenced key', keySource(keyRef(async () => ''))],
   ])('fails with the caller diagnostic and sends nothing for %s', async (_label, source) => {
     const { fetchMock } = captureFetch()
-    await expect(search(source, undefined, { missingCredentialMessage: 'no credential for this search' }))
+    await expect(search(source))
       .rejects.toMatchObject({ code: 'WEB_PROVIDER_CREDENTIAL_MISSING', message: 'no credential for this search' })
     expect(fetchMock).not.toHaveBeenCalled()
-  })
-
-  it('names no credential without a caller diagnostic', async () => {
-    captureFetch()
-    await expect(search(keySource(''))).rejects.toMatchObject({
-      code: 'WEB_PROVIDER_CREDENTIAL_MISSING', message: 'DeepSeek web access has no credential to send',
-    })
   })
 
   it('fails with WEB_PROVIDER_MISCONFIGURED at a misconfigured source', async () => {
@@ -125,40 +113,29 @@ describe('DeepSeek web credential', () => {
 
   it('reports cancellation before a missing credential', async () => {
     const { fetchMock } = captureFetch()
-    await expect(search(keySource(''), AbortSignal.abort(new Error('caller stopped'))))
+    await expect(search(keySource(keyRef(async () => undefined)), AbortSignal.abort(new Error('caller stopped'))))
       .rejects.toThrow(expect.objectContaining({ code: 'WEB_ABORTED' }))
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })
 
-describe('DeepSeek web credential availability and readiness', () => {
-  it.each<[boolean, DeepSeekWebAuthSource]>([
-    [false, keySource('')],
-    [true, keySource()],
-    [true, keySource(keyRef(async () => undefined))],
-    [true, misconfigured],
-  ])('reports a credential to try as %s without reading it', (expected, source) => {
-    expect(hasDeepSeekWebCredential({ source })).toBe(expected)
-  })
-
+describe('DeepSeek web credential readiness', () => {
   it('checks a referenced key for presence without reading it', async () => {
     const { fetchMock } = captureFetch()
     const resolve = vi.fn(async () => 'resolved-key')
     const configured = vi.fn(async () => true)
-    expect(await isDeepSeekWebAuthReady({ source: keySource(keyRef(resolve, configured)) })).toBe(true)
+    expect(await isDeepSeekWebAuthReady({ source: keySource(keyRef(resolve, configured)), missingCredentialMessage: 'no key' })).toBe(true)
     expect(configured).toHaveBeenCalledOnce()
     expect(resolve).not.toHaveBeenCalled()
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it.each<[string, DeepSeekWebAuthSource, boolean]>([
-    ['an empty literal key', keySource(''), false],
-    ['a literal key', keySource(), true],
     ['an unconfigured referenced key', keySource(keyRef(async () => undefined, async () => false)), false],
     ['a misconfigured source', misconfigured, false],
     ['an unreadable credential store', keySource(keyRef(async () => 'key', () => Promise.reject(new Error('store locked')))), false],
   ])('answers for %s', async (_label, source, expected) => {
-    expect(await isDeepSeekWebAuthReady({ source })).toBe(expected)
+    expect(await isDeepSeekWebAuthReady({ source, missingCredentialMessage: 'no key' })).toBe(expected)
   })
 })
 
@@ -191,7 +168,7 @@ describe('DeepSeek web cancellation and failures', () => {
     const { sent } = captureFetch(() => jsonResponse({ truncated: false }))
     await expect(search(keySource(keyRef(async () => 'resolved-key')), new AbortController().signal))
       .resolves.toMatchObject({ truncated: false })
-    expect(sent()[0]?.headers['x-api-key']).toBe('resolved-key')
+    expect(sent()[0]?.headers.authorization).toBe('Bearer resolved-key')
   })
 
   it('maps a credential resolver rejection under an active signal to WEB_PROVIDER_ERROR', async () => {

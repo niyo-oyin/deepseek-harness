@@ -5,7 +5,7 @@
  */
 import type { WebSearchProvider, WebSearchRequest, WebSearchResult } from '@deepseek-ai/dsh-web'
 import {
-  dispatchDeepSeekWeb, hasDeepSeekWebCredential, invalidResponse, isRecord, searchAborted,
+  dispatchDeepSeekWeb, invalidResponse, isRecord, searchAborted,
   type DeepSeekWebAuth, type DeepSeekWebGuidance,
 } from './transport.ts'
 
@@ -91,8 +91,7 @@ export class DeepSeekSearchApiProvider implements WebSearchProvider {
 
   available(): boolean {
     const options = this.resolveOptions()
-    return hasDeepSeekWebCredential(options.auth)
-      && (options.auth.source.kind === 'misconfigured' || URL.canParse(options.auth.source.baseURL))
+    return (options.auth.source.kind === 'misconfigured' || URL.canParse(options.auth.source.baseURL))
       && isPositiveInteger(options.count) && isPositiveInteger(options.requestsPerSecond)
   }
 

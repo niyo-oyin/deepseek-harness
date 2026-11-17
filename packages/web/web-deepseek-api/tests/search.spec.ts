@@ -13,14 +13,14 @@ import {
 } from '@deepseek-ai/dsh-web-deepseek-api'
 import * as webApiPlugin from '@deepseek-ai/dsh-web-deepseek-api'
 import { DSH_LAUNCH_ENVIRONMENT_KEY, createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
-import { customGuidance } from './guidance.ts'
+import { customGuidance, referencedKeyAuth } from './guidance.ts'
 
 /** Construct the provider over a fixed options value; production passes a live thunk. */
 const searchProvider = (options: DeepSeekSearchApiOptions): DeepSeekSearchApiProvider =>
   new DeepSeekSearchApiProvider(() => options)
 
 const BASE = 'https://api.deepseek.test/api/v1/tools'
-const auth = (key: string, baseURL = BASE): DeepSeekSearchApiOptions['auth'] => ({ source: { kind: 'api-key', baseURL, key } })
+const auth = (key: string, baseURL = BASE): DeepSeekSearchApiOptions['auth'] => referencedKeyAuth(key, baseURL)
 
 const options = {
   auth: auth('ds-key'),
@@ -74,16 +74,14 @@ describe('mapSearchResponse', () => {
 })
 
 describe('DeepSeekSearchApiProvider availability', () => {
-  it('is unavailable without a key', () => {
-    expect(searchProvider({ ...options, auth: auth('') }).available()).toBe(false)
-  })
-
   it('is available with a key', () => {
     expect(searchProvider(options).available()).toBe(true)
   })
 
   it('is available with only a misconfigured source, which the search reports', () => {
-    expect(searchProvider({ ...options, auth: { source: { kind: 'misconfigured', message: 'route settings do not resolve' } } }).available()).toBe(true)
+    expect(searchProvider({ ...options, auth: {
+      source: { kind: 'misconfigured', message: 'route settings do not resolve' }, missingCredentialMessage: 'no key',
+    } }).available()).toBe(true)
   })
 
   it('is misconfigured when the base URL is unparseable', () => {
