@@ -722,7 +722,7 @@ async function reviewerRoute(
   try {
     info = await ctx.llm.resolveModelInfo(provider, model, signal)
   } catch (error) {
-    if (signal.aborted) throw error
+    if (signal.aborted) throw signal.reason
     throw unusable(error instanceof Error ? error.message : String(error))
   }
   if (reasoningEffort !== undefined && info.reasoning?.efforts.some(effort => effort.id === reasoningEffort) !== true) {

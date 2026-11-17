@@ -463,7 +463,7 @@ interface ListingTarget {
 function endpointIdentity(url: string): string | undefined {
   try {
     const parsed = new URL(url)
-    return `${parsed.protocol}//${parsed.host.toLowerCase()}${parsed.pathname.replace(/\/+$/u, '')}`
+    return `${parsed.protocol}//${parsed.host}${parsed.pathname.replace(/\/+$/u, '')}`
   } catch {
     return undefined
   }
