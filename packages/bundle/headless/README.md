@@ -53,7 +53,7 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 
 The shipped headless profile disables the managed credential store and its authorization consumer. API-key routes use the launch environment, then `<invocation cwd>/.env`, then `$DSH_HOME/.env`. Keys and sign-ins saved by the GUI are ignored without changing their file. Providers that require a saved sign-in fail unless stored authentication is restored; external provider credential chains, such as AWS profiles, remain available.
 
-The DeepSeek Search and Fetch APIs [send the DeepSeek API key](../../web/web-deepseek-api/README.md#authentication). In the shipped headless profile, they send the DeepSeek model route's `DEEPSEEK_API_KEY` to that route's origin. Without that key, the model request omits `web_search`.
+The DeepSeek Search and Fetch APIs [send the DeepSeek API key](../../web/web-deepseek-api/README.md#authentication). In the shipped headless profile, they send the DeepSeek model route's `DEEPSEEK_API_KEY` to that route's origin. Without that key, the model request omits `web_search`. The key alone does not enable it: it readies both DeepSeek search providers, so `web_search` is offered only after `web.searchProvider` or `DSH_WEB_SEARCH_PROVIDER` selects one ([provider selection](../../web/web/README.md#provider-selection)).
 
 Unset an empty launch variable to allow its `.env` fallback; an exported empty value shadows that fallback.
 

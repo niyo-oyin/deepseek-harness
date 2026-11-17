@@ -34,7 +34,7 @@ The HTTP provider retains its own URL validation and resource limits. Selecting 
 
 ### Default migration
 
-The shipped composition selects `deepseek-search-api`; the [selection decision](../architecture/2026-10-29-web-provider-selection.md) owns that default and its no-fallback rule. API keys reach the public routes. Deployments behind a gateway without `/v1/tools` routes set `searchBaseURL` to a base that serves them. A stored `web.searchProvider: deepseek-official` selects Messages search, and any other stored selection keeps its provider.
+The shipped composition selects no search provider; with a DeepSeek key both `deepseek-search-api` and Messages search are ready, so searching needs a stored selection. The [selection decision](../architecture/2026-10-29-web-provider-selection.md) owns that rule and its no-fallback rule. API keys reach the public routes. Deployments behind a gateway without `/v1/tools` routes set `searchBaseURL` to a base that serves them. A stored `web.searchProvider: deepseek-official` selects Messages search, and any other stored selection keeps its provider.
 
 ### Legacy Messages search
 
