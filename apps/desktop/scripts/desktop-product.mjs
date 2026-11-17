@@ -5,3 +5,6 @@ export const DESKTOP_PRODUCT_NAME = 'Not DeepSeek Harness'
 
 /** Packaged manifest name; Electron derives the default userData directory from it. */
 export const DESKTOP_PACKAGE_NAME = 'ndsh-desktop'
+
+/** Installer file name prefix: `<prefix>-<version>-<os>-<arch>[-unsigned|-unnotarized].<ext>`. */
+export const DESKTOP_ARTIFACT_PREFIX = 'ndsh'

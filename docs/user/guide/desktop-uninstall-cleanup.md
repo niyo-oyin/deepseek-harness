@@ -27,14 +27,14 @@ rm -rf -- \
   "$HOME/.ndsh" \
   "$HOME/Library/Application Support/ndsh-desktop" \
   "$HOME/Library/Logs/Not DeepSeek Harness" \
-  "$HOME/Library/Preferences/com.deepseek.dsh.plist" \
-  "$HOME/Library/Preferences/ByHost"/com.deepseek.dsh.ShipIt.*.plist \
-  "$HOME/Library/Caches/com.deepseek.dsh" \
-  "$HOME/Library/Caches/com.deepseek.dsh.ShipIt" \
-  "$HOME/Library/HTTPStorages/com.deepseek.dsh" \
+  "$HOME/Library/Preferences/app.ndsh.desktop.plist" \
+  "$HOME/Library/Preferences/ByHost"/app.ndsh.desktop.ShipIt.*.plist \
+  "$HOME/Library/Caches/app.ndsh.desktop" \
+  "$HOME/Library/Caches/app.ndsh.desktop.ShipIt" \
+  "$HOME/Library/HTTPStorages/app.ndsh.desktop" \
   "$HOME/Library/Caches/ndsh-desktop-updater" \
-  "$(getconf DARWIN_USER_CACHE_DIR)/com.deepseek.dsh" \
-  "$(getconf DARWIN_USER_CACHE_DIR)/com.deepseek.dsh.helper"
+  "$(getconf DARWIN_USER_CACHE_DIR)/app.ndsh.desktop" \
+  "$(getconf DARWIN_USER_CACHE_DIR)/app.ndsh.desktop.helper"
 '
 ```
 

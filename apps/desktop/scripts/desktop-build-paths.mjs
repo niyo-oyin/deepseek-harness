@@ -1,6 +1,7 @@
 /** Resolve target-owned Desktop outputs and shared package caches. */
 
 import { isAbsolute, join, resolve } from 'node:path'
+import { DESKTOP_ARTIFACT_PREFIX } from './desktop-product.mjs'
 
 const APP_ROOT = resolve(import.meta.dirname, '..')
 const BUILD_ROOT = join(APP_ROOT, '.desktop-build')
@@ -137,5 +138,5 @@ export function desktopArtifactOutput(paths, mode) {
  */
 export function desktopInstallerPath(target, version, mode, environment = process.env) {
   const output = desktopArtifactOutput(desktopTargetBuildPaths(target, environment), mode)
-  return join(output.directory, `deepseek-harness-${version}-${target}${output.suffix}.${target === 'win-x64' ? 'exe' : 'dmg'}`)
+  return join(output.directory, `${DESKTOP_ARTIFACT_PREFIX}-${version}-${target}${output.suffix}.${target === 'win-x64' ? 'exe' : 'dmg'}`)
 }

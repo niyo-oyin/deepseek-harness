@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path'
 import { packagingStep } from './packaging-step.mjs'
 import { resolveMacOSSigningEnvironment } from './desktop-release-environment.mjs'
 import { verifyMacOSSignature } from './verify-macos-signature.mjs'
-import { DESKTOP_PRODUCT_NAME } from './desktop-product.mjs'
+import { DESKTOP_ARTIFACT_PREFIX, DESKTOP_PRODUCT_NAME } from './desktop-product.mjs'
 
 /** One electron-builder DMG made from an already signed application. */
 export interface DesktopPrepackagedArtifact {
@@ -47,7 +47,7 @@ export async function packageMacOSDiskImage(
   const expected = resolveMacOSSigningEnvironment(environment)
   const appPath = join(artifactsRoot, arch === 'arm64' ? 'mac-arm64' : 'mac', `${DESKTOP_PRODUCT_NAME}.app`)
   const output = await mkdtemp(join(dirname(artifactsRoot), 'notarization-'))
-  const filename = `deepseek-harness-${version}-mac-${arch}.dmg`
+  const filename = `${DESKTOP_ARTIFACT_PREFIX}-${version}-mac-${arch}.dmg`
   try {
     apple.verifySignature(appPath, expected)
     const start = performance.now()
