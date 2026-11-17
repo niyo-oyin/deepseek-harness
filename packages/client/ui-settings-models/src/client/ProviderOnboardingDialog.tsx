@@ -72,8 +72,11 @@ export function ProviderOnboardingDialog(props: ProviderOnboardingDialogProps): 
           // The dialog's own Configure later is the one dismissal, so the panel's editors offer no Cancel.
           cancelable={false}
           onClose={(changed) => {
-            // A saved provider ends the step once the refreshed join finds it usable.
-            if (changed) void controller.load()
+            if (!changed) return
+            void controller.load()
+            // First run ends once the refreshed join finds the saved provider usable; an explicitly opened
+            // step already had one, so the save itself ends it.
+            if (explicit) complete()
           }}
         />
       </div>
