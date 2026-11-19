@@ -693,7 +693,7 @@ describe('sandbox escalation through ctx.approval', () => {
     expect(bash.modes).toEqual([])
   })
 
-  it('rejects injected escalation without a sandbox and narrower escalation without prompting', async () => {
+  it('rejects injected escalation without a sandbox and runs an already granted target without prompting', async () => {
     const plain = await setup()
     const { command, description, sandbox_permissions, justification } = escalate
     for (const args of [escalate, { command, description, sandbox_permissions }, { command, description, justification }]) {
@@ -702,11 +702,12 @@ describe('sandbox escalation through ctx.approval', () => {
       expect(unavailable).toMatchObject({ error: { info: { name: 'ToolArgsError', code: 'INVALID_ARGS' } } })
     }
 
-    const { ctx } = await setupSandboxed(true)
+    const { ctx, bash } = await setupSandboxed(true)
     const prompted = vi.fn()
     ctx.on('approval/request', () => { prompted(); return Promise.resolve<ApprovalOutcome>('allowed-once') })
     const result = await call(ctx, 'pwsh', { ...escalate, sandbox_permissions: 'workspace-write' }, sandboxAgent('danger-full-access'))
-    expect(text(result)).toContain('not strictly wider')
+    expect(result.isError, text(result)).toBe(false)
+    expect(bash.modes).toEqual(['danger-full-access'])
     expect(prompted).not.toHaveBeenCalled()
 
     const malformed = sandboxAgent()
@@ -714,7 +715,7 @@ describe('sandbox escalation through ctx.approval', () => {
       type: string,
       data: Record<string, unknown>,
     ) => unknown)('sandbox/mode', { mode: 'unknown-mode' })
-    expect(text(await call(ctx, 'pwsh', escalate, malformed))).toContain('not strictly wider')
+    expect(text(await call(ctx, 'pwsh', escalate, malformed))).toContain('can widen to')
   })
 
   it.each(['workspace-write', 'danger-full-access'] as const)('runs a repeated %s request without approval', async (mode) => {

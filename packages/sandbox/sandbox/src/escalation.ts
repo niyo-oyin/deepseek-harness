@@ -24,7 +24,7 @@ import type { SandboxMode } from './index.ts'
 /**
  * Every {@link SandboxEscalationError} code:
  * - `SANDBOX_ESCALATION_INVALID_ARGUMENT` — the escalation fields are unpaired, the justification is blank, or the
- *   target is not strictly wider than the call's effective mode; the model corrects the request.
+ *   target is not a mode the call's effective mode can widen to; the model corrects the request.
  * - `SANDBOX_ESCALATION_UNAVAILABLE` — the composition cannot ask for approval: no approval service, no calling Agent,
  *   or no approval channel.
  * - `SANDBOX_ESCALATION_REJECTED` — the user declined the escalation; the operation stays denied.
@@ -196,10 +196,11 @@ export interface EscalationRequest {
 }
 
 /**
- * Resolve a sandbox permission request before execution. Repeating the call's
- * effective mode returns it without approval. A strictly wider mode requires
- * approval and applies only to this call. Narrower or unsupported targets,
- * missing approval services or agents for widening, and non-grant outcomes
+ * Resolve a sandbox permission request before execution. A target the call's
+ * effective mode already grants — that mode or a narrower one — returns the
+ * effective mode without approval. A strictly wider mode requires approval
+ * and applies only to this call. Unsupported targets, missing approval
+ * services or agents for widening, and non-grant outcomes
  * throw {@link SandboxEscalationError} before execution; a `cancelled`
  * outcome while `approval.signal` is aborted rethrows the signal's reason.
  * @param request - the escalation to judge (see {@link EscalationRequest}).
@@ -208,13 +209,15 @@ export interface EscalationRequest {
  */
 export async function approveEscalation<A, C>(request: EscalationRequest, approval: EscalationApproval<A, C>): Promise<SandboxMode> {
   const { requestedMode: mode, effectiveMode, justification, subject } = request
-  if (mode === effectiveMode) return effectiveMode
+  // The schema advertises every target in every session mode, so a model
+  // cannot avoid naming one the effective mode already grants.
+  if (mode === effectiveMode || (WIDER_MODES[mode] ?? []).includes(effectiveMode)) return effectiveMode
   // Strict widening is an EXECUTION check against the call's effective mode —
   // deliberately not a schema constraint (the enum is the closed target
   // vocabulary; the effective mode is per-call truth).
   if (!(WIDER_MODES[effectiveMode] ?? []).includes(mode as SandboxMode)) {
     throw new SandboxEscalationError(
-      `sandbox escalation to "${mode}" is not strictly wider than this call's current "${effectiveMode}" mode`,
+      `sandbox escalation to "${mode}" is not a mode this call's current "${effectiveMode}" mode can widen to`,
       'SANDBOX_ESCALATION_INVALID_ARGUMENT',
     )
   }

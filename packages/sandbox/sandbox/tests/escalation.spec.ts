@@ -123,15 +123,23 @@ describe('approveEscalation', () => {
       .resolves.toBe(mode)
   })
 
-  it('a narrower or unsupported target fails closed without asking', async () => {
+  it('a target the effective mode already grants keeps the effective mode without asking', async () => {
+    const seen: unknown[] = []
+    const spy = ingredients({ approver: approver('rejected', r => seen.push(r)) })
+    await expect(approveEscalation(req({ requestedMode: 'read-only', effectiveMode: 'workspace-write' }), spy))
+      .resolves.toBe('workspace-write')
+    await expect(approveEscalation(req({ requestedMode: 'workspace-write', effectiveMode: 'danger-full-access' }), spy))
+      .resolves.toBe('danger-full-access')
+    await expect(approveEscalation(req({ requestedMode: 'workspace-write', effectiveMode: 'danger-full-access' }),
+      ingredients({ approver: undefined, agent: undefined }))).resolves.toBe('danger-full-access')
+    expect(seen).toEqual([])
+  })
+
+  it('an unsupported target fails closed without asking', async () => {
     const seen: unknown[] = []
     const spy = ingredients({ approver: approver('allowed-once', r => seen.push(r)) })
-    await expect(approveEscalation(req({ requestedMode: 'read-only', effectiveMode: 'workspace-write' }), spy))
-      .rejects.toThrow(/not strictly wider than this call's current "workspace-write" mode/)
-    await expect(approveEscalation(req({ requestedMode: 'workspace-write', effectiveMode: 'danger-full-access' as never }), spy))
-      .rejects.toThrow(/not strictly wider/)
     await expect(approveEscalation(req({ requestedMode: 'unknown-mode' }), spy))
-      .rejects.toThrow(/not strictly wider/)
+      .rejects.toThrow(/not a mode this call's current "read-only" mode can widen to/)
     await expect(approveEscalation(req({ requestedMode: 'unknown-mode' }), spy))
       .rejects.toEqual(escalationError('SANDBOX_ESCALATION_INVALID_ARGUMENT'))
     expect(seen).toEqual([])
