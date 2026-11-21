@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-11-17-sidebar-scrollbar-fade-in-css.zh.md)
-
 ## Problem
 
 The sidebar draws its scrollbar thumb only while the pointer is over the column. [The pointer-revealed scrollbar note](../../archived/feature/2026-08-04-pointer-revealed-sidebar-scrollbars.md) shipped this with a 2-second JavaScript timer after the leave, and the thumb then vanished in one step. Product review asked for a 500ms hold followed by a visible fade (Issue #7921). That note rejected expressing the delay as a CSS transition; this note reverses that rejection.
