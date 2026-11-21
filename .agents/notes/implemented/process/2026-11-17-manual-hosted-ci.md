@@ -4,9 +4,9 @@ Status: implemented
 
 ## Problem
 
-This repository is a solo developer's fork. Its working branch is `fork/main`, and `master` only mirrors upstream. The fork has no repository secrets or variables, no self-hosted or organization-owned larger runners, publishes nothing to npm, PyPI, GitHub Releases, or GitHub Pages, and does not use upstream's Issue, approval, or merge-policy process.
+This repository is a solo developer's fork. Its working branch is `main`, and `master` only mirrors upstream. The fork has no repository secrets or variables, no self-hosted or organization-owned larger runners, publishes nothing to npm, PyPI, GitHub Releases, or GitHub Pages, and does not use upstream's Issue, approval, or merge-policy process.
 
-The inherited workflows assumed all of those. Pull-request and master-push triggers did not match the fork's direct pushes to `fork/main`, so the gates never ran there, while six workflows whose `env:` block had been left empty failed as invalid definitions on every push. Failover routing selected self-hosted and Blacksmith pools through `DSH_CI_FAILOVER_*` variables. Publication, Pages, and Cloudflare preview workflows needed credentials. Real-API workflows needed a provider key. `Policy` workflows, weighted approval, and Issue lifecycle automation enforced a review process the fork does not run. Aggregate verdict jobs existed only to satisfy branch protection.
+The inherited workflows assumed all of those. Pull-request and master-push triggers did not match the fork's direct pushes to `main`, so the gates never ran there, while six workflows whose `env:` block had been left empty failed as invalid definitions on every push. Failover routing selected self-hosted and Blacksmith pools through `DSH_CI_FAILOVER_*` variables. Publication, Pages, and Cloudflare preview workflows needed credentials. Real-API workflows needed a provider key. `Policy` workflows, weighted approval, and Issue lifecycle automation enforced a review process the fork does not run. Aggregate verdict jobs existed only to satisfy branch protection.
 
 ## Decision
 
@@ -24,7 +24,7 @@ Every workflow under [.github/workflows](../../../../.github/workflows) starts o
 
 [CI](../../../../.github/workflows/ci.yml) keeps the Linux static, coverage, lint, benchmark, and consumer jobs plus the Node 24.9 and 26 compatibility matrix. [CI Windows](../../../../.github/workflows/ci-windows.yml) keeps the native build, coverage, and targeted native-test jobs on `windows-2025` under native PowerShell ([native Windows decision](2026-08-08-native-windows-pull-request-ci.md)). [CI Python](../../../../.github/workflows/ci-python.yml) runs the keyless SDK suite, then calls the single-exe builder for Linux and Windows x64 ([installed-wheel decision](../testing/2026-08-23-installed-python-wheel-black-box-ci.md)). The Node addon, Sandbox, SSH helper, and Windows CUA helper workflows build or test their components on demand. `pnpm run check:windows-wine` stays an optional local diagnostic.
 
-The frozen Agent Note archive check needs a baseline. The `node 24 / static` job checks out complete history and sets `DSH_ARCHIVE_BASE_REF` to `git merge-base HEAD origin/fork/main`, so a dispatch on a topic branch compares against the point where it left the working branch, and a dispatch on `fork/main` compares against itself.
+The frozen Agent Note archive check needs a baseline. The `node 24 / static` job checks out complete history and sets `DSH_ARCHIVE_BASE_REF` to `git merge-base HEAD origin/main`, so a dispatch on a topic branch compares against the point where it left the working branch, and a dispatch on `main` compares against itself.
 
 The `workflow definitions` job of the Lefthook pre-commit hook runs `actionlint` over every workflow when a workflow file is staged. `actionlint` is not a repository dependency: each contributor installs it on `PATH`, on Windows with `winget install rhysd.actionlint`.
 
@@ -42,7 +42,7 @@ The `workflow definitions` job of the Lefthook pre-commit hook runs `actionlint`
 
 ## Consequences
 
-No CI result exists unless the owner dispatches it, so a regression that local checks miss can stay on `fork/main` until the next dispatch. Platform evidence for native Windows, Python runtime targets, macOS, and real kernels comes from explicit runs, and real-provider compatibility comes only from local key-backed runs.
+No CI result exists unless the owner dispatches it, so a regression that local checks miss can stay on `main` until the next dispatch. Platform evidence for native Windows, Python runtime targets, macOS, and real kernels comes from explicit runs, and real-provider compatibility comes only from local key-backed runs.
 
 Job timeouts and partition layouts were tuned on 16-core runners and are unverified on standard hosted runners, so the first runs may need longer timeouts. Contributors who commit workflow changes need `actionlint` installed, or the pre-commit hook fails.
 

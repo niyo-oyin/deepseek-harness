@@ -30,7 +30,7 @@ jobs:
         run: |
           echo "TMPDIR=${{ runner.temp }}" >> "$GITHUB_ENV"
 
-      # Complete history includes origin/fork/main, the baseline of the
+      # Complete history includes origin/main, the baseline of the
       # frozen Agent Note archive gate.
       - uses: actions/checkout@v7.0.1
         with:
@@ -73,10 +73,10 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # The archive manifest must extend the one at the point where this ref
-      # left fork/main; on fork/main itself the baseline is HEAD.
+      # left main; on main itself the baseline is HEAD.
       - name: Run static gates
         run: |
-          DSH_ARCHIVE_BASE_REF="$(git merge-base HEAD origin/fork/main)"
+          DSH_ARCHIVE_BASE_REF="$(git merge-base HEAD origin/main)"
           export DSH_ARCHIVE_BASE_REF
           pnpm run check:ci:static
 
