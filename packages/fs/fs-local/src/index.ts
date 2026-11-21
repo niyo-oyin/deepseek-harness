@@ -8,9 +8,7 @@ import { applyHunks } from '@deepseek-ai/dsh-fs-patch'
 import type { PatchHunk } from '@deepseek-ai/dsh-fs-patch'
 import { Context } from '@deepseek-ai/cordis'
 import { constants as bufferConstants } from 'node:buffer'
-import { once } from 'node:events'
-import { watch } from 'chokidar'
-import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import z from '@deepseek-ai/schemastery'
 import { FileSystem, FsError, type FsVersion } from '@deepseek-ai/dsh-fs'
@@ -65,6 +63,8 @@ const MAX_DIFF_BASIS_BYTES = Math.min(
   bufferConstants.MAX_LENGTH,
   bufferConstants.MAX_STRING_LENGTH,
 )
+/** Interval between version comparisons of a watched target; the longest a change waits to be reported. */
+const WATCH_INTERVAL_MS = 1000
 
 /**
  * The host-filesystem backend. Reads resolve relative paths from {@link Config.cwd}
@@ -74,25 +74,34 @@ const MAX_DIFF_BASIS_BYTES = Math.min(
  */
 export class LocalFileSystem extends FileSystem {
   override async watch(target: FsTarget, changed: (error?: Error) => void, signal: AbortSignal): Promise<() => Promise<void>> {
-    signal.throwIfAborted()
-    const path = resolve(this.processPath(target))
-    const directory = (await this.stat(target, signal))?.type === 'directory'
-    signal.throwIfAborted()
-    const root = directory ? path : dirname(path)
-    const watcher = watch(root, {
-      ignoreInitial: true, depth: 0,
-      ignored: entry => !directory && resolve(entry) !== root && resolve(entry) !== path,
-    })
-    watcher.on('all', (_event, entry) => {
-      if (directory || resolve(entry) === path) changed()
-    })
-    watcher.on('error', (error) => { changed(error instanceof Error ? error : new Error(String(error))) })
-    try {
-      await once(watcher, 'ready', { signal })
-      return () => watcher.close()
-    } catch (error) {
-      await watcher.close()
-      throw error
+    // Polled rather than held open: an OS watch keeps a handle on the directory,
+    // and Windows refuses to rename or move any ancestor of an open directory.
+    let version = (await this.stat(target, signal))?.version
+    let closed = false
+    let timer: NodeJS.Timeout | undefined
+    const schedule = (): void => {
+      // A watch never keeps the process alive.
+      timer = setTimeout(() => { void poll() }, WATCH_INTERVAL_MS).unref()
+    }
+    const poll = async (): Promise<void> => {
+      try {
+        const current = (await this.stat(target))?.version
+        if (closed) return
+        if (current !== version) {
+          version = current
+          changed()
+        }
+      } catch (error) {
+        if (closed) return
+        changed(error instanceof Error ? error : new Error(String(error)))
+      }
+      schedule()
+    }
+    schedule()
+    return () => {
+      closed = true
+      clearTimeout(timer)
+      return Promise.resolve()
     }
   }
 

@@ -399,7 +399,9 @@ Abstract filesystem provider. Targets must preserve identity across aliases; rea
 
 ```ts cordis-catalog
 /**
- * Observe one file or a directory's direct entries in this provider's execution world.
+ * Observe one file, or the set of a directory's direct entries, in this provider's execution world.
+ * A directory reports entries appearing, disappearing, and being renamed; a change to an entry's
+ * content belongs to a watch on that entry.
  * @param target - resolved file or directory, including an absent path to observe for creation.
  * @param changed - invalidation callback; errors can be reported during or after initialization.
  * @param signal - cancels watcher initialization; the caller closes an initialized watcher.

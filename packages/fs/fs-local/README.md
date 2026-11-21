@@ -54,7 +54,7 @@ Patch and move text is LF-normalized internally and restored using the source li
 
 Read, listing, and mutation failures are typed `FsError`s with stable codes — `FS_NOT_FOUND`, `FS_NOT_TEXT` (binary content), `FS_STALE_VERSION` (changed since observation), `FS_EDIT_NOT_FOUND` or `FS_AMBIGUOUS_EDIT` (no unique literal match), and others — so callers branch on the code, never on message text. A missing target on an edit reports `FS_STALE_VERSION` whether or not the version guard is supplied.
 
-Chokidar observes one file or a directory's direct entries through OS events, without polling or recursive watching. Files use a filtered parent-directory watch, so readiness also covers creation of an initially missing file. File watches cover in-place writes, atomic replacement, deletion, and same-path recreation while the parent directory remains.
+A watch compares its target's version once a second and reports each difference, so a change is reported within a second. It opens nothing: an OS watch keeps a handle on the directory, and Windows refuses to rename or move any ancestor of an open directory. A file watch covers in-place writes, atomic replacement, deletion, and creation of a missing file, including after its parent directory is removed and created again. A directory watch covers direct entries appearing, disappearing, and being renamed, which move the directory's own modification time; writing into an existing entry does not, and is reported by a watch on that entry. A read that fails is reported to the callback and the watch continues.
 
 -----
 
@@ -129,7 +129,7 @@ No direct invalidation; the named consumer owns any request-prefix changes.
 These limits define when the local backend is a poor fit or needs special operational care. They are current package constraints, not a general filesystem comparison or a task backlog.
 
 - **`config.cwd` is not a sandbox** — it is a resolution default, not containment: absolute paths and `..` escape it. Enforce containment with a stricter `ctx.fs` backend or a permission plugin on the `tools/execute` waterfall.
-- **Linux parent-directory recreation** — restoring observation after a parent directory is deleted and recreated is deferred; same-path file recreation while its parent remains is supported.
+- **Watches are polled** — each open watch reads its target's metadata once a second whether or not anything changes, and a change waits up to that long to be reported.
 - **Version tokens depend on filesystem metadata** — they combine device, inode, size, nanosecond mtime, and nanosecond ctime; a storage layer that cannot update any of those facts for a rewrite can still defeat the stale guard.
 - **`editText` holds the whole file (plus the edited copy) in memory** — streaming exists only on the read path.
 - **A sub-limit overwrite still buffers a contextual basis** — `writeText` may retain up to just below `config.diffBasisMaxBytes` of prior text in addition to the caller-owned replacement; the bound does not cap the returned `after` value or the whole-file presentation fallback.

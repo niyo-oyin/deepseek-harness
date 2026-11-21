@@ -406,7 +406,7 @@ export class WorkspaceFiles extends TypertRemoteService {
   }
 
   /**
-   * Watch one file or a directory's direct entries in the Session's filesystem.
+   * Watch one file or the set of a directory's direct entries in the Session's filesystem.
    * Files use the backend's read authority; directories remain workspace-scoped.
    * @param workspaceFileScope - header-derived workspace root for the Session identity on the wire.
    * @param path - target path; the Host determines its type and confines directories to the workspace.

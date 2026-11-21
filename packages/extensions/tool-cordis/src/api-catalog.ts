@@ -1566,7 +1566,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     methods: [
       {
         signature: 'watch(target: FsTarget, changed: (error?: Error) => void, signal: AbortSignal): Promise<() => Promise<void>>',
-        description: 'Observe one file or a directory\'s direct entries in this provider\'s execution world.',
+        description: 'Observe one file, or the set of a directory\'s direct entries, in this provider\'s execution world. A directory reports entries appearing, disappearing, and being renamed; a change to an entry\'s content belongs to a watch on that entry.',
         parameters: [{ name: 'target', description: 'resolved file or directory, including an absent path to observe for creation.' }, { name: 'changed', description: 'invalidation callback; errors can be reported during or after initialization.' }, { name: 'signal', description: 'cancels watcher initialization; the caller closes an initialized watcher.' }],
         returns: 'a promise resolving once observation is active, with an asynchronous close function.',
         throws: ['when the provider does not support watching or cannot initialize the watcher.'],
@@ -4780,7 +4780,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: '@Remote({ mode: \'stream\' }) changes(workspaceFileScope: WorkspaceFileScope, path: string, signal: AbortSignal): AsyncIterable<WorkspaceFileWatchFrame>',
-        description: 'Watch one file or a directory\'s direct entries in the Session\'s filesystem. Files use the backend\'s read authority; directories remain workspace-scoped.',
+        description: 'Watch one file or the set of a directory\'s direct entries in the Session\'s filesystem. Files use the backend\'s read authority; directories remain workspace-scoped.',
         parameters: [{ name: 'workspaceFileScope', description: 'header-derived workspace root for the Session identity on the wire.' }, { name: 'path', description: 'target path; the Host determines its type and confines directories to the workspace.' }, { name: 'signal', description: 'generation cancellation.' }],
         returns: '`ready` once the target watch is active, then current metadata for queued and live invalidations.',
         throws: ['RemoteError when watching is unavailable or a directory is outside the workspace.'],

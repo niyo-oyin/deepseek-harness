@@ -32,7 +32,7 @@ Mount the package beside `dsh-fs`, `dsh-sandbox-policy`, the Session store, and 
 | `readBytes(path, { range?, baseFile? })` | `WorkspaceFileBytes` = stat + `{ offset, data, eof }` | Complete file or bounded byte range as `Uint8Array`; optionally resolve from another file's directory |
 | `list(path)` | `WorkspaceDirectoryListing { path, entries, truncated }` | Direct children of one directory |
 | `search({ query, excludedPaths, includeHidden, respectGitignore })` | `WorkspaceFileSearchResult { matches, truncated, incomplete }` | Entries anywhere in the workspace whose name or relative path contains the query |
-| `changes(path)` | stream of `WorkspaceFileWatchFrame` | Subscription readiness, then invalidations of one file or a directory's direct entries |
+| `changes(path)` | stream of `WorkspaceFileWatchFrame` | Subscription readiness, then invalidations of one file or of a directory's set of direct entries |
 | `gitBranch()` | `WorkspaceGitBranch`: `{ kind: 'branch', name }`, `{ kind: 'detached', head }`, or `{ kind: 'none' }` | What Git has checked out in the workspace root: the branch, the short commit id of a detached HEAD, or `none` outside a repository, without Git or a subprocess provider, and when the read fails or exceeds five seconds |
 
 ### Addressing and paths
@@ -64,7 +64,7 @@ Each call obtains `subprocess` on demand and runs packaged `rg --files --sort=pa
 
 ### The change feed
 
-`changes` is a `stream` Remote accepting only a target path. The Host derives the target's type from `stat` and requires workspace containment whenever that type is a directory, including after a type change. A generation registers its observation queue, resolves the target, and starts `fs.watch` before yielding `{ kind: 'ready' }`. It then yields `{ kind: 'change', change }`, where `change` is current stat metadata `{ absolutePath, version }` or `{ absolutePath, absent: true }`. Local providers use Chokidar; directories watch only direct entries. Matching `fs/observed` emissions also invalidate the target. The generation queues changes during setup. Cancellation closes the watcher independently of consumer pulls, and generation or plugin teardown awaits closure. Missing files remain watchable for same-path recreation while their parent directory remains.
+`changes` is a `stream` Remote accepting only a target path. The Host derives the target's type from `stat` and requires workspace containment whenever that type is a directory, including after a type change. A generation registers its observation queue, resolves the target, and starts `fs.watch` before yielding `{ kind: 'ready' }`. It then yields `{ kind: 'change', change }`, where `change` is current stat metadata `{ absolutePath, version }` or `{ absolutePath, absent: true }`. The local provider polls the target once a second; a directory reports direct entries appearing, disappearing, and being renamed, not writes into an existing entry. Matching `fs/observed` emissions also invalidate the target. The generation queues changes during setup. Cancellation closes the watcher independently of consumer pulls, and generation or plugin teardown awaits closure. Missing files remain watchable for same-path creation.
 
 ### Configuration
 
@@ -153,7 +153,7 @@ None; this package neither assembles nor sends a provider request.
 <a id="known-limitations-and-deferred-work"></a>
 
 - **Provider watch support** — unsupported backends, including SSH, report `watch-unsupported`; ordinary reads and manual refresh remain available, without polling for external changes.
-- **Linux parent-directory recreation** — automatic watch recovery after a parent directory is deleted and recreated is deferred; see [fs-local](../../fs/fs-local/README.md).
+- **Local changes arrive within a second** — the local provider polls each watched target; see [fs-local](../../fs/fs-local/README.md).
 - **Directory scope only** — directory listing and watches stay inside the Session workspace; file reads and watches use the filesystem backend's read authority.
 - **No total line count** — a page reports `eof`, not how many lines follow; a consumer that needs the total pages to the end or estimates from `bytes`.
 - **One giant line has no page** — a single line above `maxBytes` fails `too-large` at every window that includes it, because pages are cut by lines, not bytes.

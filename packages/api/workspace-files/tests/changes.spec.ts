@@ -465,7 +465,7 @@ describe('workspaceFiles.changes — backends and access', () => {
     mark('complete')
   })
 
-  it.each(['create', 'modify', 'remove'] as const)(
+  it.each(['create', 'remove'] as const)(
     'reports an external direct-child %s through the real local watcher',
     async (operation) => {
       watch.mockRestore()

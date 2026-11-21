@@ -1,145 +1,158 @@
-/** Watch initialization and asynchronous release at the Chokidar adapter. */
+/** Polled target watches: what they report, when, and what they leave open. */
 import { Context } from '@deepseek-ai/cordis'
-import type { FsTargetKey, FsVersion } from '@deepseek-ai/dsh-fs'
-import { brandString } from '@deepseek-ai/dsh-brand'
-import { dirname, join, resolve } from 'node:path'
-import * as chokidar from 'chokidar'
+import type { FileSystem, FsTarget } from '@deepseek-ai/dsh-fs'
+import { mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { setTimeout as realDelay } from 'node:timers/promises'
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { LocalFileSystem } from '../src/index.ts'
 
-vi.mock('chokidar', async (importOriginal) => {
-  const original = await importOriginal<typeof import('chokidar')>()
-  return { ...original, watch: vi.fn(original.watch) }
-})
+afterEach(() => { vi.useRealTimers() })
 
-afterEach(() => { vi.restoreAllMocks() })
+type Changed = (error?: Error) => void
 
-async function setup(kind: 'file' | 'directory' | 'missing' = 'file') {
-  const watcher = new chokidar.FSWatcher()
-  onTestFinished(() => watcher.close())
-  const started = Promise.withResolvers<undefined>()
-  const watch = vi.mocked(chokidar.watch).mockReset().mockImplementation(() => {
-    started.resolve(undefined)
-    return watcher
-  })
+async function setup(): Promise<{ fs: FileSystem; root: string; changed: ReturnType<typeof vi.fn<Changed>>; signal: AbortSignal }> {
+  const root = await mkdtemp(join(tmpdir(), 'fs-local-watch-'))
+  onTestFinished(() => rm(root, { recursive: true, force: true }))
   const ctx = new Context()
   onTestFinished(() => ctx.fiber.dispose())
   await ctx.plugin(LocalFileSystem)
-  const path = resolve('/workspace/file.txt')
-  const target = { targetKey: brandString<FsTargetKey>(path), displayPath: 'file.txt' }
-  const stat = vi.spyOn(ctx.fs, 'stat').mockResolvedValue(kind === 'missing'
-    ? undefined : { type: kind, version: brandString<FsVersion>('v1'), size: 1 })
-  const changed = vi.fn<(error?: Error) => void>()
-  const controller = new AbortController()
-  onTestFinished(() => { controller.abort() })
-  return { watcher, watch, fs: ctx.fs, target, changed, controller, path, stat, started: started.promise }
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  return { fs: ctx.fs, root, changed: vi.fn<Changed>(), signal: new AbortController().signal }
+}
+
+/** Start a watch, registering its closure with the test. */
+async function watching(fs: FileSystem, target: FsTarget, changed: Changed, signal: AbortSignal): Promise<() => Promise<void>> {
+  const close = await fs.watch(target, changed, signal)
+  onTestFinished(close)
+  return close
+}
+
+/** Run every open watch's next poll to completion; each schedules its successor after its filesystem read. */
+async function nextPoll(watches = 1): Promise<void> {
+  vi.advanceTimersByTime(1000)
+  while (vi.getTimerCount() !== watches) await realDelay(1)
 }
 
 describe('local filesystem watch', () => {
-  it.each(['file', 'missing'] as const)('waits for the parent watch of a %s target and awaits closure', async (kind) => {
-    const h = await setup(kind)
-    const pending = h.fs.watch(h.target, h.changed, h.controller.signal)
-    await h.started
-    const ignored = h.watch.mock.calls[0]![1]!.ignored
-    if (typeof ignored !== 'function') throw new Error('Expected a target filter')
-    expect(h.watch).toHaveBeenCalledExactlyOnceWith(dirname(h.path), { ignoreInitial: true, depth: 0, ignored })
-    expect(ignored(dirname(h.path))).toBe(false)
-    expect(ignored(h.path)).toBe(false)
-    expect(ignored(join(dirname(h.path), 'unrelated.txt'))).toBe(true)
-    let ready = false
-    void pending.then(() => { ready = true })
-    await Promise.resolve(undefined)
-    expect(ready).toBe(false)
-    h.watcher.emit('ready')
-    const close = await pending
-    h.watcher.emit('all', 'addDir', dirname(h.path))
-    h.watcher.emit('all', 'change', join(dirname(h.path), 'unrelated.txt'))
+  it('reports a file being written, removed, and created again', async () => {
+    const h = await setup()
+    const path = join(h.root, 'file.txt')
+    await writeFile(path, 'one')
+    await watching(h.fs, await h.fs.resolve(path), h.changed, h.signal)
+
+    await nextPoll()
     expect(h.changed).not.toHaveBeenCalled()
-    h.watcher.emit('all', 'change', h.path)
-    expect(h.changed).toHaveBeenCalledExactlyOnceWith()
-    const closed = Promise.withResolvers<undefined>()
-    onTestFinished(() => { closed.resolve(undefined) })
-    const nativeClose = h.watcher.close.bind(h.watcher)
-    vi.spyOn(h.watcher, 'close').mockImplementationOnce(async () => { await closed.promise; await nativeClose() })
-    const closing = close()
-    try {
-      expect(h.watcher.closed).toBe(false)
-    } finally {
-      closed.resolve(undefined)
-      await closing
-    }
-    expect(h.watcher.closed).toBe(true)
+
+    await writeFile(path, 'two, longer')
+    await nextPoll()
+    expect(h.changed).toHaveBeenCalledTimes(1)
+
+    await rm(path)
+    await nextPoll()
+    expect(h.changed).toHaveBeenCalledTimes(2)
+
+    await writeFile(path, 'three')
+    await nextPoll()
+    expect(h.changed.mock.calls).toEqual([[], [], []])
   })
 
-  it('watches a directory itself without filtering its direct entries', async () => {
-    const h = await setup('directory')
-    const pending = h.fs.watch(h.target, h.changed, h.controller.signal)
-    await h.started
-    expect(h.watch.mock.calls[0]![0]).toBe(h.path)
-    const ignored = h.watch.mock.calls[0]![1]!.ignored
-    if (typeof ignored !== 'function') throw new Error('Expected a target filter')
-    expect(ignored(join(h.path, 'child.txt'))).toBe(false)
-    h.watcher.emit('ready')
-    const close = await pending
-    h.watcher.emit('all', 'change', join(h.path, 'child.txt'))
-    expect(h.changed).toHaveBeenCalledExactlyOnceWith()
+  it('reports a missing file appearing, even after its parent directory is recreated', async () => {
+    const h = await setup()
+    const parent = join(h.root, 'parent')
+    const path = join(parent, 'file.txt')
+    await watching(h.fs, await h.fs.resolve(path), h.changed, h.signal)
+
+    await mkdir(parent)
+    await nextPoll()
+    expect(h.changed).not.toHaveBeenCalled()
+
+    await writeFile(path, 'one')
+    await nextPoll()
+    expect(h.changed).toHaveBeenCalledTimes(1)
+
+    await rm(parent, { recursive: true })
+    await nextPoll()
+    await mkdir(parent)
+    await writeFile(path, 'two')
+    await nextPoll()
+    expect(h.changed).toHaveBeenCalledTimes(3)
+  })
+
+  it('reports a directory gaining, renaming, and losing a direct entry', async () => {
+    const h = await setup()
+    const directory = join(h.root, 'directory')
+    await mkdir(directory)
+    await watching(h.fs, await h.fs.resolve(directory), h.changed, h.signal)
+
+    await writeFile(join(directory, 'a.txt'), 'a')
+    await nextPoll()
+    expect(h.changed).toHaveBeenCalledTimes(1)
+
+    await rename(join(directory, 'a.txt'), join(directory, 'b.txt'))
+    await nextPoll()
+    expect(h.changed).toHaveBeenCalledTimes(2)
+
+    await rm(join(directory, 'b.txt'))
+    await nextPoll()
+    expect(h.changed).toHaveBeenCalledTimes(3)
+  })
+
+  it('leaves a watched directory and its ancestors free to be renamed', async () => {
+    const h = await setup()
+    const ancestor = join(h.root, 'ancestor')
+    const directory = join(ancestor, 'directory')
+    await mkdir(directory, { recursive: true })
+    await writeFile(join(directory, 'file.txt'), 'one')
+    await watching(h.fs, await h.fs.resolve(directory), h.changed, h.signal)
+    await watching(h.fs, await h.fs.resolve(join(directory, 'file.txt')), h.changed, h.signal)
+    await nextPoll(2)
+
+    await rename(ancestor, join(h.root, 'renamed'))
+    await nextPoll(2)
+    expect(h.changed.mock.calls).toEqual([[], []])
+  })
+
+  it('reports nothing after it is closed, including a poll already reading', async () => {
+    const h = await setup()
+    const path = join(h.root, 'file.txt')
+    await writeFile(path, 'one')
+    const close = await watching(h.fs, await h.fs.resolve(path), h.changed, h.signal)
+
+    await writeFile(path, 'two, longer')
+    vi.advanceTimersByTime(1000)
     await close()
-  })
-
-  it('does not acquire a watcher when cancelled during metadata lookup', async () => {
-    const h = await setup()
-    const metadata = Promise.withResolvers<undefined>()
-    h.stat.mockReturnValueOnce(metadata.promise)
-    const pending = h.fs.watch(h.target, h.changed, h.controller.signal)
-    const rejected = expect(pending).rejects.toThrow()
-    h.controller.abort()
-    metadata.resolve(undefined)
-    await rejected
-    expect(h.watch).not.toHaveBeenCalled()
-  })
-
-  it('rejects an already-cancelled initialization without acquiring a watcher', async () => {
-    const h = await setup()
-    h.controller.abort()
-    await expect(h.fs.watch(h.target, h.changed, h.controller.signal)).rejects.toThrow()
-    expect(h.watch).not.toHaveBeenCalled()
-  })
-
-  it('closes the acquired watcher when initialization is cancelled', async () => {
-    const h = await setup()
-    const pending = h.fs.watch(h.target, h.changed, h.controller.signal)
-    const rejected = expect(pending).rejects.toThrow()
-    await h.started
-    h.controller.abort()
-    await rejected
-    expect(h.watcher.closed).toBe(true)
+    await realDelay(50)
+    vi.advanceTimersByTime(5000)
+    await realDelay(50)
     expect(h.changed).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
   })
 
-  it('reports initialization errors and closes before rejecting', async () => {
+  it('rejects a cancelled initialization without starting to poll', async () => {
     const h = await setup()
-    const error = new Error('watch failed')
-    const pending = h.fs.watch(h.target, h.changed, h.controller.signal)
-    const rejected = expect(pending).rejects.toBe(error)
-    await h.started
-    h.watcher.emit('error', error)
-    await rejected
+    const controller = new AbortController()
+    controller.abort()
+    await expect(h.fs.watch(await h.fs.resolve(join(h.root, 'file.txt')), h.changed, controller.signal)).rejects.toThrow()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('reports a failed read and keeps watching', async () => {
+    const h = await setup()
+    const path = join(h.root, 'file.txt')
+    await writeFile(path, 'one')
+    const target = await h.fs.resolve(path)
+    await watching(h.fs, target, h.changed, h.signal)
+
+    const error = new Error('read failed')
+    const stat = vi.spyOn(h.fs, 'stat').mockRejectedValueOnce(error)
+    await nextPoll()
     expect(h.changed).toHaveBeenCalledExactlyOnceWith(error)
-    expect(h.watcher.closed).toBe(true)
-  })
 
-  it('normalizes watcher errors after initialization', async () => {
-    const h = await setup()
-    const pending = h.fs.watch(h.target, h.changed, h.controller.signal)
-    await h.started
-    h.watcher.emit('ready')
-    const close = await pending
-    const error = new Error('watch failed')
-    h.watcher.emit('error', error)
-    // EventEmitter callbacks can receive non-Error values from the external watcher.
-    h.watcher.emit('error', 'watch unavailable')
-    expect(h.changed.mock.calls).toEqual([[error], [new Error('watch unavailable')]])
-    await close()
-    expect(h.watcher.closed).toBe(true)
+    stat.mockRestore()
+    await writeFile(path, 'two, longer')
+    await nextPoll()
+    expect(h.changed).toHaveBeenLastCalledWith()
   })
 })
